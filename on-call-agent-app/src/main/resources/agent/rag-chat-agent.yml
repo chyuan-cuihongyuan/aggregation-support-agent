@@ -1,0 +1,42 @@
+# RAG 智能问答智能体配置 — 基于文档知识库的问答助手
+# 使用 z.ai OpenAI 兼容接口作为对话模型
+ai:
+  agent:
+    config:
+      tables:
+        ragChatAgent:
+          app-name: ragChatAgent
+          agent:
+            agent-id: "200001"
+            agent-name: RAG 智能问答
+            agent-desc: 基于文档知识库的智能问答助手，支持多轮对话和语义检索
+          module:
+            ai-api:
+              # z.ai OpenAI 兼容接口（通过环境变量覆盖可切换模型提供商）
+              base-url: ${LLM_BASE_URL:https://api.z.ai/v1}
+              api-key: ${LLM_API_KEY:sk-xxx}
+              completions-path: v1/chat/completions
+              embeddings-path: v1/embeddings
+            chat-model:
+              model: ${LLM_MODEL:gpt-4.1}
+              tool-mcp-list:
+                # 使用本地注册的 RAG 文档检索工具
+                - local:
+                    name: ragToolCallbackProvider
+            agents:
+              - name: ragChatAgent
+                description: RAG 智能问答助手，检索知识库文档回答问题
+                instruction: |
+                  你是一个专业的智能问答助手，可以基于内部知识库文档回答问题。
+                  当用户提问时，使用 searchInternalDocs 工具检索相关文档，
+                  然后基于检索到的内容回答用户的问题。
+                  回答要求：
+                  1. 基于检索到的文档内容准确回答
+                  2. 注明信息来源（引用文档名或章节）
+                  3. 如果检索结果不足以回答问题，诚实告知用户
+                  4. 回答使用中文
+                output-key: rag_answer
+            runner:
+              agent-name: ragChatAgent
+              plugin-name-list:
+                - myLogPlugin

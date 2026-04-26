@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>cn.chyuan</groupId>
+    <artifactId>on-call-agent</artifactId>
+    <version>1.0</version>
+    <packaging>pom</packaging>
+
+    <modules>
+        <module>on-call-agent-api</module>
+        <module>on-call-agent-types</module>
+        <module>on-call-agent-domain</module>
+        <module>on-call-agent-infrastructure</module>
+        <module>on-call-agent-trigger</module>
+        <module>on-call-agent-app</module>
+    </modules>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.0</version>
+        <relativePath/>
+    </parent>
+
+    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- Milvus 向量数据库 SDK 版本 -->
+        <milvus-sdk.version>2.6.10</milvus-sdk.version>
+        <!-- 阿里云 DashScope SDK 版本（用于文本向量化） -->
+        <dashscope-sdk.version>2.17.0</dashscope-sdk.version>
+    </properties>
+
+    <!-- 统一版本管理，子模块按需引用 -->
+    <dependencyManagement>
+        <dependencies>
+            <!-- Milvus 向量数据库 Java SDK -->
+            <dependency>
+                <groupId>io.milvus</groupId>
+                <artifactId>milvus-sdk-java</artifactId>
+                <version>${milvus-sdk.version}</version>
+            </dependency>
+            <!-- 阿里云 DashScope SDK（文本嵌入向量化） -->
+            <dependency>
+                <groupId>com.alibaba</groupId>
+                <artifactId>dashscope-sdk-java</artifactId>
+                <version>${dashscope-sdk.version}</version>
+                <exclusions>
+                    <!-- 排除 slf4j-simple，使用 Spring Boot 默认的 Logback -->
+                    <exclusion>
+                        <groupId>org.slf4j</groupId>
+                        <artifactId>slf4j-simple</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+            <!-- XML 处理库（types 模块使用） -->
+            <dependency>
+                <groupId>com.thoughtworks.xstream</groupId>
+                <artifactId>xstream</artifactId>
+                <version>1.4.20</version>
+            </dependency>
+            <dependency>
+                <groupId>org.dom4j</groupId>
+                <artifactId>dom4j</artifactId>
+                <version>2.1.4</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+</project>

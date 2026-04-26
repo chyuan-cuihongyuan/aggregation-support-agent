@@ -1,0 +1,52 @@
+package cn.chyuan.ai.infrastructure.config;
+
+import lombok.Data;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
+
+/**
+ * Milvus 向量数据库连接配置属性 — 从 application.yml 中读取 milvus.* 配置
+ * <p>
+ * 配置示例：
+ * <pre>
+ * milvus:
+ *   host: 127.0.0.1
+ *   port: 19530
+ *   collection-name: biz
+ *   dimension: 1024
+ *   index-type: IVF_FLAT
+ *   metric-type: L2
+ *   nlist: 1024
+ *   top-k: 3
+ * </pre>
+ */
+@Data
+@Component
+@ConfigurationProperties(prefix = "milvus")
+public class MilvusConfigProperties {
+
+    /** Milvus 服务地址 */
+    private String host = "127.0.0.1";
+
+    /** Milvus gRPC 端口 */
+    private int port = 19530;
+
+    /** 集合名称 */
+    private String collectionName = "biz";
+
+    /** 向量维度（DashScope text-embedding-v4 输出 1024 维） */
+    private int dimension = 1024;
+
+    /** 索引类型 */
+    private String indexType = "IVF_FLAT";
+
+    /** 距离度量类型 */
+    private String metricType = "L2";
+
+    /** IVF 聚类数量 */
+    private int nlist = 1024;
+
+    /** 默认检索返回数量 */
+    private int topK = 3;
+
+}
