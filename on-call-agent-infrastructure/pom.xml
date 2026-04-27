@@ -20,6 +20,11 @@
             <artifactId>lombok</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>fastjson</artifactId>
+        </dependency>
+
         <!-- Milvus 向量数据库 SDK — 用于文档向量存储与检索 -->
         <dependency>
             <groupId>io.milvus</groupId>

@@ -134,7 +134,7 @@ public class MilvusVectorStoreRepository implements IVectorStoreRepository {
             CreateIndexParam indexParam = CreateIndexParam.newBuilder()
                     .withCollectionName(collectionName)
                     .withFieldName(FIELD_VECTOR)
-                    .withIndexType(io.milvus.param.index.IndexType.IVF_FLAT)
+                    .withIndexType(io.milvus.param.IndexType.IVF_FLAT)
                     .withMetricType(io.milvus.param.MetricType.L2)
                     .withExtraParam("{\"nlist\": " + milvusConfigProperties.getNlist() + "}")
                     .build();

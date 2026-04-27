@@ -3,7 +3,7 @@ package cn.chyuan.ai.domain.agent.service.armory;
 import cn.chyuan.ai.domain.agent.model.entity.ArmoryCommandEntity;
 import cn.chyuan.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import cn.chyuan.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
-import cn.chyuan.wrench.design.framework.tree.AbstractMultiThreadStrategyRouter;
+import cn.bugstack.wrench.design.framework.tree.AbstractMultiThreadStrategyRouter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.config.BeanDefinition;
