@@ -10,6 +10,8 @@ import org.springframework.context.annotation.Configuration;
 
 import javax.annotation.Resource;
 
+import org.springframework.context.annotation.Lazy;
+
 /**
  * Milvus 客户端配置类 — 创建 MilvusServiceClient 单例 Bean 并在启动时确保集合存在
  * <p>
@@ -24,6 +26,7 @@ public class MilvusClientConfig implements SmartInitializingSingleton {
     @Resource
     private MilvusConfigProperties milvusConfigProperties;
 
+    @Lazy
     @Resource
     private IVectorStoreRepository vectorStoreRepository;
 

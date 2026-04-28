@@ -12,12 +12,12 @@ ai:
             agent-desc: 多智能体协作的智能运维分析助手，自动分析告警并生成运维报告
           module:
             ai-api:
-              base-url: ${LLM_BASE_URL:https://api.z.ai/v1}
-              api-key: ${LLM_API_KEY:sk-xxx}
-              completions-path: v1/chat/completions
-              embeddings-path: v1/embeddings
+              base-url: ${LLM_BASE_URL:https://open.bigmodel.cn/api/coding/paas/v4}
+              api-key: ${LLM_API_KEY:47b14566882e4e5ab68ae079e307667f.gYg6trXMmDAFQBT3}
+              completions-path: /chat/completions
+              embeddings-path: /embeddings
             chat-model:
-              model: ${LLM_MODEL:gpt-4.1}
+              model: ${LLM_MODEL:glm-5.1}
               tool-mcp-list:
                 # AIOps 分析工具集：时间、文档检索、告警查询、日志查询
                 - local:
