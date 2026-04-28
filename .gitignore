@@ -40,3 +40,4 @@ build/
 /.idea/
 CLAUDE.md
 .gitignore!/.gitignore
+/data/
