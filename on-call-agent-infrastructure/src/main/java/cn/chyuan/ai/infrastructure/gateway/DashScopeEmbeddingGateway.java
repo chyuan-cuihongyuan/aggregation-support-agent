@@ -34,6 +34,7 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 @Service
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "embedding.provider", havingValue = "dashscope", matchIfMissing = false)
 public class DashScopeEmbeddingGateway implements IEmbeddingService {
 
     /** DashScope OpenAI 兼容接口地址 */
