@@ -1,0 +1,41 @@
+# DeepSeek RAG 智能问答智能体配置 — 基于文档知识库的问答助手
+# 使用 DeepSeek OpenAI 兼容接口作为对话模型
+ai:
+  agent:
+    config:
+      tables:
+        deepseekRagChatAgent:
+          app-name: deepseekRagChatAgent
+          agent:
+            agent-id: "200004"
+            agent-name: DeepSeek RAG 问答
+            agent-desc: 基于 DeepSeek 模型的文档知识库问答助手
+          module:
+            ai-api:
+              # DeepSeek OpenAI 兼容接口
+              base-url: https://api.deepseek.com
+              api-key: ${DEEPSEEK_API_KEY:sk-REDACTED}
+              completions-path: /v1/chat/completions
+              embeddings-path: /v1/embeddings
+            chat-model:
+              model: deepseek-v4-pro
+              tool-mcp-list:
+                - local:
+                    name: ragToolCallbackProvider
+            agents:
+              - name: deepseekRagChatAgent
+                description: DeepSeek RAG 智能问答助手，检索知识库文档回答问题
+                instruction: |
+                  你是一个专业的智能问答助手，可以基于内部知识库文档回答问题。
+                  当用户提问时，使用 searchInternalDocs 工具检索相关文档，
+                  然后基于检索到的内容回答用户的问题。
+                  回答要求：
+                  1. 基于检索到的文档内容准确回答
+                  2. 注明信息来源（引用文档名或章节）
+                  3. 如果检索结果不足以回答问题，诚实告知用户
+                  4. 回答使用中文
+                output-key: rag_answer
+            runner:
+              agent-name: deepseekRagChatAgent
+              plugin-name-list:
+                - myLogPlugin
