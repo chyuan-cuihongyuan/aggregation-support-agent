@@ -1,28 +1,27 @@
-# 单一交流智能体配置 — 专注自然对话的通用聊天助手
-# 使用大语言模型提供友好、专业的对话体验
+# DeepSeek 智能问答智能体配置 — 纯对话问答，不检索知识库
+# 使用 DeepSeek OpenAI 兼容接口作为对话模型
 ai:
   agent:
     config:
       tables:
-        chatAgent:
-          app-name: chatAgent
+        deepseekRagChatAgent:
+          app-name: deepseekRagChatAgent
           agent:
-            agent-id: "100003"
-            agent-name: 智能对话助手
-            agent-desc: 专注于自然交流的通用对话助手，提供友好、专业的对话体验
+            agent-id: "200004"
+            agent-name: DeepSeek 智能问答
+            agent-desc: 基于 DeepSeek 模型的智能对话问答助手
           module:
             ai-api:
-              # 使用项目默认的 LLM API 配置
-              base-url: ${LLM_BASE_URL:https://open.bigmodel.cn/api/coding/paas/v4}
-              api-key: ${LLM_API_KEY:47b14566882e4e5ab68ae079e307667f.gYg6trXMmDAFQBT3}
-              completions-path: /chat/completions
-              embeddings-path: /embeddings
+              # DeepSeek OpenAI 兼容接口
+              base-url: https://api.deepseek.com
+              api-key: ${DEEPSEEK_API_KEY:sk-REDACTED}
+              completions-path: /v1/chat/completions
+#              embeddings-path: /v1/embeddings
             chat-model:
-              model: ${LLM_MODEL:glm-5.1}
-              tool-mcp-list: [ ]
+              model: deepseek-v4-pro
             agents:
-              - name: conversationAgent
-                description: 智能对话助手，专注于自然、流畅的人机交流
+              - name: deepseekRagChatAgent
+                description: DeepSeek 智能问答助手，专注于自然、流畅的人机交流
                 instruction: |
                   你是一个专业、友好的智能对话助手。你的核心使命是与用户进行自然、有意义的交流。
                   
@@ -60,8 +59,8 @@ ai:
                   - 在对话结束时，询问是否还有其他需要帮助的地方
                   
                   记住：你的目标是让每次对话都变得有价值、愉快且富有成效。
-                output-key: chat_response
+                output-key: rag_answer
             runner:
-              agent-name: conversationAgent
+              agent-name: deepseekRagChatAgent
               plugin-name-list:
                 - myLogPlugin

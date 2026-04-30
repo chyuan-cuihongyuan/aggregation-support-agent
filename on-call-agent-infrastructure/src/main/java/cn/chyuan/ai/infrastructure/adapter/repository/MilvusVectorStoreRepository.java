@@ -6,6 +6,8 @@ import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
 import cn.chyuan.ai.infrastructure.config.MilvusConfigProperties;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.TypeReference;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import io.milvus.client.MilvusServiceClient;
 import io.milvus.grpc.DataType;
 import io.milvus.grpc.MutationResult;
@@ -175,7 +177,8 @@ public class MilvusVectorStoreRepository implements IVectorStoreRepository {
             // 构建向量字段数据
             List<List<Float>> vectors = new ArrayList<>();
             List<String> contents = new ArrayList<>();
-            List<String> metadataList = new ArrayList<>();
+            List<JsonObject> metadataList = new ArrayList<>();
+            Gson gson = new Gson();
 
             for (DocumentChunkEntity chunk : chunks) {
                 // 将 float[] 转换为 List<Float>
@@ -185,8 +188,8 @@ public class MilvusVectorStoreRepository implements IVectorStoreRepository {
                 }
                 vectors.add(vectorList);
                 contents.add(chunk.getContent());
-                // 将元数据 Map 序列化为 JSON 字符串
-                metadataList.add(JSON.toJSONString(chunk.getMetadata()));
+                // Milvus JSON 字段要求传入 Gson 的 JsonObject
+                metadataList.add(gson.toJsonTree(chunk.getMetadata()).getAsJsonObject());
             }
 
             // 构建插入参数
