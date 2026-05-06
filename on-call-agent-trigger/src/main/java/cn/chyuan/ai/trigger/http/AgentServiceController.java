@@ -9,7 +9,10 @@ import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyEmitter;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import io.reactivex.rxjava3.schedulers.Schedulers;
+import org.springframework.http.MediaType;
 
 import javax.annotation.Resource;
 import java.util.List;
@@ -139,17 +142,21 @@ public class AgentServiceController implements IAgentService {
         }
     }
 
-    @RequestMapping(value = "chat_stream", method = RequestMethod.POST)
+    @RequestMapping(value = "chat_stream", method = RequestMethod.POST, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @Override
-    public ResponseBodyEmitter chatStream(@RequestBody ChatRequestDTO requestDTO) {
-        ResponseBodyEmitter emitter = new ResponseBodyEmitter(3 * 60 * 1000L);
+    public SseEmitter chatStream(@RequestBody ChatRequestDTO requestDTO) {
+        SseEmitter emitter = new SseEmitter(3 * 60 * 1000L);
         try {
             log.info("流式对话 agentId:{} userId:{} sessionId:{} message:{}", requestDTO.getAgentId(), requestDTO.getUserId(), requestDTO.getSessionId(), requestDTO.getMessage());
             chatService.handleMessageStream(requestDTO.getAgentId(), requestDTO.getUserId(), requestDTO.getSessionId(), requestDTO.getMessage())
+                    .subscribeOn(Schedulers.io())
                     .subscribe(
                             event -> {
                                 try {
-                                    emitter.send(event.stringifyContent());
+                                    String content = event.stringifyContent();
+                                    if (content != null && !content.isEmpty()) {
+                                        emitter.send(SseEmitter.event().data(content));
+                                    }
                                 } catch (Exception e) {
                                     log.error("流式对话发送失败", e);
                                     emitter.completeWithError(e);

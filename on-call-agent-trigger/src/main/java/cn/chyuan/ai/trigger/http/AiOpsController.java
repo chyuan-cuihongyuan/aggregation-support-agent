@@ -7,9 +7,11 @@ import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
 import com.google.adk.events.Event;
 import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyEmitter;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import javax.annotation.Resource;
 
@@ -43,10 +45,10 @@ public class AiOpsController {
      * @param requestDTO AIOps 请求（包含 agentId、userId、sessionId、alertDescription）
      * @return ResponseBodyEmitter（SSE 流式响应）
      */
-    @RequestMapping(value = "ai_ops", method = RequestMethod.POST)
-    public ResponseBodyEmitter aiOpsAnalysis(@RequestBody AiOpsRequestDTO requestDTO) {
+    @RequestMapping(value = "ai_ops", method = RequestMethod.POST, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter aiOpsAnalysis(@RequestBody AiOpsRequestDTO requestDTO) {
         // 设置 10 分钟超时的 SSE Emitter
-        ResponseBodyEmitter emitter = new ResponseBodyEmitter(AIOPS_TIMEOUT_MS);
+        SseEmitter emitter = new SseEmitter(AIOPS_TIMEOUT_MS);
 
         try {
             String agentId = requestDTO.getAgentId() != null ? requestDTO.getAgentId() : DEFAULT_AIOPS_AGENT_ID;
@@ -66,26 +68,27 @@ public class AiOpsController {
             Flowable<Event> events = chatService.handleMessageStream(agentId, userId, finalSessionId, message);
 
             // 订阅事件流，将每个事件内容通过 SSE 推送到前端
-            events.subscribe(
-                    event -> {
-                        try {
-                            String content = event.stringifyContent();
-                            if (content != null && !content.isEmpty()) {
-                                emitter.send(content);
-                            }
-                        } catch (Exception e) {
-                            log.error("AIOps SSE 发送失败", e);
-                            emitter.completeWithError(e);
-                        }
-                    },
-                    emitter::completeWithError,
-                    emitter::complete
-            );
+            events.subscribeOn(Schedulers.io())
+                    .subscribe(
+                            event -> {
+                                try {
+                                    String content = event.stringifyContent();
+                                    if (content != null && !content.isEmpty()) {
+                                        emitter.send(SseEmitter.event().data(content));
+                                    }
+                                } catch (Exception e) {
+                                    log.error("AIOps SSE 发送失败", e);
+                                    emitter.completeWithError(e);
+                                }
+                            },
+                            emitter::completeWithError,
+                            emitter::complete
+                    );
 
         } catch (AppException e) {
             log.error("AIOps 分析异常", e);
             try {
-                emitter.send("分析失败: " + e.getInfo());
+                emitter.send(SseEmitter.event().data("分析失败: " + e.getInfo()));
             } catch (Exception ignored) {
             }
             emitter.complete();
