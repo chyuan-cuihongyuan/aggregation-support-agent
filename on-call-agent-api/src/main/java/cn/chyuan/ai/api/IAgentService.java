@@ -2,7 +2,7 @@ package cn.chyuan.ai.api;
 
 import cn.chyuan.ai.api.dto.*;
 import cn.chyuan.ai.api.response.Response;
-import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyEmitter;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 
@@ -19,6 +19,6 @@ public interface IAgentService {
 
     Response<ChatResponseDTO> chat(ChatRequestDTO requestDTO);
 
-    ResponseBodyEmitter chatStream(ChatRequestDTO requestDTO);
+    SseEmitter chatStream(ChatRequestDTO requestDTO);
 
 }
