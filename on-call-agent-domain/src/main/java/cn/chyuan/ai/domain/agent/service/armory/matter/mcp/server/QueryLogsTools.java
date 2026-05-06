@@ -9,64 +9,58 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import jakarta.annotation.PostConstruct;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
- * CLS 日志查询工具 — 从云日志服务检索和分析日志，支持 Mock 模式
- * <p>
- * 在 AIOps 场景中，智能体需要查询和分析系统日志来辅助故障诊断：
- * <ul>
- *   <li>查询应用错误日志，定位异常堆栈</li>
- *   <li>检索数据库慢查询日志，分析性能瓶颈</li>
- *   <li>查看系统指标日志，了解资源使用趋势</li>
- *   <li>分析系统事件日志，排查变更和部署影响</li>
- * </ul>
- * <p>
- * 支持四个日志主题（Topic）：
- * <ul>
- *   <li>system-metrics — 系统指标日志（CPU、内存、磁盘等）</li>
- *   <li>application-logs — 应用运行日志（错误、警告、信息等）</li>
- *   <li>database-slow-query — 数据库慢查询日志</li>
- *   <li>system-events — 系统事件日志（部署、扩容、配置变更等）</li>
- * </ul>
- * <p>
- * 支持两种运行模式：
- * <ul>
- *   <li>Mock 模式：返回预定义的模拟日志数据，用于开发和测试</li>
- *   <li>真实模式：通过 CLS API 查询真实日志（待接入）</li>
- * </ul>
- * <p>
- * 迁移自 OnCall-Agent-java 项目，作为本地 MCP 工具注册为 Spring Bean。
+ * 日志查询工具 — 接入 Loki 日志聚合系统，支持 Mock 模式回退
  */
 @Slf4j
 @Service
 public class QueryLogsTools {
 
-    /** 是否启用 Mock 模式，为 true 时返回模拟日志数据而不调用真实 CLS */
-    @Value("${cls.mock-enabled:true}")
+    @Value("${aiops.mock.enabled:false}")
     private boolean mockEnabled;
 
-    /** JSON 序列化工具 */
+    @Value("${aiops.loki.base-url:http://localhost:3100}")
+    private String lokiBaseUrl;
+
+    @Value("${aiops.loki.timeout:10}")
+    private int lokiTimeout;
+
+    private OkHttpClient httpClient;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    // ========== 工具方法（@Tool 标注，供 AI 智能体调用） ==========
+    @PostConstruct
+    public void init() {
+        this.httpClient = new OkHttpClient.Builder()
+                .connectTimeout(lokiTimeout, TimeUnit.SECONDS)
+                .readTimeout(lokiTimeout, TimeUnit.SECONDS)
+                .writeTimeout(lokiTimeout, TimeUnit.SECONDS)
+                .build();
+        log.info("QueryLogsTools 初始化完成, mockEnabled={}, lokiBaseUrl={}", mockEnabled, lokiBaseUrl);
+    }
 
     /**
      * 获取可用的日志主题列表
-     * <p>
-     * 返回系统中所有可查询的日志主题，每个主题包含名称和描述信息，
-     * 智能体可据此选择合适的日志主题进行查询。
-     *
-     * @return JSON 格式的日志主题列表
      */
     @Tool(description = "获取所有可用的日志主题列表，包含主题名称和描述，用于后续日志查询时指定目标主题")
     public String getAvailableLogTopics() {
@@ -89,23 +83,14 @@ public class QueryLogsTools {
     }
 
     /**
-     * 查询日志 — 根据条件从指定日志主题中检索日志
-     * <p>
-     * 智能体通过此工具查询特定日志主题的日志内容，支持按关键词过滤和限制返回条数。
-     *
-     * @param region   地域，例如 ap-guangzhou、ap-shanghai
-     * @param logTopic 日志主题名称，需从 getAvailableLogTopics 获取
-     * @param query    查询关键词，支持 Lucene 语法，例如 "ERROR AND payment"
-     * @param limit    返回的最大日志条数
-     * @return JSON 格式的日志查询结果
+     * 查询日志 — 从 Loki 检索或 Mock 模式
      */
-    @Tool(description = "从指定日志主题中查询日志，支持按地域、主题、关键词过滤，返回匹配的日志条目")
+    @Tool(description = "从指定日志主题中查询日志，支持按地域、主题、关键词过滤，返回匹配的日志条目。真实模式从 Loki 聚合系统查询")
     public String queryLogs(String region, String logTopic, String query, int limit) {
         log.info("工具调用: 查询日志, region={}, logTopic={}, query={}, limit={}, mockEnabled={}",
                 region, logTopic, query, limit, mockEnabled);
 
         try {
-            // Mock 模式：返回模拟日志数据
             if (mockEnabled) {
                 LogQueryOutput mockOutput = buildMockLogs(logTopic, query, limit);
                 String result = objectMapper.writeValueAsString(mockOutput);
@@ -113,16 +98,7 @@ public class QueryLogsTools {
                 return result;
             }
 
-            // 真实模式：调用 CLS API 查询日志（待接入）
-            // TODO: 接入真实 CLS API
-            log.warn("真实 CLS API 尚未接入，请配置 cls.mock-enabled=true 使用 Mock 模式");
-            LogQueryOutput output = LogQueryOutput.builder()
-                    .status("error")
-                    .errorMessage("真实 CLS API 尚未接入，请使用 Mock 模式")
-                    .totalLogs(0)
-                    .logs(new ArrayList<>())
-                    .build();
-            return objectMapper.writeValueAsString(output);
+            return queryLogsFromLoki(logTopic, query, limit);
 
         } catch (Exception e) {
             log.error("查询日志失败: logTopic={}, query={}, 错误: {}", logTopic, query, e.getMessage(), e);
@@ -137,17 +113,230 @@ public class QueryLogsTools {
         }
     }
 
-    // ========== 日志主题构建方法 ==========
-
     /**
-     * 构建所有可用的日志主题
-     *
-     * @return 日志主题列表
+     * 使用 LogQL 查询 Loki 日志
      */
+    @Tool(description = "使用 LogQL 查询表达式从 Loki 中检索日志，支持高级过滤和标签匹配。例如: {service=\"payment-service\"} |= \"ERROR\"")
+    public String queryLogsByLogQL(
+            @JsonProperty("logql") @JsonPropertyDescription("LogQL 查询表达式，例如: {service=\"payment-service\"} |= \"ERROR\" | json | line_format \"{{.message}}\"") String logql,
+            @JsonProperty("limit") @JsonPropertyDescription("返回的最大日志条数，默认 100") int limit,
+            @JsonProperty("timeRange") @JsonPropertyDescription("时间范围，例如: 1h, 6h, 24h, 7d") String timeRange) {
+        log.info("工具调用: LogQL 查询, logql={}, limit={}, timeRange={}", logql, limit, timeRange);
+
+        try {
+            if (mockEnabled) {
+                LogQueryOutput mockOutput = buildMockLogs("application-logs", "ERROR", limit > 0 ? limit : 100);
+                return objectMapper.writeValueAsString(mockOutput);
+            }
+
+            int actualLimit = limit > 0 ? limit : 100;
+            int rangeMinutes = parseTimeRange(timeRange);
+
+            long endNs = Instant.now().toEpochMilli() * 1_000_000L;
+            long startNs = Instant.now().minus(rangeMinutes, ChronoUnit.MINUTES).toEpochMilli() * 1_000_000L;
+
+            String encodedQuery = URLEncoder.encode(logql, StandardCharsets.UTF_8);
+            String url = lokiBaseUrl + "/loki/api/v1/query_range"
+                    + "?query=" + encodedQuery
+                    + "&limit=" + actualLimit
+                    + "&start=" + startNs
+                    + "&end=" + endNs
+                    + "&direction=backward";
+
+            Request request = new Request.Builder().url(url).get().build();
+
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    log.error("Loki API 调用失败: statusCode={}", response.code());
+                    String errorBody = response.body() != null ? response.body().string() : "";
+                    return objectMapper.writeValueAsString(LogQueryOutput.builder()
+                            .status("error")
+                            .errorMessage("Loki API 调用失败: HTTP " + response.code() + ", " + errorBody)
+                            .totalLogs(0)
+                            .logs(new ArrayList<>())
+                            .build());
+                }
+
+                String responseBody = response.body() != null ? response.body().string() : "{}";
+                LogQueryOutput output = parseLokiResponse(responseBody);
+                return objectMapper.writeValueAsString(output);
+            }
+
+        } catch (Exception e) {
+            log.error("LogQL 查询失败: logql={}, error={}", logql, e.getMessage(), e);
+            try {
+                return objectMapper.writeValueAsString(LogQueryOutput.builder()
+                        .status("error")
+                        .errorMessage("查询失败: " + e.getMessage())
+                        .totalLogs(0)
+                        .logs(new ArrayList<>())
+                        .build());
+            } catch (Exception ex) {
+                return "{\"status\":\"error\",\"errorMessage\":\"查询异常\"}";
+            }
+        }
+    }
+
+    // ========== Loki 查询 ==========
+
+    private String queryLogsFromLoki(String logTopic, String query, int limit) throws Exception {
+        String logql = buildLogQL(logTopic, query);
+        int actualLimit = limit > 0 ? limit : 100;
+
+        long endNs = Instant.now().toEpochMilli() * 1_000_000L;
+        long startNs = Instant.now().minus(1, ChronoUnit.HOURS).toEpochMilli() * 1_000_000L;
+
+        String encodedQuery = URLEncoder.encode(logql, StandardCharsets.UTF_8);
+        String url = lokiBaseUrl + "/loki/api/v1/query_range"
+                + "?query=" + encodedQuery
+                + "&limit=" + actualLimit
+                + "&start=" + startNs
+                + "&end=" + endNs
+                + "&direction=backward";
+
+        Request request = new Request.Builder().url(url).get().build();
+
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                log.error("Loki API 调用失败: statusCode={}", response.code());
+                return objectMapper.writeValueAsString(LogQueryOutput.builder()
+                        .status("error")
+                        .errorMessage("Loki API 调用失败: HTTP " + response.code())
+                        .totalLogs(0)
+                        .logs(new ArrayList<>())
+                        .build());
+            }
+
+            String responseBody = response.body() != null ? response.body().string() : "{}";
+            LogQueryOutput output = parseLokiResponse(responseBody);
+            output.setLogTopic(logTopic);
+            output.setQuery(query);
+            return objectMapper.writeValueAsString(output);
+        }
+    }
+
+    private String buildLogQL(String logTopic, String query) {
+        StringBuilder logql = new StringBuilder("{");
+        switch (logTopic) {
+            case "system-metrics":
+                logql.append("job=\"varlogs\"");
+                break;
+            case "application-logs":
+                logql.append("level=~\"ERROR|WARN\"");
+                break;
+            case "database-slow-query":
+                logql.append("level=\"WARN\"");
+                break;
+            case "system-events":
+                logql.append("job=\"varlogs\"");
+                break;
+            default:
+                logql.append("job=~\".*\"");
+                break;
+        }
+        logql.append("}");
+
+        if (query != null && !query.trim().isEmpty()) {
+            logql.append(" |= \"").append(query.replace("\"", "\\\"")).append("\"");
+        }
+
+        return logql.toString();
+    }
+
+    @SuppressWarnings("unchecked")
+    private LogQueryOutput parseLokiResponse(String responseBody) {
+        try {
+            Map<String, Object> response = objectMapper.readValue(responseBody, Map.class);
+            String status = (String) response.getOrDefault("status", "unknown");
+
+            Map<String, Object> data = (Map<String, Object>) response.get("data");
+            List<LogEntry> logs = new ArrayList<>();
+
+            if (data != null) {
+                List<Map<String, Object>> results = (List<Map<String, Object>>) data.get("result");
+                if (results != null) {
+                    for (Map<String, Object> result : results) {
+                        Map<String, String> stream = (Map<String, String>) result.get("stream");
+                        List<List<Object>> values = (List<List<Object>>) result.get("values");
+
+                        if (values != null) {
+                            for (List<Object> valuePair : values) {
+                                String timestamp = valuePair.size() > 0 ? String.valueOf(valuePair.get(0)) : "";
+                                String line = valuePair.size() > 1 ? String.valueOf(valuePair.get(1)) : "";
+
+                                Map<String, Object> metadata = new HashMap<>();
+                                if (stream != null) {
+                                    metadata.putAll(stream);
+                                }
+
+                                String level = stream != null ? stream.getOrDefault("level", "INFO") : "INFO";
+                                String service = stream != null ? stream.getOrDefault("service", "unknown") : "unknown";
+                                String source = stream != null ? stream.getOrDefault("container", "unknown") : "unknown";
+
+                                logs.add(LogEntry.builder()
+                                        .timestamp(formatLokiTimestamp(timestamp))
+                                        .level(level)
+                                        .source(source)
+                                        .serviceName(service)
+                                        .message(line)
+                                        .metadata(metadata)
+                                        .build());
+                            }
+                        }
+                    }
+                }
+            }
+
+            return LogQueryOutput.builder()
+                    .status(status)
+                    .totalLogs(logs.size())
+                    .logs(logs)
+                    .build();
+
+        } catch (Exception e) {
+            log.error("解析 Loki 响应失败: {}", e.getMessage(), e);
+            return LogQueryOutput.builder()
+                    .status("error")
+                    .errorMessage("解析响应失败: " + e.getMessage())
+                    .totalLogs(0)
+                    .logs(new ArrayList<>())
+                    .build();
+        }
+    }
+
+    private String formatLokiTimestamp(String nsTimestamp) {
+        try {
+            long millis = Long.parseLong(nsTimestamp) / 1_000_000;
+            return Instant.ofEpochMilli(millis).toString();
+        } catch (Exception e) {
+            return nsTimestamp;
+        }
+    }
+
+    private int parseTimeRange(String timeRange) {
+        if (timeRange == null || timeRange.isEmpty()) {
+            return 60;
+        }
+        try {
+            String lower = timeRange.toLowerCase();
+            if (lower.endsWith("d")) {
+                return Integer.parseInt(lower.replace("d", "")) * 24 * 60;
+            } else if (lower.endsWith("h")) {
+                return Integer.parseInt(lower.replace("h", "")) * 60;
+            } else if (lower.endsWith("m")) {
+                return Integer.parseInt(lower.replace("m", ""));
+            }
+            return Integer.parseInt(timeRange);
+        } catch (NumberFormatException e) {
+            return 60;
+        }
+    }
+
+    // ========== 日志主题 ==========
+
     private List<LogTopic> buildLogTopics() {
         List<LogTopic> topics = new ArrayList<>();
 
-        // 系统指标日志主题
         topics.add(LogTopic.builder()
                 .name("system-metrics")
                 .displayName("系统指标日志")
@@ -155,7 +344,6 @@ public class QueryLogsTools {
                 .retentionDays(30)
                 .build());
 
-        // 应用运行日志主题
         topics.add(LogTopic.builder()
                 .name("application-logs")
                 .displayName("应用运行日志")
@@ -163,7 +351,6 @@ public class QueryLogsTools {
                 .retentionDays(15)
                 .build());
 
-        // 数据库慢查询日志主题
         topics.add(LogTopic.builder()
                 .name("database-slow-query")
                 .displayName("数据库慢查询日志")
@@ -171,7 +358,6 @@ public class QueryLogsTools {
                 .retentionDays(30)
                 .build());
 
-        // 系统事件日志主题
         topics.add(LogTopic.builder()
                 .name("system-events")
                 .displayName("系统事件日志")
@@ -182,20 +368,11 @@ public class QueryLogsTools {
         return topics;
     }
 
-    // ========== 模拟数据构建方法 ==========
+    // ========== Mock 数据 ==========
 
-    /**
-     * 根据日志主题构建模拟日志数据
-     *
-     * @param logTopic 日志主题名称
-     * @param query    查询关键词
-     * @param limit    返回条数限制
-     * @return 模拟日志查询输出
-     */
     private LogQueryOutput buildMockLogs(String logTopic, String query, int limit) {
         List<LogEntry> allLogs = new ArrayList<>();
 
-        // 根据日志主题生成对应的模拟日志
         switch (logTopic) {
             case "system-metrics":
                 allLogs.addAll(buildSystemMetricsLogs());
@@ -210,15 +387,11 @@ public class QueryLogsTools {
                 allLogs.addAll(buildSystemEventLogs());
                 break;
             default:
-                // 未知主题，返回空结果
                 log.warn("未知的日志主题: {}", logTopic);
                 break;
         }
 
-        // 如果有关键词，进行简单过滤（模拟检索）
         List<LogEntry> filteredLogs = filterLogs(allLogs, query);
-
-        // 限制返回条数
         List<LogEntry> resultLogs = filteredLogs.stream()
                 .limit(limit > 0 ? limit : 10)
                 .collect(Collectors.toList());
@@ -232,378 +405,193 @@ public class QueryLogsTools {
                 .build();
     }
 
-    /**
-     * 构建系统指标模拟日志
-     * <p>
-     * 包含 CPU、内存、磁盘等系统指标的模拟日志条目
-     */
     private List<LogEntry> buildSystemMetricsLogs() {
         List<LogEntry> logs = new ArrayList<>();
-
-        // CPU 使用率日志
         logs.add(LogEntry.builder()
                 .timestamp("2025-06-15T10:22:15.000Z")
                 .level("WARN")
                 .source("10.0.1.15")
                 .serviceName("payment-service")
                 .message("CPU 使用率达到 92%，超过告警阈值 80%")
-                .metadata(Map.of(
-                        "metric", "cpu_usage_percent",
-                        "value", "92",
-                        "threshold", "80",
-                        "duration", "15m"
-                ))
+                .metadata(Map.of("metric", "cpu_usage_percent", "value", "92", "threshold", "80", "duration", "15m"))
                 .build());
-
-        // 内存使用率日志
         logs.add(LogEntry.builder()
                 .timestamp("2025-06-15T10:23:30.000Z")
                 .level("WARN")
                 .source("10.0.2.22")
                 .serviceName("order-service")
                 .message("内存使用率达到 91%，超过告警阈值 85%")
-                .metadata(Map.of(
-                        "metric", "memory_usage_percent",
-                        "value", "91",
-                        "threshold", "85",
-                        "duration", "10m"
-                ))
+                .metadata(Map.of("metric", "memory_usage_percent", "value", "91", "threshold", "85", "duration", "10m"))
                 .build());
-
-        // 磁盘 I/O 日志
         logs.add(LogEntry.builder()
                 .timestamp("2025-06-15T10:24:00.000Z")
                 .level("INFO")
                 .source("10.0.1.15")
                 .serviceName("payment-service")
                 .message("磁盘 I/O 等待时间升高，iowait 达到 35%")
-                .metadata(Map.of(
-                        "metric", "disk_iowait_percent",
-                        "value", "35",
-                        "normal", "<10"
-                ))
+                .metadata(Map.of("metric", "disk_iowait_percent", "value", "35", "normal", "<10"))
                 .build());
-
         return logs;
     }
 
-    /**
-     * 构建应用运行模拟日志
-     * <p>
-     * 包含应用错误、警告等运行日志的模拟条目
-     */
     private List<LogEntry> buildApplicationLogs() {
         List<LogEntry> logs = new ArrayList<>();
-
-        // 支付服务错误日志
         logs.add(LogEntry.builder()
                 .timestamp("2025-06-15T10:22:45.123Z")
                 .level("ERROR")
                 .source("10.0.1.15")
                 .serviceName("payment-service")
                 .message("PaymentProcessingException: 支付回调处理失败，第三方网关超时")
-                .metadata(Map.of(
-                        "thread", "payment-callback-3",
-                        "traceId", "trace-abc123",
-                        "spanId", "span-def456",
+                .metadata(Map.of("thread", "payment-callback-3", "traceId", "trace-abc123",
                         "exception", "PaymentProcessingException",
-                        "stackTrace", "PaymentProcessingException: 第三方网关超时\n" +
-                                "  at cn.chyuan.payment.callback.PaymentCallbackHandler.process(PaymentCallbackHandler.java:45)\n" +
-                                "  at cn.chyuan.payment.callback.PaymentCallbackHandler.handle(PaymentCallbackHandler.java:28)\n" +
-                                "  at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)"
-                ))
+                        "stackTrace", "PaymentProcessingException: 第三方网关超时\n  at cn.chyuan.payment.callback.PaymentCallbackHandler.process(PaymentCallbackHandler.java:45)"))
                 .build());
-
-        // 订单服务警告日志
         logs.add(LogEntry.builder()
                 .timestamp("2025-06-15T10:23:15.456Z")
                 .level("WARN")
                 .source("10.0.2.22")
                 .serviceName("order-service")
                 .message("数据库连接池使用率达到 85%，活跃连接数 170/200")
-                .metadata(Map.of(
-                        "thread", "db-pool-monitor",
-                        "activeConnections", "170",
-                        "maxConnections", "200",
-                        "usagePercent", "85"
-                ))
+                .metadata(Map.of("thread", "db-pool-monitor", "activeConnections", "170", "maxConnections", "200", "usagePercent", "85"))
                 .build());
-
-        // 用户服务错误日志
         logs.add(LogEntry.builder()
                 .timestamp("2025-06-15T10:25:00.789Z")
                 .level("ERROR")
                 .source("10.0.3.18")
                 .serviceName("user-service")
                 .message("RedisConnectionException: 无法连接到 Redis 集群，连接超时")
-                .metadata(Map.of(
-                        "thread", "redis-connection-pool-1",
-                        "traceId", "trace-ghi789",
-                        "exception", "RedisConnectionException",
-                        "redisCluster", "redis-prod-east-1",
-                        "connectionTimeout", "3000ms"
-                ))
+                .metadata(Map.of("thread", "redis-connection-pool-1", "traceId", "trace-ghi789",
+                        "exception", "RedisConnectionException", "connectionTimeout", "3000ms"))
                 .build());
-
         return logs;
     }
 
-    /**
-     * 构建数据库慢查询模拟日志
-     * <p>
-     * 包含慢 SQL 查询的模拟日志条目
-     */
     private List<LogEntry> buildDatabaseSlowQueryLogs() {
         List<LogEntry> logs = new ArrayList<>();
-
-        // 订单表慢查询
         logs.add(LogEntry.builder()
                 .timestamp("2025-06-15T10:20:00.000Z")
                 .level("WARN")
                 .source("10.0.4.10")
                 .serviceName("order-service")
                 .message("慢查询检测: SELECT 查询耗时 3.5s，超过阈值 1s")
-                .metadata(Map.of(
-                        "database", "order_db",
-                        "sql", "SELECT o.*, u.username, p.product_name FROM orders o " +
-                                "LEFT JOIN users u ON o.user_id = u.id " +
-                                "LEFT JOIN products p ON o.product_id = p.id " +
-                                "WHERE o.created_at > '2025-06-01' AND o.status = 'PENDING' " +
-                                "ORDER BY o.created_at DESC LIMIT 100",
-                        "executionTime", "3.5s",
-                        "threshold", "1s",
-                        "rowsExamined", "580000",
-                        "rowsReturned", "100",
-                        "useIndex", "idx_created_at"
-                ))
+                .metadata(Map.of("database", "order_db", "executionTime", "3.5s", "threshold", "1s",
+                        "rowsExamined", "580000", "rowsReturned", "100", "useIndex", "idx_created_at"))
                 .build());
-
-        // 用户表慢查询
         logs.add(LogEntry.builder()
                 .timestamp("2025-06-15T10:21:30.000Z")
                 .level("WARN")
                 .source("10.0.4.10")
                 .serviceName("user-service")
                 .message("慢查询检测: UPDATE 语句耗时 2.1s，超过阈值 1s")
-                .metadata(Map.of(
-                        "database", "user_db",
-                        "sql", "UPDATE users SET last_login_at = NOW(), login_count = login_count + 1 " +
-                                "WHERE email LIKE '%@example.com'",
-                        "executionTime", "2.1s",
-                        "threshold", "1s",
-                        "rowsAffected", "45000",
-                        "useIndex", "none (全表扫描)"
-                ))
+                .metadata(Map.of("database", "user_db", "executionTime", "2.1s", "threshold", "1s",
+                        "rowsAffected", "45000", "useIndex", "none (全表扫描)"))
                 .build());
-
         return logs;
     }
 
-    /**
-     * 构建系统事件模拟日志
-     * <p>
-     * 包含服务部署、扩缩容、配置变更等系统事件的模拟日志条目
-     */
     private List<LogEntry> buildSystemEventLogs() {
         List<LogEntry> logs = new ArrayList<>();
-
-        // 服务部署事件
         logs.add(LogEntry.builder()
                 .timestamp("2025-06-15T10:00:00.000Z")
                 .level("INFO")
                 .source("ci-cd-system")
                 .serviceName("payment-service")
                 .message("服务部署完成: payment-service v2.3.1 -> v2.4.0")
-                .metadata(Map.of(
-                        "eventType", "DEPLOYMENT",
-                        "previousVersion", "v2.3.1",
-                        "currentVersion", "v2.4.0",
-                        "deployedBy", "devops-bot",
-                        "deployStrategy", "rolling-update"
-                ))
+                .metadata(Map.of("eventType", "DEPLOYMENT", "previousVersion", "v2.3.1",
+                        "currentVersion", "v2.4.0", "deployedBy", "devops-bot", "deployStrategy", "rolling-update"))
                 .build());
-
-        // 扩容事件
         logs.add(LogEntry.builder()
                 .timestamp("2025-06-15T10:10:00.000Z")
                 .level("INFO")
                 .source("hpa-controller")
                 .serviceName("order-service")
                 .message("HPA 触发扩容: order-service 副本数 3 -> 5")
-                .metadata(Map.of(
-                        "eventType", "SCALE_UP",
-                        "previousReplicas", "3",
-                        "currentReplicas", "5",
-                        "triggerReason", "CPU 使用率超过 70%",
-                        "hpaName", "order-service-hpa"
-                ))
+                .metadata(Map.of("eventType", "SCALE_UP", "previousReplicas", "3",
+                        "currentReplicas", "5", "triggerReason", "CPU 使用率超过 70%"))
                 .build());
-
-        // 配置变更事件
         logs.add(LogEntry.builder()
                 .timestamp("2025-06-15T09:50:00.000Z")
                 .level("INFO")
                 .source("config-center")
                 .serviceName("user-service")
                 .message("配置变更: user-service 数据库连接池参数调整")
-                .metadata(Map.of(
-                        "eventType", "CONFIG_CHANGE",
-                        "changedBy", "dba-team",
-                        "configKey", "spring.datasource.hikari.maximum-pool-size",
-                        "oldValue", "50",
-                        "newValue", "100",
-                        "configSource", "nacos"
-                ))
+                .metadata(Map.of("eventType", "CONFIG_CHANGE", "changedBy", "dba-team",
+                        "configKey", "spring.datasource.hikari.maximum-pool-size", "oldValue", "50", "newValue", "100"))
                 .build());
-
         return logs;
     }
 
-    /**
-     * 根据查询关键词过滤日志条目
-     * <p>
-     * 模拟检索功能，对日志内容进行简单的关键词匹配过滤。
-     * 支持多个关键词的 AND 逻辑组合。
-     *
-     * @param logs  全量日志列表
-     * @param query 查询关键词，支持空格分隔的多关键词 AND 查询
-     * @return 过滤后的日志列表
-     */
     private List<LogEntry> filterLogs(List<LogEntry> logs, String query) {
         if (query == null || query.trim().isEmpty()) {
             return logs;
         }
-
-        // 将查询按空格分割为多个关键词
         List<String> keywords = Arrays.asList(query.toLowerCase().split("\\s+"));
-
         return logs.stream()
                 .filter(log -> {
-                    // 在日志的所有文本字段中搜索关键词
-                    String searchText = (log.getMessage() + " " +
-                            log.getServiceName() + " " +
-                            log.getLevel() + " " +
-                            log.getSource() + " " +
+                    String searchText = (log.getMessage() + " " + log.getServiceName() + " " +
+                            log.getLevel() + " " + log.getSource() + " " +
                             (log.getMetadata() != null ? log.getMetadata().values().toString() : ""))
                             .toLowerCase();
-                    // 所有关键词都必须匹配（AND 逻辑）
                     return keywords.stream().allMatch(searchText::contains);
                 })
                 .collect(Collectors.toList());
     }
 
-    // ========== 内部数据模型类 ==========
+    // ========== 数据模型 ==========
 
-    /**
-     * 日志主题信息 — 描述一个可查询的日志主题
-     */
     @Data
     @Builder
     @AllArgsConstructor
     @NoArgsConstructor
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class LogTopic {
-
-        /** 主题标识名称，用于查询时指定 */
         @JsonProperty("name")
-        @JsonPropertyDescription("日志主题名称标识")
         private String name;
-
-        /** 主题显示名称 */
         @JsonProperty("displayName")
-        @JsonPropertyDescription("日志主题显示名称")
         private String displayName;
-
-        /** 主题描述信息 */
         @JsonProperty("description")
-        @JsonPropertyDescription("日志主题描述")
         private String description;
-
-        /** 日志保留天数 */
         @JsonProperty("retentionDays")
-        @JsonPropertyDescription("日志保留天数")
         private Integer retentionDays;
     }
 
-    /**
-     * 日志查询输出 — 封装日志查询的整体结果
-     */
     @Data
     @Builder
     @AllArgsConstructor
     @NoArgsConstructor
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class LogQueryOutput {
-
-        /** 查询状态：success 或 error */
         @JsonProperty("status")
-        @JsonPropertyDescription("查询状态")
         private String status;
-
-        /** 查询的日志主题 */
         @JsonProperty("logTopic")
-        @JsonPropertyDescription("查询的日志主题")
         private String logTopic;
-
-        /** 查询关键词 */
         @JsonProperty("query")
-        @JsonPropertyDescription("查询关键词")
         private String query;
-
-        /** 返回的日志条数 */
         @JsonProperty("totalLogs")
-        @JsonPropertyDescription("返回的日志条数")
         private int totalLogs;
-
-        /** 日志条目列表 */
         @JsonProperty("logs")
-        @JsonPropertyDescription("日志条目列表")
         private List<LogEntry> logs;
-
-        /** 错误信息（仅在查询失败时返回） */
         @JsonProperty("errorMessage")
-        @JsonPropertyDescription("错误信息")
         private String errorMessage;
     }
 
-    /**
-     * 日志条目 — 单条日志记录
-     */
     @Data
     @Builder
     @AllArgsConstructor
     @NoArgsConstructor
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class LogEntry {
-
-        /** 日志时间戳（ISO 8601 格式） */
         @JsonProperty("timestamp")
-        @JsonPropertyDescription("日志时间戳")
         private String timestamp;
-
-        /** 日志级别：ERROR、WARN、INFO、DEBUG */
         @JsonProperty("level")
-        @JsonPropertyDescription("日志级别")
         private String level;
-
-        /** 日志来源地址 */
         @JsonProperty("source")
-        @JsonPropertyDescription("日志来源地址")
         private String source;
-
-        /** 关联服务名称 */
         @JsonProperty("serviceName")
-        @JsonPropertyDescription("关联服务名称")
         private String serviceName;
-
-        /** 日志内容 */
         @JsonProperty("message")
-        @JsonPropertyDescription("日志内容")
         private String message;
-
-        /** 附加元数据（包含指标值、异常堆栈、SQL 等详细信息） */
         @JsonProperty("metadata")
-        @JsonPropertyDescription("附加元数据")
         private Map<String, Object> metadata;
     }
 }
