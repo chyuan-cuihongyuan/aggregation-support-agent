@@ -7,9 +7,11 @@ import org.springframework.beans.factory.annotation.Configurable;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.mybatis.spring.annotation.MapperScan;
 
 @SpringBootApplication
 @Configurable
+@MapperScan("cn.chyuan.ai.infrastructure.persistent.mapper")
 public class Application {
 
     public static void main(String[] args) {
