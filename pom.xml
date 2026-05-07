@@ -113,6 +113,17 @@
                 <artifactId>commons-lang3</artifactId>
                 <version>3.9</version>
             </dependency>
+            <!-- protobuf 版本统一 — milvus-sdk 和 grpc 需要 3.25.x，mysql-connector 拉入了 3.11.4 -->
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java</artifactId>
+                <version>3.25.5</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java-util</artifactId>
+                <version>3.25.5</version>
+            </dependency>
             <dependency>
                 <groupId>com.google.guava</groupId>
                 <artifactId>guava</artifactId>
