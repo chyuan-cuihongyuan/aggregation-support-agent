@@ -154,18 +154,9 @@ public class AgentServiceController implements IAgentService {
                     .subscribe(
                             event -> {
                                 try {
-                                    StringBuilder sb = new StringBuilder();
-                                    event.content().ifPresent(c ->
-                                        c.parts().ifPresent(parts ->
-                                            parts.forEach(part ->
-                                                part.text().ifPresent(text -> {
-                                                    if (!text.isEmpty()) sb.append(text);
-                                                })
-                                            )
-                                        )
-                                    );
-                                    if (sb.length() > 0) {
-                                        emitter.send(SseEmitter.event().data(sb.toString()));
+                                    String content = event.stringifyContent();
+                                    if (content != null && !content.isEmpty()) {
+                                        emitter.send(SseEmitter.event().data(content));
                                     }
                                 } catch (Exception e) {
                                     log.error("流式对话发送失败", e);
