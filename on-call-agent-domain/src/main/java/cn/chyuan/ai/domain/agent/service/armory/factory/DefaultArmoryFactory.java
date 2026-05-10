@@ -63,6 +63,11 @@ public class DefaultArmoryFactory {
         private ChatModel chatModel;
 
         /**
+         * 是否注册了工具
+         */
+        private boolean hasTools;
+
+        /**
          * 智能体配置组
          */
         private Map<String, BaseAgent> agentGroup = new HashMap<>();
