@@ -29,6 +29,7 @@ ai:
                     request-timeout: 5000
             agents:
               - name: CodeWriterAgent
+                react-mode: true
                 description: Writes initial Java code based on a specification.
                 instruction: |
                   You are a Java Code Generator.
@@ -36,6 +37,7 @@ ai:
                   Output *only* the complete Java code block, enclosed in triple backticks (```java ... ```).
                 output-key: generated_code
               - name: CodeReviewerAgent
+                react-mode: true
                 description: Reviews code and provides feedback.
                 instruction: |
                   You are an expert Java Code Reviewer.
@@ -59,6 +61,7 @@ ai:
                   Output *only* the review comments or the "No major issues" statement.
                 output-key: review_comments
               - name: CodeRefactorerAgent
+                react-mode: true
                 description: Refactors code based on review comments.
                 instruction: |
                   You are a Java Code Refactoring AI.

@@ -25,6 +25,7 @@ ai:
                     name: ragToolCallbackProvider
             agents:
               - name: ragChatAgent
+                react-mode: true
                 description: RAG 智能问答助手，检索知识库文档回答问题
                 instruction: |
                   你是一个专业的智能问答助手，可以基于内部知识库文档回答问题。

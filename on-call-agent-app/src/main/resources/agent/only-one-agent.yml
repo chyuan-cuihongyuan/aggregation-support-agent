@@ -22,6 +22,7 @@ ai:
               tool-mcp-list: [ ]
             agents:
               - name: conversationAgent
+                react-mode: true
                 description: 智能对话助手，专注于自然、流畅的人机交流
                 instruction: |
                   你是一个专业、友好的智能对话助手。你的核心使命是与用户进行自然、有意义的交流。
