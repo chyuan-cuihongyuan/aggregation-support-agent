@@ -24,6 +24,7 @@ ai:
                     name: ragToolCallbackProvider
             agents:
               - name: qianwenRagChatAgent
+                react-mode: true
                 description: 千问版 RAG 智能问答助手
                 instruction: |
                   你是一个专业的智能问答助手，可以基于内部知识库文档回答问题。

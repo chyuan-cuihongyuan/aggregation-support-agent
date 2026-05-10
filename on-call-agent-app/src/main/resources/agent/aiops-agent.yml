@@ -25,6 +25,7 @@ ai:
             agents:
               # 分析规划器 — 分解问题、调用工具收集信息、制定分析计划
               - name: aiops_planner
+                react-mode: true
                 description: AIOps 分析规划器，负责分解问题和制定分析计划
                 instruction: |
                   你是一个运维分析规划器。根据用户的告警描述，制定详细的分析计划。
@@ -43,6 +44,7 @@ ai:
                 output-key: plan_result
               # 分析执行器 — 根据计划生成结构化的 Markdown 运维报告
               - name: aiops_executor
+                react-mode: true
                 description: AIOps 分析执行器，根据规划结果生成运维报告
                 instruction: |
                   你是一个运维分析报告生成器。根据规划器提供的分析结果 {plan_result}，

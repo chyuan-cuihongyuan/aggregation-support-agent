@@ -24,6 +24,7 @@ ai:
                     request-timeout: 500000
             agents:
               - name: RenewableEnergyResearcher
+                react-mode: true
                 description: Researches renewable energy sources.
                 instruction: |
                   You are an AI Research Assistant specializing in energy.
@@ -33,6 +34,7 @@ ai:
                   Output *only* the summary.
                 output-key: renewable_energy_result
               - name: EVResearcher
+                react-mode: true
                 description: Researches electric vehicle technology.
                 instruction: |
                   You are an AI Research Assistant specializing in transportation.
@@ -42,6 +44,7 @@ ai:
                   Output *only* the summary.
                 output-key: ev_technology_result
               - name: CarbonCaptureResearcher
+                react-mode: true
                 description: Researches carbon capture methods.
                 instruction: |
                   You are an AI Research Assistant specializing in climate solutions.
@@ -51,6 +54,7 @@ ai:
                   Output *only* the summary.
                 output-key: carbon_capture_result
               - name: SynthesisAgent
+                react-mode: true
                 description: Combines research findings into a structured report.
                 instruction: |
                   You are an AI Assistant responsible for combining research findings into a structured report.
