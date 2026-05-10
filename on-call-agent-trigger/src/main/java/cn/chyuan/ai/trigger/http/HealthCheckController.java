@@ -4,9 +4,9 @@ import cn.chyuan.ai.api.response.Response;
 import cn.chyuan.ai.domain.rag.service.IRagService;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
-import javax.annotation.Resource;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -19,7 +19,7 @@ import java.util.Map;
 @CrossOrigin(origins = "*")
 public class HealthCheckController {
 
-    @Resource
+    @Autowired
     private IRagService ragService;
 
     /**
@@ -27,10 +27,23 @@ public class HealthCheckController {
      */
     @RequestMapping(value = "milvus/health", method = RequestMethod.GET)
     public Response<Map<String, Object>> milvusHealthCheck() {
+        Map<String, Object> data = new HashMap<>();
+
+        if (ragService == null) {
+            data.put("milvus", "DISABLED");
+            data.put("rag", "UNAVAILABLE");
+            data.put("message", "RAG服务未启用，请配置milvus.enabled=true");
+
+            return Response.<Map<String, Object>>builder()
+                    .code(ResponseCode.SUCCESS.getCode())
+                    .info(ResponseCode.SUCCESS.getInfo())
+                    .data(data)
+                    .build();
+        }
+
         try {
             boolean healthy = ragService.healthCheck();
 
-            Map<String, Object> data = new HashMap<>();
             data.put("milvus", healthy ? "UP" : "DOWN");
             data.put("rag", healthy ? "AVAILABLE" : "UNAVAILABLE");
 
@@ -42,7 +55,6 @@ public class HealthCheckController {
 
         } catch (Exception e) {
             log.error("Milvus 健康检查失败", e);
-            Map<String, Object> data = new HashMap<>();
             data.put("milvus", "DOWN");
             data.put("rag", "UNAVAILABLE");
             data.put("error", e.getMessage());

@@ -8,9 +8,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.Resource;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -29,7 +29,7 @@ import java.util.regex.Pattern;
 @Service
 public class AnswerQualityEvaluator {
 
-    @Resource
+    @Autowired(required = false)
     private ChatModel chatModel;
 
     private static final Pattern SCORE_PATTERN = Pattern.compile("(\\d+(?:\\.\\d+)?)");
@@ -158,8 +158,16 @@ public class AnswerQualityEvaluator {
                 """.formatted(truncate(context, 3000), truncate(answer, 1000));
 
         try {
+            if (chatModel == null) {
+                log.warn("ChatModel未配置，跳过幻觉检测");
+                return HallucinationResult.builder()
+                        .hallucinationRate(0.0)
+                        .details("ChatModel未配置，跳过检测")
+                        .build();
+            }
+
             String result = chatModel.call(new Prompt(new UserMessage(prompt)))
-                    .getResult().getOutput().getContent();
+                    .getResult().getOutput().getText();
 
             // 解析幻觉比例
             double hallucinationRate = extractHallucinationRate(result);
@@ -181,9 +189,13 @@ public class AnswerQualityEvaluator {
      * 调用LLM获取分数
      */
     private double callLLMForScore(String prompt) {
+        if (chatModel == null) {
+            log.warn("ChatModel未配置，返回默认分数");
+            return 0.5;
+        }
         try {
             String result = chatModel.call(new Prompt(new UserMessage(prompt)))
-                    .getResult().getOutput().getContent();
+                    .getResult().getOutput().getText();
             return extractScore(result);
         } catch (Exception e) {
             log.warn("LLM评分调用失败: {}", e.getMessage());

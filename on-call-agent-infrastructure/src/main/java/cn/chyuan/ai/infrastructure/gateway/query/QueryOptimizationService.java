@@ -8,9 +8,9 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -21,12 +21,17 @@ import java.util.List;
 @Service
 public class QueryOptimizationService implements IQueryOptimizationService {
 
-    @Resource
+    @Autowired(required = false)
     private ChatModel chatModel;
 
     @Override
     public String rewriteQuery(String originalQuery, List<String> chatHistory) {
         log.info("Query改写: originalQuery={}", originalQuery);
+
+        if (chatModel == null) {
+            log.warn("ChatModel未配置，返回原始查询");
+            return originalQuery;
+        }
 
         String historyStr = chatHistory != null ? String.join("\n", chatHistory) : "无";
 
@@ -50,7 +55,7 @@ public class QueryOptimizationService implements IQueryOptimizationService {
 
         try {
             String rewritten = chatModel.call(new Prompt(new UserMessage(prompt)))
-                    .getResult().getOutput().getContent();
+                    .getResult().getOutput().getText();
             log.info("Query改写完成: original={}, rewritten={}", originalQuery, rewritten);
             return rewritten.trim();
         } catch (Exception e) {
@@ -62,6 +67,13 @@ public class QueryOptimizationService implements IQueryOptimizationService {
     @Override
     public List<String> expandQuery(String originalQuery, int count) {
         log.info("Multi-Query扩展: originalQuery={}, count={}", originalQuery, count);
+
+        if (chatModel == null) {
+            log.warn("ChatModel未配置，返回原始查询");
+            List<String> fallback = new ArrayList<>();
+            fallback.add(originalQuery);
+            return fallback;
+        }
 
         String prompt = """
                 请将以下问题扩展为%d个不同角度的问法。
@@ -80,7 +92,7 @@ public class QueryOptimizationService implements IQueryOptimizationService {
 
         try {
             String result = chatModel.call(new Prompt(new UserMessage(prompt)))
-                    .getResult().getOutput().getContent();
+                    .getResult().getOutput().getText();
 
             // 提取JSON数组
             JSONArray jsonArray = JSON.parseArray(extractJson(result));
@@ -105,6 +117,11 @@ public class QueryOptimizationService implements IQueryOptimizationService {
     public String generateHypotheticalDocument(String query) {
         log.info("HyDE生成假设文档: query={}", query);
 
+        if (chatModel == null) {
+            log.warn("ChatModel未配置，返回原始查询");
+            return query;
+        }
+
         String prompt = """
                 请根据以下问题，生成一段假设的文档内容。
                 这段文档应该像是从知识库中检索出来的，能够回答这个问题。
@@ -122,7 +139,7 @@ public class QueryOptimizationService implements IQueryOptimizationService {
 
         try {
             String hypotheticalDoc = chatModel.call(new Prompt(new UserMessage(prompt)))
-                    .getResult().getOutput().getContent();
+                    .getResult().getOutput().getText();
             log.info("HyDE生成完成: length={}", hypotheticalDoc.length());
             return hypotheticalDoc.trim();
         } catch (Exception e) {
@@ -134,6 +151,11 @@ public class QueryOptimizationService implements IQueryOptimizationService {
     @Override
     public String generateStepBackQuery(String specificQuery) {
         log.info("Step-back Prompting: specificQuery={}", specificQuery);
+
+        if (chatModel == null) {
+            log.warn("ChatModel未配置，返回原始查询");
+            return specificQuery;
+        }
 
         String prompt = """
                 请将以下具体问题抽象为一个更通用的背景问题。
@@ -153,7 +175,7 @@ public class QueryOptimizationService implements IQueryOptimizationService {
 
         try {
             String stepBackQuery = chatModel.call(new Prompt(new UserMessage(prompt)))
-                    .getResult().getOutput().getContent();
+                    .getResult().getOutput().getText();
             log.info("Step-back生成完成: stepBackQuery={}", stepBackQuery);
             return stepBackQuery.trim();
         } catch (Exception e) {

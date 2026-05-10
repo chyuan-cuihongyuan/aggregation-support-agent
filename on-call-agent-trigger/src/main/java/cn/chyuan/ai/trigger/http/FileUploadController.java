@@ -7,10 +7,10 @@ import cn.chyuan.ai.domain.rag.service.IRagService;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import javax.annotation.Resource;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
@@ -26,7 +26,7 @@ import java.util.UUID;
 @CrossOrigin(origins = "*")
 public class FileUploadController {
 
-    @Resource
+    @Autowired(required = false)
     private IRagService ragService;
 
     /**
@@ -43,6 +43,13 @@ public class FileUploadController {
                 return Response.<UploadResponseDTO>builder()
                         .code(ResponseCode.ILLEGAL_PARAMETER.getCode())
                         .info("上传文件不能为空")
+                        .build();
+            }
+
+            if (ragService == null) {
+                return Response.<UploadResponseDTO>builder()
+                        .code(ResponseCode.UN_ERROR.getCode())
+                        .info("RAG服务未启用，请配置milvus.enabled=true")
                         .build();
             }
 

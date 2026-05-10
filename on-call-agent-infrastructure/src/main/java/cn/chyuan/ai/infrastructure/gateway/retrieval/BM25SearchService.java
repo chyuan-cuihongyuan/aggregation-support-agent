@@ -11,10 +11,13 @@ import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.index.Term;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.*;
+import org.apache.lucene.search.similarities.BM25Similarity;
 import org.apache.lucene.store.ByteBuffersDirectory;
 import org.apache.lucene.store.Directory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
@@ -28,6 +31,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * BM25检索服务实现 — 使用Lucene实现基于词频的关键词检索
  */
 @Slf4j
+@ConditionalOnMissingBean(ElasticsearchBM25SearchService.class)
 @Service
 public class BM25SearchService implements IBM25SearchService {
 

@@ -1,6 +1,7 @@
 package cn.chyuan.ai.domain.rag.service;
 
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
+import cn.chyuan.ai.domain.rag.adapter.port.IDocumentParserFactory;
 import cn.chyuan.ai.domain.rag.adapter.repository.IVectorStoreRepository;
 import cn.chyuan.ai.domain.rag.model.entity.DocumentChunkEntity;
 import cn.chyuan.ai.domain.rag.model.valobj.DocumentUploadCommand;
@@ -9,10 +10,15 @@ import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
 import cn.chyuan.ai.domain.rag.service.chunker.SemanticChunker;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
-import java.util.List;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * RAG 服务实现 — 文档解析 → 语义分块 → 嵌入 → Milvus 存储 / 查询嵌入 → L2 检索
@@ -26,11 +32,21 @@ import java.util.List;
  */
 @Slf4j
 @Service
+@ConditionalOnMissingBean(EnhancedRagService.class)
+@ConditionalOnProperty(name = "milvus.enabled", havingValue = "true", matchIfMissing = false)
 public class RagService implements IRagService {
 
     /** 检索返回的最相似文档数量 */
     @Value("${rag.top-k:3}")
     private int defaultTopK;
+
+    /** 分块最大字符数 */
+    @Value("${document.chunk.max-size:1000}")
+    private int chunkMaxSize;
+
+    /** 分块重叠字符数 */
+    @Value("${document.chunk.overlap:100}")
+    private int chunkOverlap;
 
     @Resource
     private IEmbeddingService embeddingService;
@@ -39,7 +55,7 @@ public class RagService implements IRagService {
     private IVectorStoreRepository vectorStoreRepository;
 
     @Resource
-    private DocumentParserFactory documentParserFactory;
+    private IDocumentParserFactory documentParserFactory;
 
     @Resource
     private SemanticChunker semanticChunker;

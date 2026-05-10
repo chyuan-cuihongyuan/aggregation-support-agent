@@ -7,10 +7,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.Resource;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -36,7 +36,7 @@ import java.util.stream.Collectors;
 @Component
 public class SummaryIndexChunker {
 
-    @Resource
+    @Autowired(required = false)
     private ChatModel chatModel;
 
     /** 摘要最大长度 */
@@ -139,6 +139,13 @@ public class SummaryIndexChunker {
      * 使用LLM生成摘要
      */
     private String generateSummary(String content) {
+        if (chatModel == null) {
+            log.warn("ChatModel未配置，使用截断原文作为摘要");
+            return content.length() > summaryMaxLength
+                    ? content.substring(0, summaryMaxLength) + "..."
+                    : content;
+        }
+
         String prompt = """
                 请为以下文本生成一段简洁的摘要，要求：
                 1. 提炼核心要点，去除冗余信息
@@ -155,7 +162,7 @@ public class SummaryIndexChunker {
 
         try {
             String summary = chatModel.call(new Prompt(new UserMessage(prompt)))
-                    .getResult().getOutput().getContent();
+                    .getResult().getOutput().getText();
             return summary.trim();
         } catch (Exception e) {
             log.warn("摘要生成失败，使用截断原文: {}", e.getMessage());
