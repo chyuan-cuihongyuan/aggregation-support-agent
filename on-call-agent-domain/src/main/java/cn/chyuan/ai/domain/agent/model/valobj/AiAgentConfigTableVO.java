@@ -143,7 +143,7 @@ public class AiAgentConfigTableVO {
             private String instruction;
             private String description;
             private String outputKey;
-
+            private Boolean reactMode;
         }
 
         @Data
