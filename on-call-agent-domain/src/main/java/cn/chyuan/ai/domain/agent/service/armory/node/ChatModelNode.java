@@ -76,6 +76,7 @@ public class ChatModelNode extends AbstractArmorySupport {
                 .build();
 
         dynamicContext.setChatModel(chatModel);
+        dynamicContext.setHasTools(!toolCallbackList.isEmpty());
 
         return router(requestParameter, dynamicContext);
     }
