@@ -1,6 +1,7 @@
 package cn.chyuan.ai.infrastructure.gateway.parser;
 
 import cn.chyuan.ai.domain.rag.adapter.port.IDocumentParser;
+import cn.chyuan.ai.domain.rag.adapter.port.IDocumentParserFactory;
 import cn.chyuan.ai.domain.rag.model.valobj.ParsedDocumentVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -12,7 +13,7 @@ import java.util.List;
  */
 @Slf4j
 @Component
-public class DocumentParserFactory {
+public class DocumentParserFactory implements IDocumentParserFactory {
 
     private final List<IDocumentParser> parsers;
 
@@ -29,6 +30,7 @@ public class DocumentParserFactory {
      * @param mimeType MIME类型
      * @return 解析后的文档对象
      */
+    @Override
     public ParsedDocumentVO parse(byte[] content, String fileName, String mimeType) {
         IDocumentParser parser = getParser(mimeType, fileName);
 
@@ -66,6 +68,7 @@ public class DocumentParserFactory {
     /**
      * 判断是否支持该文档类型
      */
+    @Override
     public boolean isSupported(String mimeType, String fileName) {
         return parsers.stream().anyMatch(p -> p.supports(mimeType, fileName));
     }

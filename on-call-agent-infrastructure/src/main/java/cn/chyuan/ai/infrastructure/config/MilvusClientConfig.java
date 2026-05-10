@@ -5,6 +5,7 @@ import io.milvus.client.MilvusServiceClient;
 import io.milvus.param.ConnectParam;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.SmartInitializingSingleton;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -21,6 +22,7 @@ import org.springframework.context.annotation.Lazy;
  */
 @Slf4j
 @Configuration
+@ConditionalOnProperty(name = "milvus.enabled", havingValue = "true", matchIfMissing = false)
 public class MilvusClientConfig implements SmartInitializingSingleton {
 
     @Resource

@@ -8,10 +8,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.Resource;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -43,7 +43,7 @@ import java.util.stream.Collectors;
 @Component
 public class PropositionChunker {
 
-    @Resource
+    @Autowired(required = false)
     private ChatModel chatModel;
 
     /** 每次发送给LLM的最大文本长度 */
@@ -132,6 +132,13 @@ public class PropositionChunker {
      * 调用LLM提取命题
      */
     private List<String> callLLMForPropositions(String text) {
+        if (chatModel == null) {
+            log.warn("ChatModel未配置，返回原始文本作为命题");
+            List<String> fallback = new ArrayList<>();
+            fallback.add(text);
+            return fallback;
+        }
+
         String prompt = """
                 请将以下文本分解为独立的命题（Proposition）。
                 
@@ -159,7 +166,7 @@ public class PropositionChunker {
 
         try {
             String result = chatModel.call(new Prompt(new UserMessage(prompt)))
-                    .getResult().getOutput().getContent();
+                    .getResult().getOutput().getText();
 
             // 提取JSON数组
             String jsonStr = extractJsonArray(result);

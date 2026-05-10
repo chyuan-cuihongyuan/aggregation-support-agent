@@ -8,14 +8,12 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
-import org.springframework.context.annotation.ProxyBeanMethods;
 
 /**
  * 嵌入缓存配置 — 启用/禁用嵌入向量缓存
  */
 @Slf4j
-@Configuration
-@ProxyBeanMethods(false)
+@Configuration(proxyBeanMethods = false)
 public class EmbeddingCacheConfig {
 
     @Value("${rag.cache.embedding.enabled:false}")

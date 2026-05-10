@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
@@ -29,6 +30,7 @@ import java.util.*;
  */
 @Slf4j
 @Service
+@ConditionalOnClass(ElasticsearchClient.class)
 @ConditionalOnBean(ElasticsearchClient.class)
 public class ElasticsearchBM25SearchService implements IBM25SearchService {
 
@@ -96,7 +98,7 @@ public class ElasticsearchBM25SearchService implements IBM25SearchService {
                                     .multiMatch(m -> m
                                             .fields("content")
                                             .query(query)
-                                            .type(co.elastic.clients.elasticsearch._types.QueryType.BestFields)
+                                            .type(co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType.BestFields)
                                             .fuzziness("AUTO")
                                     )
                             )

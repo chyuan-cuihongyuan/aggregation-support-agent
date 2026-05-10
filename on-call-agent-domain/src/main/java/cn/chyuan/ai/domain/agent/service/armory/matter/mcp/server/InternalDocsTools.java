@@ -5,10 +5,10 @@ import cn.chyuan.ai.domain.rag.service.IRagService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import jakarta.annotation.Resource;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,7 +33,7 @@ import java.util.stream.Collectors;
 public class InternalDocsTools {
 
     /** RAG 检索服务，提供语义搜索能力 */
-    @Resource
+    @Autowired
     private IRagService ragService;
 
     /** JSON 序列化工具 */
@@ -59,6 +59,19 @@ public class InternalDocsTools {
     @Tool(description = "查询内部运维文档知识库，通过语义检索获取与查询最相关的运维文档、故障案例、架构说明等资料")
     public String queryInternalDocs(String query) {
         log.info("工具调用: 查询内部文档, query={}, topK={}", query, topK);
+
+        if (ragService == null) {
+            log.warn("RAG服务未启用，无法查询内部文档");
+            try {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", true);
+                errorResponse.put("message", "RAG服务未启用，请配置milvus.enabled=true");
+                errorResponse.put("query", query);
+                return objectMapper.writeValueAsString(errorResponse);
+            } catch (Exception jsonException) {
+                return "{\"error\":true,\"message\":\"RAG服务未启用\"}";
+            }
+        }
 
         try {
             // 调用 RAG 服务执行语义检索

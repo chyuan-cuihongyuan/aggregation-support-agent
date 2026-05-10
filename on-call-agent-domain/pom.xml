@@ -49,6 +49,10 @@
             <groupId>cn.chyuan.ai</groupId>
             <artifactId>on-call-agent-types</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>fastjson</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

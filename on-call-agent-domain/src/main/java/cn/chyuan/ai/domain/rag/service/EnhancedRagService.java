@@ -1,6 +1,7 @@
 package cn.chyuan.ai.domain.rag.service;
 
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
+import cn.chyuan.ai.domain.rag.adapter.port.IDocumentParserFactory;
 import cn.chyuan.ai.domain.rag.adapter.repository.IVectorStoreRepository;
 import cn.chyuan.ai.domain.rag.model.entity.DocumentChunkEntity;
 import cn.chyuan.ai.domain.rag.model.valobj.DocumentUploadCommand;
@@ -14,9 +15,11 @@ import cn.chyuan.ai.domain.rag.service.query.IQueryOptimizationService;
 import cn.chyuan.ai.domain.rag.service.rerank.IRerankService;
 import cn.chyuan.ai.domain.rag.service.reorder.LostInTheMiddleReorderer;
 import cn.chyuan.ai.domain.rag.service.retrieval.IBM25SearchService;
-import cn.chyuan.ai.infrastructure.gateway.parser.DocumentParserFactory;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -38,7 +41,9 @@ import java.util.stream.Collectors;
  * </ul>
  */
 @Slf4j
+@Primary
 @Service
+@ConditionalOnProperty(name = "milvus.enabled", havingValue = "true", matchIfMissing = false)
 public class EnhancedRagService implements IRagService {
 
     /** 检索返回的最相似文档数量 */
@@ -92,7 +97,7 @@ public class EnhancedRagService implements IRagService {
     private IVectorStoreRepository vectorStoreRepository;
 
     @Resource
-    private DocumentParserFactory documentParserFactory;
+    private IDocumentParserFactory documentParserFactory;
 
     @Resource
     private SemanticChunker semanticChunker;
@@ -109,7 +114,7 @@ public class EnhancedRagService implements IRagService {
     @Resource
     private IResultFusionService resultFusionService;
 
-    @Resource(required = false)
+    @Autowired(required = false)
     private IRerankService rerankService;
 
     @Resource

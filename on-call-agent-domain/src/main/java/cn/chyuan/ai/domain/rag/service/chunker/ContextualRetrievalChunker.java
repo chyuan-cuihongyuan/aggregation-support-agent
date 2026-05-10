@@ -7,10 +7,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -48,7 +48,7 @@ import java.util.stream.Collectors;
 @Component
 public class ContextualRetrievalChunker {
 
-    @Resource
+    @Autowired(required = false)
     private ChatModel chatModel;
 
     /** 发送给LLM的最大文档长度 */
@@ -160,6 +160,11 @@ public class ContextualRetrievalChunker {
      * 批量生成Contexts
      */
     private List<String> batchGenerateContexts(String fullDocument, List<DocumentChunkEntity> chunks) {
+        if (chatModel == null) {
+            log.warn("ChatModel未配置，返回空Context");
+            return chunks.stream().map(c -> "").collect(Collectors.toList());
+        }
+
         StringBuilder chunksDescription = new StringBuilder();
         for (int i = 0; i < chunks.size(); i++) {
             chunksDescription.append(String.format("Chunk %d:\n%s\n\n", i + 1, chunks.get(i).getContent()));
@@ -185,7 +190,7 @@ public class ContextualRetrievalChunker {
 
         try {
             String result = chatModel.call(new Prompt(new UserMessage(prompt)))
-                    .getResult().getOutput().getContent();
+                    .getResult().getOutput().getText();
 
             String jsonStr = extractJsonArray(result);
             com.alibaba.fastjson.JSONArray jsonArray = com.alibaba.fastjson.JSON.parseArray(jsonStr);
@@ -210,6 +215,11 @@ public class ContextualRetrievalChunker {
      * 为单个chunk生成Context
      */
     private String generateContext(String fullDocument, String chunkContent) {
+        if (chatModel == null) {
+            log.warn("ChatModel未配置，返回空Context");
+            return "";
+        }
+
         String prompt = """
                 请为以下chunk生成一段简短的背景说明（Context）。
                 
@@ -230,7 +240,7 @@ public class ContextualRetrievalChunker {
 
         try {
             String context = chatModel.call(new Prompt(new UserMessage(prompt)))
-                    .getResult().getOutput().getContent();
+                    .getResult().getOutput().getText();
             return truncate(context.trim(), maxContextLength);
         } catch (Exception e) {
             log.warn("Context生成失败: {}", e.getMessage());

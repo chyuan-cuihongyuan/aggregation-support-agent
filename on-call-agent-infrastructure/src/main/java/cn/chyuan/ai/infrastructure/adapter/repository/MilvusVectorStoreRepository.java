@@ -24,6 +24,7 @@ import io.milvus.param.dml.SearchParam;
 import io.milvus.param.index.CreateIndexParam;
 import io.milvus.response.SearchResultsWrapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 import javax.annotation.Resource;
@@ -47,6 +48,7 @@ import java.util.Map;
  */
 @Slf4j
 @Repository
+@ConditionalOnProperty(name = "milvus.enabled", havingValue = "true", matchIfMissing = false)
 public class MilvusVectorStoreRepository implements IVectorStoreRepository {
 
     /** 字段名称常量 */
