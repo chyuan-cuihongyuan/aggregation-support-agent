@@ -42,3 +42,4 @@ CLAUDE.md
 .gitignore!/.gitignore
 /data/
 .claude/
+docs/maven/archetype/.idea/
