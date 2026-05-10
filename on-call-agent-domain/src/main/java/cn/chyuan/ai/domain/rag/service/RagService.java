@@ -4,41 +4,29 @@ import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import cn.chyuan.ai.domain.rag.adapter.repository.IVectorStoreRepository;
 import cn.chyuan.ai.domain.rag.model.entity.DocumentChunkEntity;
 import cn.chyuan.ai.domain.rag.model.valobj.DocumentUploadCommand;
+import cn.chyuan.ai.domain.rag.model.valobj.ParsedDocumentVO;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
+import cn.chyuan.ai.domain.rag.service.chunker.SemanticChunker;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /**
- * RAG 服务实现 — 文档分块 → 嵌入 → Milvus 存储 / 查询嵌入 → L2 检索
+ * RAG 服务实现 — 文档解析 → 语义分块 → 嵌入 → Milvus 存储 / 查询嵌入 → L2 检索
  * <p>
- * 文档分块策略：
+ * 文档预处理流程：
  * <ul>
- *   <li>优先按 Markdown 标题（# ~ ######）分割章节</li>
- *   <li>每个章节再按段落边界分块，最大 800 字符</li>
- *   <li>相邻分块保留 100 字符重叠，维持语义连贯</li>
+ *   <li>支持多种文档格式（TXT、Markdown、PDF、Word、HTML）</li>
+ *   <li>使用语义分块器，基于句子边界分割，保持语义完整性</li>
+ *   <li>保留文档结构信息（标题、章节、元数据）</li>
  * </ul>
  */
 @Slf4j
 @Service
 public class RagService implements IRagService {
-
-    /** 每个分块最大字符数 */
-    @Value("${document.chunk.max-size:800}")
-    private int chunkMaxSize;
-
-    /** 分块之间的重叠字符数 */
-    @Value("${document.chunk.overlap:100}")
-    private int chunkOverlap;
 
     /** 检索返回的最相似文档数量 */
     @Value("${rag.top-k:3}")
@@ -50,28 +38,41 @@ public class RagService implements IRagService {
     @Resource
     private IVectorStoreRepository vectorStoreRepository;
 
+    @Resource
+    private DocumentParserFactory documentParserFactory;
+
+    @Resource
+    private SemanticChunker semanticChunker;
+
     @Override
     public void uploadDocument(DocumentUploadCommand command) {
         log.info("开始处理文档上传: fileName={}, contentLength={}", command.getFileName(), command.getContent().length());
 
-        // 1. 智能分块：按 Markdown 标题和段落边界分割文档
-        List<DocumentChunkEntity> chunks = chunkDocument(command.getContent(), command.getFileName());
+        // 1. 解析文档：根据文件类型自动选择解析器
+        ParsedDocumentVO parsedDocument = documentParserFactory.parse(
+                command.getContent().getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                command.getFileName(),
+                command.getMimeType()
+        );
+
+        // 2. 语义分块：基于句子边界进行智能分块
+        List<DocumentChunkEntity> chunks = semanticChunker.chunk(parsedDocument, command.getFileName());
 
         if (chunks.isEmpty()) {
             log.warn("文档分块结果为空，跳过处理: {}", command.getFileName());
             return;
         }
 
-        // 2. 批量嵌入：将所有分块文本转换为向量
-        List<String> texts = chunks.stream().map(DocumentChunkEntity::getContent).collect(Collectors.toList());
+        // 3. 批量嵌入：将所有分块文本转换为向量
+        List<String> texts = chunks.stream().map(DocumentChunkEntity::getContent).collect(java.util.stream.Collectors.toList());
         List<float[]> vectors = embeddingService.embedBatch(texts);
 
-        // 3. 将向量写回分块实体
+        // 4. 将向量写回分块实体
         for (int i = 0; i < chunks.size(); i++) {
             chunks.get(i).setVector(vectors.get(i));
         }
 
-        // 4. 写入向量数据库
+        // 5. 写入向量数据库
         vectorStoreRepository.insertChunks(chunks);
 
         log.info("文档上传处理完成: fileName={}, chunkCount={}", command.getFileName(), chunks.size());
