@@ -6,6 +6,7 @@ import cn.chyuan.ai.domain.rag.adapter.repository.IVectorStoreRepository;
 import cn.chyuan.ai.domain.rag.model.entity.DocumentChunkEntity;
 import cn.chyuan.ai.domain.rag.model.valobj.DocumentUploadCommand;
 import cn.chyuan.ai.domain.rag.model.valobj.ParsedDocumentVO;
+import cn.chyuan.ai.domain.rag.model.valobj.SearchResultDetailVO;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
 import cn.chyuan.ai.domain.rag.service.chunker.ParentChildChunker;
 import cn.chyuan.ai.domain.rag.service.chunker.SemanticChunker;
@@ -205,6 +206,61 @@ public class EnhancedRagService implements IRagService {
     @Override
     public boolean healthCheck() {
         return vectorStoreRepository.healthCheck();
+    }
+
+    @Override
+    public SearchResultDetailVO searchWithDetails(String query, int topK) {
+        log.info("检索测试(EnhancedRagService): query={}, topK={}", query, topK);
+
+        List<VectorSearchResultVO> vectorResults = new ArrayList<>();
+        List<VectorSearchResultVO> bm25Results = new ArrayList<>();
+        List<VectorSearchResultVO> hybridResults;
+
+        try {
+            vectorResults = vectorRetrieval(query, topK);
+        } catch (Exception e) {
+            log.error("向量检索失败: {}", e.getMessage());
+        }
+
+        try {
+            if (bm25Enabled) {
+                bm25Results = bm25Retrieval(query, topK);
+            }
+        } catch (Exception e) {
+            log.error("BM25检索失败: {}", e.getMessage());
+        }
+
+        List<List<VectorSearchResultVO>> allResults = new ArrayList<>();
+        if (!vectorResults.isEmpty()) allResults.add(vectorResults);
+        if (!bm25Results.isEmpty()) allResults.add(bm25Results);
+
+        if (allResults.size() > 1) {
+            hybridResults = resultFusionService.rrfFusion(allResults, topK);
+        } else {
+            hybridResults = allResults.isEmpty() ? new ArrayList<>() : allResults.get(0);
+        }
+
+        return SearchResultDetailVO.builder()
+                .query(query)
+                .vectorResults(convertToItems(vectorResults))
+                .bm25Results(convertToItems(bm25Results))
+                .hybridResults(convertToItems(hybridResults))
+                .build();
+    }
+
+    private List<SearchResultDetailVO.SearchItem> convertToItems(List<VectorSearchResultVO> results) {
+        if (results == null) return new ArrayList<>();
+        return results.stream().map(r -> {
+            String source = r.getMetadata() != null ? (String) r.getMetadata().get("_source") : null;
+            Integer chunkIndex = r.getMetadata() != null && r.getMetadata().get("chunkIndex") != null
+                    ? ((Number) r.getMetadata().get("chunkIndex")).intValue() : null;
+            return SearchResultDetailVO.SearchItem.builder()
+                    .content(r.getContent())
+                    .score(r.getScore())
+                    .source(source)
+                    .chunkIndex(chunkIndex)
+                    .build();
+        }).collect(Collectors.toList());
     }
 
     /**

@@ -20,7 +20,13 @@ public class DocumentUploadCommand {
     /** 文件内容（UTF-8 文本） */
     private String content;
 
+    /** 原始二进制内容（用于 PDF/Word/HTML 等二进制格式） */
+    private byte[] rawContent;
+
     /** MIME 类型（text/plain 或 text/markdown） */
     private String mimeType;
+
+    /** 上传用户ID */
+    private String userId;
 
 }

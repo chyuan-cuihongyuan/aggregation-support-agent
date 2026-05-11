@@ -11,9 +11,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.nio.charset.StandardCharsets;
-import java.util.UUID;
-
 /**
  * 文件上传控制器 — 处理文档上传并自动向量化存储到 Milvus
  * <p>
@@ -36,13 +33,21 @@ public class FileUploadController {
      * @return 上传结果（文档 ID、分块数量、状态）
      */
     @RequestMapping(value = "upload", method = RequestMethod.POST)
-    public Response<UploadResponseDTO> uploadDocument(@RequestParam("file") MultipartFile file) {
+    public Response<UploadResponseDTO> uploadDocument(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "userId", required = false, defaultValue = "") String userId) {
         try {
-            // 校验文件
             if (file.isEmpty()) {
                 return Response.<UploadResponseDTO>builder()
                         .code(ResponseCode.ILLEGAL_PARAMETER.getCode())
                         .info("上传文件不能为空")
+                        .build();
+            }
+
+            if (file.getSize() > 50 * 1024 * 1024) {
+                return Response.<UploadResponseDTO>builder()
+                        .code(ResponseCode.ILLEGAL_PARAMETER.getCode())
+                        .info("文件大小超过50MB限制")
                         .build();
             }
 
@@ -57,31 +62,18 @@ public class FileUploadController {
             String contentType = file.getContentType();
             log.info("接收文档上传: fileName={}, contentType={}, size={}", originalFilename, contentType, file.getSize());
 
-            // 读取文件内容为 UTF-8 文本
-            String content = new String(file.getBytes(), StandardCharsets.UTF_8);
-
-            // 构建上传命令并调用 RAG 服务处理（分块 → 嵌入 → 存储）
             DocumentUploadCommand command = DocumentUploadCommand.builder()
                     .fileName(originalFilename)
-                    .content(content)
+                    .rawContent(file.getBytes())
                     .mimeType(contentType)
+                    .userId(userId)
                     .build();
 
-            // 生成文档 ID 用于追踪
-            String documentId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
-
             ragService.uploadDocument(command);
-
-            UploadResponseDTO responseDTO = new UploadResponseDTO();
-            responseDTO.setDocumentId(documentId);
-            responseDTO.setChunkCount(0); // 实际块数由 RagService 内部计算
-            responseDTO.setStatus("success");
-            responseDTO.setMessage("文档上传并处理成功");
 
             return Response.<UploadResponseDTO>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
-                    .data(responseDTO)
                     .build();
 
         } catch (AppException e) {

@@ -1,6 +1,7 @@
 package cn.chyuan.ai.domain.rag.service;
 
 import cn.chyuan.ai.domain.rag.model.valobj.DocumentUploadCommand;
+import cn.chyuan.ai.domain.rag.model.valobj.SearchResultDetailVO;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
 
 import java.util.List;
@@ -43,5 +44,14 @@ public interface IRagService {
      * @return true 表示 Milvus 连接正常
      */
     boolean healthCheck();
+
+    /**
+     * 检索测试 — 分别返回向量检索、BM25 检索和混合检索的结果
+     *
+     * @param query 查询文本
+     * @param topK  返回结果数量
+     * @return 分组检索结果详情
+     */
+    SearchResultDetailVO searchWithDetails(String query, int topK);
 
 }
