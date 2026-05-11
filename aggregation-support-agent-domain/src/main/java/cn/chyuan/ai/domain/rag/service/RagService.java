@@ -2,12 +2,17 @@ package cn.chyuan.ai.domain.rag.service;
 
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import cn.chyuan.ai.domain.rag.adapter.port.IDocumentParserFactory;
+import cn.chyuan.ai.domain.rag.adapter.repository.IDocumentMetadataRepository;
 import cn.chyuan.ai.domain.rag.adapter.repository.IVectorStoreRepository;
 import cn.chyuan.ai.domain.rag.model.entity.DocumentChunkEntity;
+import cn.chyuan.ai.domain.rag.model.entity.DocumentMetadataEntity;
 import cn.chyuan.ai.domain.rag.model.valobj.DocumentUploadCommand;
 import cn.chyuan.ai.domain.rag.model.valobj.ParsedDocumentVO;
+import cn.chyuan.ai.domain.rag.model.valobj.SearchResultDetailVO;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
 import cn.chyuan.ai.domain.rag.service.chunker.SemanticChunker;
+import cn.chyuan.ai.domain.rag.service.retrieval.IBM25SearchService;
+import cn.chyuan.ai.domain.rag.service.retrieval.IHybridSearchService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -60,38 +65,81 @@ public class RagService implements IRagService {
     @Resource
     private SemanticChunker semanticChunker;
 
+    @Resource
+    private IDocumentMetadataRepository documentMetadataRepository;
+
+    @Resource(name = "hybridSearchService")
+    private IHybridSearchService hybridSearchService;
+
+    @Resource(name = "bm25SearchService")
+    private IBM25SearchService bm25SearchService;
+
     @Override
     public void uploadDocument(DocumentUploadCommand command) {
-        log.info("开始处理文档上传: fileName={}, contentLength={}", command.getFileName(), command.getContent().length());
+        String documentId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        String fileName = command.getFileName();
+        log.info("开始处理文档上传: fileName={}", fileName);
 
-        // 1. 解析文档：根据文件类型自动选择解析器
-        ParsedDocumentVO parsedDocument = documentParserFactory.parse(
-                command.getContent().getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                command.getFileName(),
-                command.getMimeType()
-        );
-
-        // 2. 语义分块：基于句子边界进行智能分块
-        List<DocumentChunkEntity> chunks = semanticChunker.chunk(parsedDocument, command.getFileName());
-
-        if (chunks.isEmpty()) {
-            log.warn("文档分块结果为空，跳过处理: {}", command.getFileName());
-            return;
+        String extension = "";
+        if (fileName != null && fileName.contains(".")) {
+            extension = fileName.substring(fileName.lastIndexOf(".") + 1).toLowerCase();
         }
 
-        // 3. 批量嵌入：将所有分块文本转换为向量
-        List<String> texts = chunks.stream().map(DocumentChunkEntity::getContent).collect(java.util.stream.Collectors.toList());
-        List<float[]> vectors = embeddingService.embedBatch(texts);
+        long fileSize = command.getRawContent() != null ? command.getRawContent().length
+                : (command.getContent() != null ? command.getContent().length() : 0L);
 
-        // 4. 将向量写回分块实体
-        for (int i = 0; i < chunks.size(); i++) {
-            chunks.get(i).setVector(vectors.get(i));
+        DocumentMetadataEntity metadata = DocumentMetadataEntity.builder()
+                .documentId(documentId)
+                .fileName(fileName)
+                .fileExtension(extension)
+                .fileSize(fileSize)
+                .mimeType(command.getMimeType())
+                .processingStatus("processing")
+                .userId(command.getUserId() != null ? command.getUserId() : "")
+                .build();
+        documentMetadataRepository.save(metadata);
+
+        try {
+            byte[] rawBytes;
+            if (command.getRawContent() != null) {
+                rawBytes = command.getRawContent();
+            } else if (command.getContent() != null) {
+                rawBytes = command.getContent().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            } else {
+                throw new RuntimeException("文档内容为空");
+            }
+
+            ParsedDocumentVO parsedDocument = documentParserFactory.parse(rawBytes, fileName, command.getMimeType());
+
+            List<DocumentChunkEntity> chunks = semanticChunker.chunk(parsedDocument, fileName);
+
+            if (chunks.isEmpty()) {
+                log.warn("文档分块结果为空，跳过处理: {}", fileName);
+                documentMetadataRepository.updateStatus(documentId, "success", 0, 0, 0, "文档分块结果为空");
+                return;
+            }
+
+            List<String> texts = chunks.stream().map(DocumentChunkEntity::getContent).collect(Collectors.toList());
+            List<float[]> vectors = embeddingService.embedBatch(texts);
+
+            for (int i = 0; i < chunks.size(); i++) {
+                chunks.get(i).setVector(vectors.get(i));
+            }
+
+            vectorStoreRepository.insertChunks(chunks);
+
+            int totalChars = parsedDocument.getTextContent() != null ? parsedDocument.getTextContent().length() : 0;
+            int sectionCount = parsedDocument.getSections() != null ? parsedDocument.getSections().size() : 0;
+            documentMetadataRepository.updateStatus(documentId, "success", chunks.size(), totalChars, sectionCount, "");
+
+            log.info("文档上传处理完成: fileName={}, documentId={}, chunkCount={}", fileName, documentId, chunks.size());
+        } catch (Exception e) {
+            log.error("文档上传处理失败: fileName={}, documentId={}", fileName, documentId, e);
+            String errMsg = e.getMessage() != null
+                    ? e.getMessage().substring(0, Math.min(e.getMessage().length(), 500)) : "未知错误";
+            documentMetadataRepository.updateStatus(documentId, "failed", 0, 0, 0, errMsg);
+            throw e;
         }
-
-        // 5. 写入向量数据库
-        vectorStoreRepository.insertChunks(chunks);
-
-        log.info("文档上传处理完成: fileName={}, chunkCount={}", command.getFileName(), chunks.size());
     }
 
     @Override
@@ -111,6 +159,66 @@ public class RagService implements IRagService {
     @Override
     public boolean healthCheck() {
         return vectorStoreRepository.healthCheck();
+    }
+
+    @Override
+    public SearchResultDetailVO searchWithDetails(String query, int topK) {
+        log.info("检索测试: query={}, topK={}", query, topK);
+
+        List<VectorSearchResultVO> vectorResults = Collections.emptyList();
+        List<VectorSearchResultVO> bm25Results = Collections.emptyList();
+        List<VectorSearchResultVO> hybridResults = Collections.emptyList();
+
+        try {
+            if (hybridSearchService != null && hybridSearchService.isAvailable()) {
+                vectorResults = hybridSearchService.vectorSearch(query, topK);
+            } else if (vectorStoreRepository != null) {
+                List<float[]> queryVectors = embeddingService.embedBatch(Collections.singletonList(query));
+                if (!queryVectors.isEmpty()) {
+                    vectorResults = vectorStoreRepository.search(queryVectors.get(0), topK);
+                }
+            }
+        } catch (Exception e) {
+            log.error("向量检索失败: {}", e.getMessage());
+        }
+
+        try {
+            if (bm25SearchService != null) {
+                bm25Results = bm25SearchService.search(query, topK);
+            }
+        } catch (Exception e) {
+            log.error("BM25检索失败: {}", e.getMessage());
+        }
+
+        try {
+            if (hybridSearchService != null && hybridSearchService.isAvailable()) {
+                hybridResults = hybridSearchService.search(query, topK);
+            }
+        } catch (Exception e) {
+            log.error("混合检索失败: {}", e.getMessage());
+        }
+
+        return SearchResultDetailVO.builder()
+                .query(query)
+                .vectorResults(convertToItems(vectorResults))
+                .bm25Results(convertToItems(bm25Results))
+                .hybridResults(convertToItems(hybridResults))
+                .build();
+    }
+
+    private List<SearchResultDetailVO.SearchItem> convertToItems(List<VectorSearchResultVO> results) {
+        if (results == null) return Collections.emptyList();
+        return results.stream().map(r -> {
+            String source = r.getMetadata() != null ? (String) r.getMetadata().get("_source") : null;
+            Integer chunkIndex = r.getMetadata() != null && r.getMetadata().get("chunkIndex") != null
+                    ? ((Number) r.getMetadata().get("chunkIndex")).intValue() : null;
+            return SearchResultDetailVO.SearchItem.builder()
+                    .content(r.getContent())
+                    .score(r.getScore())
+                    .source(source)
+                    .chunkIndex(chunkIndex)
+                    .build();
+        }).collect(Collectors.toList());
     }
 
     // ========== 文档分块逻辑（从 Aggregation-Support-Agent-java 迁移并适配） ==========
