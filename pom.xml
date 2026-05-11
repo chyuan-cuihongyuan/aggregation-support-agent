@@ -5,17 +5,17 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>cn.chyuan.ai</groupId>
-    <artifactId>on-call-agent</artifactId>
+    <artifactId>aggregation-support-agent</artifactId>
     <version>1.0</version>
     <packaging>pom</packaging>
 
     <modules>
-        <module>on-call-agent-api</module>
-        <module>on-call-agent-types</module>
-        <module>on-call-agent-domain</module>
-        <module>on-call-agent-infrastructure</module>
-        <module>on-call-agent-trigger</module>
-        <module>on-call-agent-app</module>
+        <module>aggregation-support-agent-api</module>
+        <module>aggregation-support-agent-types</module>
+        <module>aggregation-support-agent-domain</module>
+        <module>aggregation-support-agent-infrastructure</module>
+        <module>aggregation-support-agent-trigger</module>
+        <module>aggregation-support-agent-app</module>
     </modules>
 
 
@@ -231,27 +231,27 @@
             <!-- 工程模块 -->
             <dependency>
                 <groupId>cn.chyuan.ai</groupId>
-                <artifactId>on-call-agent-api</artifactId>
+                <artifactId>aggregation-support-agent-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>cn.chyuan.ai</groupId>
-                <artifactId>on-call-agent-domain</artifactId>
+                <artifactId>aggregation-support-agent-domain</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>cn.chyuan.ai</groupId>
-                <artifactId>on-call-agent-infrastructure</artifactId>
+                <artifactId>aggregation-support-agent-infrastructure</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>cn.chyuan.ai</groupId>
-                <artifactId>on-call-agent-types</artifactId>
+                <artifactId>aggregation-support-agent-types</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>cn.chyuan.ai</groupId>
-                <artifactId>on-call-agent-trigger</artifactId>
+                <artifactId>aggregation-support-agent-trigger</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>
@@ -293,7 +293,7 @@
                 <artifactId>maven-archetype-plugin</artifactId>
                 <version>3.2.0</version>
                 <configuration>
-                    <outputDirectory>${project.build.directory}/ai-agent-scaffold-lite-archetype</outputDirectory>
+                    <outputDirectory>${project.build.directory}/aggregation-support-agent-archetype</outputDirectory>
                 </configuration>
             </plugin>
             <plugin>
@@ -318,21 +318,21 @@
                 <activeByDefault>true</activeByDefault>
             </activation>
             <properties>
-                <java_jvm>-Xms1G -Xmx1G -server  -XX:MaxPermSize=256M -Xss256K -Dspring.profiles.active=dev -XX:+DisableExplicitGC -XX:+UseG1GC  -XX:LargePageSizeInBytes=128m -XX:+UseFastAccessorMethods -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/export/Logs/ai-agent-scaffold-lite-boot -Xloggc:/export/Logs/ai-agent-scaffold-lite-boot/gc-ai-agent-scaffold-lite-boot.log -XX:+PrintGCDetails -XX:+PrintGCDateStamps</java_jvm>
+                <java_jvm>-Xms1G -Xmx1G -server  -XX:MaxPermSize=256M -Xss256K -Dspring.profiles.active=dev -XX:+DisableExplicitGC -XX:+UseG1GC  -XX:LargePageSizeInBytes=128m -XX:+UseFastAccessorMethods -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/export/Logs/aggregation-support-agent-boot -Xloggc:/export/Logs/aggregation-support-agent-boot/gc-aggregation-support-agent-boot.log -XX:+PrintGCDetails -XX:+PrintGCDateStamps</java_jvm>
                 <profileActive>dev</profileActive>
             </properties>
         </profile>
         <profile>
             <id>test</id>
             <properties>
-                <java_jvm>-Xms1G -Xmx1G -server  -XX:MaxPermSize=256M -Xss256K -Dspring.profiles.active=test -XX:+DisableExplicitGC -XX:+UseG1GC  -XX:LargePageSizeInBytes=128m -XX:+UseFastAccessorMethods -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/export/Logs/ai-agent-scaffold-lite-boot -Xloggc:/export/Logs/ai-agent-scaffold-lite-boot/gc-ai-agent-scaffold-lite-boot.log -XX:+PrintGCDetails -XX:+PrintGCDateStamps</java_jvm>
+                <java_jvm>-Xms1G -Xmx1G -server  -XX:MaxPermSize=256M -Xss256K -Dspring.profiles.active=test -XX:+DisableExplicitGC -XX:+UseG1GC  -XX:LargePageSizeInBytes=128m -XX:+UseFastAccessorMethods -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/export/Logs/aggregation-support-agent-boot -Xloggc:/export/Logs/aggregation-support-agent-boot/gc-aggregation-support-agent-boot.log -XX:+PrintGCDetails -XX:+PrintGCDateStamps</java_jvm>
                 <profileActive>test</profileActive>
             </properties>
         </profile>
         <profile>
             <id>prod</id>
             <properties>
-                <java_jvm>-Xms6G -Xmx6G -server  -XX:MaxPermSize=256M -Xss256K -Dspring.profiles.active=release -XX:+DisableExplicitGC -XX:+UseG1GC  -XX:LargePageSizeInBytes=128m -XX:+UseFastAccessorMethods -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/export/Logs/fq-mall-activity-app -Xloggc:/export/Logs/ai-agent-scaffold-lite-boot/gc-ai-agent-scaffold-lite-boot.log -XX:+PrintGCDetails -XX:+PrintGCDateStamps</java_jvm>
+                <java_jvm>-Xms6G -Xmx6G -server  -XX:MaxPermSize=256M -Xss256K -Dspring.profiles.active=release -XX:+DisableExplicitGC -XX:+UseG1GC  -XX:LargePageSizeInBytes=128m -XX:+UseFastAccessorMethods -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/export/Logs/fq-mall-activity-app -Xloggc:/export/Logs/aggregation-support-agent-boot/gc-aggregation-support-agent-boot.log -XX:+PrintGCDetails -XX:+PrintGCDateStamps</java_jvm>
                 <profileActive>prod</profileActive>
             </properties>
         </profile>
