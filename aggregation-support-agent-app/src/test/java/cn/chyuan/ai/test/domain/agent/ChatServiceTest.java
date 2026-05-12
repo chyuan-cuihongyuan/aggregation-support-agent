@@ -1,4 +1,4 @@
-﻿package cn.chyuan.ai.test.domain.agent;
+package cn.chyuan.ai.test.domain.agent;
 
 import cn.chyuan.ai.domain.agent.model.entity.ChatCommandEntity;
 import cn.chyuan.ai.domain.agent.service.IChatService;

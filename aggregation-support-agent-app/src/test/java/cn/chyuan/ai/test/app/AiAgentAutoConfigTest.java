@@ -1,4 +1,4 @@
-﻿package cn.chyuan.ai.test.app;
+package cn.chyuan.ai.test.app;
 
 import cn.chyuan.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import com.alibaba.fastjson.JSON;

@@ -1,4 +1,4 @@
-﻿package cn.chyuan.ai.infrastructure.config;
+package cn.chyuan.ai.infrastructure.config;
 
 import cn.chyuan.ai.domain.rag.adapter.repository.IVectorStoreRepository;
 import io.milvus.client.MilvusServiceClient;

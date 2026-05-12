@@ -1,4 +1,4 @@
-﻿package cn.chyuan.ai.infrastructure.gateway;
+package cn.chyuan.ai.infrastructure.gateway;
 
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import com.alibaba.fastjson.JSON;

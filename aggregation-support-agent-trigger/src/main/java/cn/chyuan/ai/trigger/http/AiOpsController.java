@@ -1,4 +1,4 @@
-﻿package cn.chyuan.ai.trigger.http;
+package cn.chyuan.ai.trigger.http;
 
 import cn.chyuan.ai.api.dto.AiOpsRequestDTO;
 import cn.chyuan.ai.domain.agent.model.valobj.AiAgentRegisterVO;

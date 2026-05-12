@@ -1,4 +1,4 @@
-﻿package cn.chyuan.ai.trigger.http;
+package cn.chyuan.ai.trigger.http;
 
 import cn.chyuan.ai.api.dto.ChatHistoryResponseDTO;
 import cn.chyuan.ai.api.dto.ChatHistorySaveDTO;

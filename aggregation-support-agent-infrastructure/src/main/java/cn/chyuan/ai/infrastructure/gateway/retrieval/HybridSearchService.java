@@ -1,4 +1,4 @@
-﻿package cn.chyuan.ai.infrastructure.gateway.retrieval;
+package cn.chyuan.ai.infrastructure.gateway.retrieval;
 
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import cn.chyuan.ai.domain.rag.adapter.repository.IVectorStoreRepository;

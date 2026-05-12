@@ -1,4 +1,4 @@
-﻿package cn.chyuan.ai.infrastructure.gateway.retrieval;
+package cn.chyuan.ai.infrastructure.gateway.retrieval;
 
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
 import cn.chyuan.ai.domain.rag.service.retrieval.IBM25SearchService;

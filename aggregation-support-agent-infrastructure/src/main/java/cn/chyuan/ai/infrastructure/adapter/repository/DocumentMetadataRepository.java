@@ -1,4 +1,4 @@
-﻿package cn.chyuan.ai.infrastructure.adapter.repository;
+package cn.chyuan.ai.infrastructure.adapter.repository;
 
 import cn.chyuan.ai.domain.rag.adapter.repository.IDocumentMetadataRepository;
 import cn.chyuan.ai.domain.rag.model.entity.DocumentMetadataEntity;

@@ -1,4 +1,4 @@
-﻿package cn.chyuan.ai.domain.rag.service.retrieval;
+package cn.chyuan.ai.domain.rag.service.retrieval;
 
 import cn.chyuan.ai.domain.rag.model.entity.DocumentChunkEntity;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;

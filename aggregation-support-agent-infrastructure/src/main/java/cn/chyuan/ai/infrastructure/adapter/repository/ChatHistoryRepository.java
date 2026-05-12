@@ -1,4 +1,4 @@
-﻿package cn.chyuan.ai.infrastructure.adapter.repository;
+package cn.chyuan.ai.infrastructure.adapter.repository;
 
 import cn.chyuan.ai.domain.agent.adapter.repository.IChatHistoryRepository;
 import cn.chyuan.ai.domain.agent.model.entity.ChatHistoryEntity;

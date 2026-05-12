@@ -1,4 +1,4 @@
-﻿package cn.chyuan.ai.config;
+package cn.chyuan.ai.config;
 
 import cn.chyuan.ai.domain.agent.model.valobj.properties.AiAgentAutoConfigProperties;
 import cn.chyuan.ai.domain.agent.service.IArmoryService;

@@ -1,4 +1,4 @@
-﻿package cn.chyuan.ai.domain.rag.service;
+package cn.chyuan.ai.domain.rag.service;
 
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import cn.chyuan.ai.domain.rag.adapter.port.IDocumentParserFactory;
