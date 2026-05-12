@@ -1,4 +1,4 @@
-package cn.chyuan.ai.domain.agent.service.armory.node;
+﻿package cn.chyuan.ai.domain.agent.service.armory.node;
 
 import cn.chyuan.ai.domain.agent.model.entity.ArmoryCommandEntity;
 import cn.chyuan.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
@@ -12,7 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.List;
 
 @Slf4j

@@ -171,64 +171,21 @@ public class SemanticChunker {
      * 按句子边界分割文本
      */
     private List<String> splitBySentences(String text) {
-        List<String> sentences = new ArrayList<>();
-        if (text == null || text.isEmpty()) {
-            return sentences;
-        }
-
-        // 使用正则表达式按句子分割
-        String[] parts = SENTENCE_END.split(text, -1);
-        StringBuilder current = new StringBuilder();
-
-        for (int i = 0; i < parts.length; i++) {
-            current.append(parts[i]);
-
-            // 检查原字符串中该位置后是否有句子结束符
-            int pos = getEndPosition(parts, i);
-            if (pos < text.length()) {
-                char endChar = text.charAt(pos);
-                if (isSentenceEnd(endChar)) {
-                    current.append(endChar);
-                    String sentence = current.toString().trim();
-                    if (!sentence.isEmpty()) {
-                        sentences.add(sentence);
-                    }
-                    current = new StringBuilder();
-                }
-            }
-        }
-
-        // 处理最后一部分
-        if (current.length() > 0) {
-            String sentence = current.toString().trim();
-            if (!sentence.isEmpty()) {
-                sentences.add(sentence);
-            }
-        }
-
-        return sentences;
+        return SentenceUtils.splitBySentences(text);
     }
 
     /**
      * 计算分割位置
      */
     private int getEndPosition(String[] parts, int index) {
-        int pos = 0;
-        for (int i = 0; i <= index; i++) {
-            pos += parts[i].length();
-            if (i < index) {
-                pos++; // 分隔符
-            }
-        }
-        return pos;
+        return SentenceUtils.getEndPosition(parts, index);
     }
 
     /**
      * 判断是否为句子结束符
      */
     private boolean isSentenceEnd(char c) {
-        return c == '。' || c == '！' || c == '？' || c == '；' ||
-               c == '.' || c == '!' || c == '?' || c == ';' || c == '\n';
+        return SentenceUtils.isSentenceEnd(c);
     }
 
     /**

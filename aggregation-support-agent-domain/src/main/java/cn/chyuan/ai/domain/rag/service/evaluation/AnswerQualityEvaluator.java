@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -48,14 +49,19 @@ public class AnswerQualityEvaluator {
         // 合并检索内容
         String context = String.join("\n---\n", retrievedChunks);
 
-        // 1. 评估忠实度（是否基于检索内容）
-        double faithfulnessScore = evaluateFaithfulness(answer, context);
+        // 并行评估三个维度
+        CompletableFuture<Double> faithfulnessFuture =
+                CompletableFuture.supplyAsync(() -> evaluateFaithfulness(answer, context));
+        CompletableFuture<Double> relevancyFuture =
+                CompletableFuture.supplyAsync(() -> evaluateRelevancy(query, answer));
+        CompletableFuture<HallucinationResult> hallucinationFuture =
+                CompletableFuture.supplyAsync(() -> detectHallucination(answer, context));
 
-        // 2. 评估相关度（是否回答了问题）
-        double relevancyScore = evaluateRelevancy(query, answer);
+        CompletableFuture.allOf(faithfulnessFuture, relevancyFuture, hallucinationFuture).join();
 
-        // 3. 检测幻觉（是否包含未在检索内容中出现的信息）
-        HallucinationResult hallucinationResult = detectHallucination(answer, context);
+        double faithfulnessScore = faithfulnessFuture.join();
+        double relevancyScore = relevancyFuture.join();
+        HallucinationResult hallucinationResult = hallucinationFuture.join();
 
         // 计算综合分数
         double overallScore = (faithfulnessScore * 0.4 + relevancyScore * 0.4 + (1 - hallucinationResult.getHallucinationRate()) * 0.2);

@@ -1,4 +1,4 @@
-package cn.chyuan.ai.test.domain.agent;
+﻿package cn.chyuan.ai.test.domain.agent;
 
 import cn.chyuan.ai.domain.agent.model.entity.ChatCommandEntity;
 import cn.chyuan.ai.domain.agent.service.IChatService;
@@ -11,7 +11,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.util.MimeTypeUtils;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.io.IOException;
 import java.util.List;
 

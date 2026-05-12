@@ -14,6 +14,8 @@ import com.google.adk.runner.InMemoryRunner;
 import com.google.adk.sessions.Session;
 import com.google.genai.types.Content;
 import com.google.genai.types.Part;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import io.reactivex.rxjava3.core.Flowable;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -22,7 +24,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -34,7 +36,10 @@ public class ChatService implements IChatService {
     @Resource
     private AiAgentAutoConfigProperties aiAgentAutoConfigProperties;
 
-    private final Map<String, String> userSessions = new ConcurrentHashMap<>();
+    private final Cache<String, String> userSessions = CacheBuilder.newBuilder()
+            .maximumSize(10000)
+            .expireAfterAccess(24, TimeUnit.HOURS)
+            .build();
 
     @Override
     public List<AiAgentConfigTableVO.Agent> queryAiAgentConfigList() {
@@ -64,11 +69,15 @@ public class ChatService implements IChatService {
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
 
         String sessionKey = userId + ":" + agentId;
-        return userSessions.computeIfAbsent(sessionKey, key -> {
-            Session session = runner.sessionService().createSession(appName, userId)
-                    .blockingGet();
-            return session.id();
-        });
+        try {
+            return userSessions.get(sessionKey, () -> {
+                Session session = runner.sessionService().createSession(appName, userId)
+                        .blockingGet();
+                return session.id();
+            });
+        } catch (Exception e) {
+            throw new AppException(ResponseCode.E0001.getCode(), "创建会话失败", e);
+        }
     }
 
     @Override

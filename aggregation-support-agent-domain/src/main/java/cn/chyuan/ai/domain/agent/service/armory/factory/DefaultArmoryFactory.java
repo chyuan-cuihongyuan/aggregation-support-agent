@@ -1,4 +1,4 @@
-package cn.chyuan.ai.domain.agent.service.armory.factory;
+﻿package cn.chyuan.ai.domain.agent.service.armory.factory;
 
 import cn.chyuan.ai.domain.agent.model.entity.ArmoryCommandEntity;
 import cn.chyuan.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
@@ -16,7 +16,7 @@ import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 

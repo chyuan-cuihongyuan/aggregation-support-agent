@@ -1,14 +1,14 @@
-package cn.chyuan.ai.domain.rag.service.retrieval;
+﻿package cn.chyuan.ai.domain.rag.service.retrieval;
 
 import cn.chyuan.ai.domain.rag.model.entity.DocumentChunkEntity;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
-import cn.chyuan.ai.domain.rag.service.chunker.SemanticChunker;
+import cn.chyuan.ai.domain.rag.service.chunker.SentenceUtils;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -135,53 +135,15 @@ public class SentenceWindowRetriever {
      * 按句子边界分割文本
      */
     private List<String> splitBySentences(String text) {
-        List<String> sentences = new ArrayList<>();
-        if (text == null || text.isEmpty()) {
-            return sentences;
-        }
-
-        String[] parts = SENTENCE_END.split(text, -1);
-        StringBuilder current = new StringBuilder();
-
-        for (int i = 0; i < parts.length; i++) {
-            current.append(parts[i]);
-
-            int pos = getEndPosition(parts, i);
-            if (pos < text.length()) {
-                char endChar = text.charAt(pos);
-                if (isSentenceEnd(endChar)) {
-                    current.append(endChar);
-                    String sentence = current.toString().trim();
-                    if (!sentence.isEmpty()) {
-                        sentences.add(sentence);
-                    }
-                    current = new StringBuilder();
-                }
-            }
-        }
-
-        if (current.length() > 0) {
-            String sentence = current.toString().trim();
-            if (!sentence.isEmpty()) {
-                sentences.add(sentence);
-            }
-        }
-
-        return sentences;
+        return SentenceUtils.splitBySentences(text);
     }
 
     private int getEndPosition(String[] parts, int index) {
-        int pos = 0;
-        for (int i = 0; i <= index; i++) {
-            pos += parts[i].length();
-            if (i < index) pos++;
-        }
-        return pos;
+        return SentenceUtils.getEndPosition(parts, index);
     }
 
     private boolean isSentenceEnd(char c) {
-        return c == '。' || c == '！' || c == '？' || c == '；' ||
-               c == '.' || c == '!' || c == '?' || c == ';' || c == '\n';
+        return SentenceUtils.isSentenceEnd(c);
     }
 
 }

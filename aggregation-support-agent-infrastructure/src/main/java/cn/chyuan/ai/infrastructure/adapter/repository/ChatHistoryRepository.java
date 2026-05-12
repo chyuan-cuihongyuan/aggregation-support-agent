@@ -1,4 +1,4 @@
-package cn.chyuan.ai.infrastructure.adapter.repository;
+﻿package cn.chyuan.ai.infrastructure.adapter.repository;
 
 import cn.chyuan.ai.domain.agent.adapter.repository.IChatHistoryRepository;
 import cn.chyuan.ai.domain.agent.model.entity.ChatHistoryEntity;
@@ -6,7 +6,7 @@ import cn.chyuan.ai.infrastructure.dao.po.ChatHistoryPO;
 import cn.chyuan.ai.infrastructure.persistent.mapper.ChatHistoryMapper;
 import org.springframework.stereotype.Repository;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.Date;
 import java.util.List;
 import java.util.stream.Collectors;

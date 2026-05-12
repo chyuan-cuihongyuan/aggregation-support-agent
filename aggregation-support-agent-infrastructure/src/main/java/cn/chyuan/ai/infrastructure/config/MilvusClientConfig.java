@@ -1,4 +1,4 @@
-package cn.chyuan.ai.infrastructure.config;
+﻿package cn.chyuan.ai.infrastructure.config;
 
 import cn.chyuan.ai.domain.rag.adapter.repository.IVectorStoreRepository;
 import io.milvus.client.MilvusServiceClient;
@@ -9,7 +9,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 
 import org.springframework.context.annotation.Lazy;
 

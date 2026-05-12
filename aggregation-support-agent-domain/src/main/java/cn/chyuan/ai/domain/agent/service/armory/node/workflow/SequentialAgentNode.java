@@ -1,4 +1,4 @@
-package cn.chyuan.ai.domain.agent.service.armory.node.workflow;
+﻿package cn.chyuan.ai.domain.agent.service.armory.node.workflow;
 
 import cn.chyuan.ai.domain.agent.model.entity.ArmoryCommandEntity;
 import cn.chyuan.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
@@ -13,7 +13,7 @@ import com.google.adk.agents.SequentialAgent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.List;
 
 @Slf4j

@@ -14,7 +14,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.Resource;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -54,17 +54,8 @@ public class BigModelEmbeddingGateway implements IEmbeddingService {
     @Value("${bigmodel.embedding.dimension:1024}")
     private int dimension;
 
+    @Resource
     private OkHttpClient httpClient;
-
-    @PostConstruct
-    public void init() {
-        this.httpClient = new OkHttpClient.Builder()
-                .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(60, TimeUnit.SECONDS)
-                .writeTimeout(30, TimeUnit.SECONDS)
-                .build();
-        log.info("智谱嵌入网关初始化完成: url={}, model={}, dimension={}", baseUrl, modelName, dimension);
-    }
 
     @Override
     public float[] embed(String text) {

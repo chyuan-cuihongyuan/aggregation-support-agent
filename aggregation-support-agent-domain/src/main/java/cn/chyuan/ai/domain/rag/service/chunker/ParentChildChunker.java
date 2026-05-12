@@ -200,56 +200,15 @@ public class ParentChildChunker {
      * 按句子边界分割
      */
     private List<String> splitBySentences(String text) {
-        List<String> sentences = new ArrayList<>();
-        if (text == null || text.isEmpty()) {
-            return sentences;
-        }
-
-        String[] parts = SENTENCE_END.split(text, -1);
-        StringBuilder current = new StringBuilder();
-
-        for (int i = 0; i < parts.length; i++) {
-            current.append(parts[i]);
-
-            // 检查原字符串中该位置后是否有句子结束符
-            int pos = getEndPosition(parts, i);
-            if (pos < text.length()) {
-                char endChar = text.charAt(pos);
-                if (isSentenceEnd(endChar)) {
-                    current.append(endChar);
-                    String sentence = current.toString().trim();
-                    if (!sentence.isEmpty()) {
-                        sentences.add(sentence);
-                    }
-                    current = new StringBuilder();
-                }
-            }
-        }
-
-        if (current.length() > 0) {
-            String sentence = current.toString().trim();
-            if (!sentence.isEmpty()) {
-                sentences.add(sentence);
-            }
-        }
-
-        return sentences;
+        return SentenceUtils.splitBySentences(text);
     }
 
     private int getEndPosition(String[] parts, int index) {
-        int pos = 0;
-        for (int i = 0; i <= index; i++) {
-            pos += parts[i].length();
-            if (i < index) {
-                pos++;
-            }
-        }
-        return pos;
+        return SentenceUtils.getEndPosition(parts, index);
     }
 
     private boolean isSentenceEnd(char c) {
-        return c == '。' || c == '！' || c == '？' || c == '；' ||
-               c == '.' || c == '!' || c == '?' || c == ';' || c == '\n';
+        return SentenceUtils.isSentenceEnd(c);
     }
 
     /**

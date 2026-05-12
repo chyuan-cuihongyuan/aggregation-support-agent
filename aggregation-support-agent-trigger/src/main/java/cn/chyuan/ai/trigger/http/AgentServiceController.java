@@ -1,4 +1,4 @@
-package cn.chyuan.ai.trigger.http;
+﻿package cn.chyuan.ai.trigger.http;
 
 import cn.chyuan.ai.api.IAgentService;
 import cn.chyuan.ai.api.dto.*;
@@ -14,7 +14,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 import org.springframework.http.MediaType;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.List;
 import java.util.stream.Collectors;
 import com.google.genai.types.Content;
@@ -27,7 +27,6 @@ import com.google.genai.types.Content;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/")
-@CrossOrigin(origins = "*")
 public class AgentServiceController implements IAgentService {
 
     @Resource
@@ -86,7 +85,7 @@ public class AgentServiceController implements IAgentService {
                     .data(responseDTO)
                     .build();
         } catch (AppException e) {
-            log.error("查询智能体配置列表异常", e);
+            log.error("创建会话异常", e);
             return Response.<CreateSessionResponseDTO>builder()
                     .code(e.getCode())
                     .info(e.getInfo())
@@ -135,7 +134,7 @@ public class AgentServiceController implements IAgentService {
                     .info(e.getInfo())
                     .build();
         } catch (Exception e) {
-            log.error("智能体对话败 agentId:{} userId:{}", requestDTO.getAgentId(), requestDTO.getUserId(), e);
+            log.error("智能体对话失败 agentId:{} userId:{}", requestDTO.getAgentId(), requestDTO.getUserId(), e);
             return Response.<ChatResponseDTO>builder()
                     .code(ResponseCode.UN_ERROR.getCode())
                     .info(ResponseCode.UN_ERROR.getInfo())

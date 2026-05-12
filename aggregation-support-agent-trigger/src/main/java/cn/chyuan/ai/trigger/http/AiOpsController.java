@@ -1,4 +1,4 @@
-package cn.chyuan.ai.trigger.http;
+﻿package cn.chyuan.ai.trigger.http;
 
 import cn.chyuan.ai.api.dto.AiOpsRequestDTO;
 import cn.chyuan.ai.domain.agent.model.valobj.AiAgentRegisterVO;
@@ -13,7 +13,7 @@ import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 
 /**
  * AIOps 智能运维控制器 — 提供一键告警分析接口，SSE 流式返回运维报告
@@ -27,7 +27,6 @@ import javax.annotation.Resource;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1")
-@CrossOrigin(origins = "*")
 public class AiOpsController {
 
     /** AIOps 分析超时时间：10 分钟（毫秒） */

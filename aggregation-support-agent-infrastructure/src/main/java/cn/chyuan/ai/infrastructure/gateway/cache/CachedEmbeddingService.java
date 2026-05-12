@@ -12,6 +12,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 嵌入向量缓存服务 — 缓存嵌入结果，避免重复调用嵌入API
@@ -34,10 +35,10 @@ public class CachedEmbeddingService implements IEmbeddingService {
     private final Cache<String, float[]> cache;
 
     /** 缓存命中次数 */
-    private long hitCount = 0;
+    private final AtomicLong hitCount = new AtomicLong(0);
 
     /** 缓存未命中次数 */
-    private long missCount = 0;
+    private final AtomicLong missCount = new AtomicLong(0);
 
     public CachedEmbeddingService(
             IEmbeddingService delegate,
@@ -64,13 +65,13 @@ public class CachedEmbeddingService implements IEmbeddingService {
         // 尝试从缓存获取
         float[] cached = cache.getIfPresent(cacheKey);
         if (cached != null) {
-            hitCount++;
+            hitCount.incrementAndGet();
             log.debug("嵌入缓存命中: key={}", cacheKey.substring(0, Math.min(8, cacheKey.length())));
             return cached;
         }
 
         // 缓存未命中，调用实际服务
-        missCount++;
+        missCount.incrementAndGet();
         float[] result = delegate.embed(text);
 
         // 存入缓存
@@ -104,10 +105,10 @@ public class CachedEmbeddingService implements IEmbeddingService {
             float[] cached = cache.getIfPresent(cacheKey);
 
             if (cached != null) {
-                hitCount++;
+                hitCount.incrementAndGet();
                 results.add(cached);
             } else {
-                missCount++;
+                missCount.incrementAndGet();
                 results.add(null); // 占位
                 uncachedIndices.add(i);
                 uncachedTexts.add(text);
@@ -169,11 +170,13 @@ public class CachedEmbeddingService implements IEmbeddingService {
      */
     public CacheStats getStats() {
         com.google.common.cache.CacheStats guavaStats = cache.stats();
+        long hits = hitCount.get();
+        long misses = missCount.get();
         return CacheStats.builder()
                 .size(cache.size())
-                .hitCount(hitCount)
-                .missCount(missCount)
-                .hitRate(hitCount + missCount > 0 ? (double) hitCount / (hitCount + missCount) : 0)
+                .hitCount(hits)
+                .missCount(misses)
+                .hitRate(hits + misses > 0 ? (double) hits / (hits + misses) : 0)
                 .evictionCount(guavaStats.evictionCount())
                 .build();
     }

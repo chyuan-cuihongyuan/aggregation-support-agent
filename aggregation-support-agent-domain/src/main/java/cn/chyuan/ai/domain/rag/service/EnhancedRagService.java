@@ -1,4 +1,4 @@
-package cn.chyuan.ai.domain.rag.service;
+﻿package cn.chyuan.ai.domain.rag.service;
 
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import cn.chyuan.ai.domain.rag.adapter.port.IDocumentParserFactory;
@@ -23,11 +23,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
@@ -283,22 +284,32 @@ public class EnhancedRagService implements IRagService {
     }
 
     /**
-     * 多路召回（第三层）
+     * 多路召回（第三层） — 向量检索和BM25检索并行执行
      */
     private List<VectorSearchResultVO> multiPathRetrieval(String query, int topK) {
+        // 并行执行向量检索和BM25检索
+        CompletableFuture<List<VectorSearchResultVO>> vectorFuture =
+                CompletableFuture.supplyAsync(() -> vectorRetrieval(query, vectorTopK));
+
+        CompletableFuture<List<VectorSearchResultVO>> bm25Future = bm25Enabled
+                ? CompletableFuture.supplyAsync(() -> bm25Retrieval(query, bm25TopK))
+                : CompletableFuture.completedFuture(Collections.emptyList());
+
+        CompletableFuture.allOf(vectorFuture, bm25Future).join();
+
         List<List<VectorSearchResultVO>> allResults = new ArrayList<>();
 
-        // 路径1：向量检索
-        List<VectorSearchResultVO> vectorResults = vectorRetrieval(query, vectorTopK);
-        allResults.add(vectorResults);
+        List<VectorSearchResultVO> vectorResults = vectorFuture.join();
+        if (!vectorResults.isEmpty()) {
+            allResults.add(vectorResults);
+        }
 
-        // 路径2：BM25检索（如果启用）
-        if (bm25Enabled) {
-            List<VectorSearchResultVO> bm25Results = bm25Retrieval(query, bm25TopK);
+        List<VectorSearchResultVO> bm25Results = bm25Future.join();
+        if (!bm25Results.isEmpty()) {
             allResults.add(bm25Results);
         }
 
-        // 路径3：Multi-Query扩展检索（如果启用）
+        // Multi-Query扩展检索（如果启用）
         if (multiQueryEnabled) {
             List<VectorSearchResultVO> multiQueryResults = multiQueryRetrieval(query, vectorTopK);
             if (!multiQueryResults.isEmpty()) {
@@ -348,19 +359,23 @@ public class EnhancedRagService implements IRagService {
     }
 
     /**
-     * Multi-Query扩展检索
+     * Multi-Query扩展检索 — 所有扩展查询并行执行
      */
     private List<VectorSearchResultVO> multiQueryRetrieval(String originalQuery, int topK) {
         try {
             // 扩展查询
             List<String> expandedQueries = queryOptimizationService.expandQuery(originalQuery, multiQueryCount);
 
-            // 对每个扩展查询进行向量检索
-            List<List<VectorSearchResultVO>> multiResults = new ArrayList<>();
-            for (String query : expandedQueries) {
-                List<VectorSearchResultVO> results = vectorRetrieval(query, topK / expandedQueries.size() + 1);
-                multiResults.add(results);
-            }
+            // 并行执行所有扩展查询的向量检索
+            List<CompletableFuture<List<VectorSearchResultVO>>> futures = expandedQueries.stream()
+                    .map(q -> CompletableFuture.supplyAsync(() -> vectorRetrieval(q, topK / expandedQueries.size() + 1)))
+                    .collect(Collectors.toList());
+
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+            List<List<VectorSearchResultVO>> multiResults = futures.stream()
+                    .map(CompletableFuture::join)
+                    .collect(Collectors.toList());
 
             // 融合多Query结果
             return resultFusionService.rrfFusion(multiResults, topK);

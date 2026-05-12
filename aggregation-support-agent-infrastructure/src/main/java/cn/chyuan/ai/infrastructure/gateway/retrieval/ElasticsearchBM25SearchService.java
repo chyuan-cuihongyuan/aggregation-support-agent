@@ -1,4 +1,4 @@
-package cn.chyuan.ai.infrastructure.gateway.retrieval;
+﻿package cn.chyuan.ai.infrastructure.gateway.retrieval;
 
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
 import cn.chyuan.ai.domain.rag.service.retrieval.IBM25SearchService;
@@ -13,7 +13,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.util.*;
 

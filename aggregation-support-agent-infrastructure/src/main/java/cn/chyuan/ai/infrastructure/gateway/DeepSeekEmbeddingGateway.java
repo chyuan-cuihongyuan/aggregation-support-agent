@@ -1,4 +1,4 @@
-package cn.chyuan.ai.infrastructure.gateway;
+﻿package cn.chyuan.ai.infrastructure.gateway;
 
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import com.alibaba.fastjson.JSON;
@@ -14,7 +14,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;

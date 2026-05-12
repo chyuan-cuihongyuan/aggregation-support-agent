@@ -1,4 +1,4 @@
-package cn.chyuan.ai.infrastructure.gateway.retrieval;
+﻿package cn.chyuan.ai.infrastructure.gateway.retrieval;
 
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import cn.chyuan.ai.domain.rag.adapter.repository.IVectorStoreRepository;
@@ -10,7 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;

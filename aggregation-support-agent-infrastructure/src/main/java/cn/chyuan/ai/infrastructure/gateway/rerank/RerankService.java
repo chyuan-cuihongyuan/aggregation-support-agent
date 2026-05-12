@@ -11,7 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.Resource;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -44,19 +44,10 @@ public class RerankService implements IRerankService {
     @Value("${rag.rerank.timeout:30}")
     private int timeout;
 
+    @Resource
     private OkHttpClient httpClient;
 
     private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
-
-    @PostConstruct
-    public void init() {
-        this.httpClient = new OkHttpClient.Builder()
-                .connectTimeout(timeout, TimeUnit.SECONDS)
-                .readTimeout(timeout, TimeUnit.SECONDS)
-                .writeTimeout(timeout, TimeUnit.SECONDS)
-                .build();
-        log.info("Rerank服务初始化完成: url={}, model={}", rerankApiUrl, rerankModel);
-    }
 
     @Override
     public List<VectorSearchResultVO> rerank(String query, List<VectorSearchResultVO> candidates, int topK) {

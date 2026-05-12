@@ -1,4 +1,4 @@
-package cn.chyuan.ai.domain.agent.service.armory.matter.mcp.client.factory;
+﻿package cn.chyuan.ai.domain.agent.service.armory.matter.mcp.client.factory;
 
 import cn.chyuan.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.chyuan.ai.domain.agent.service.armory.matter.mcp.client.TooMcpCreateService;
@@ -10,7 +10,7 @@ import cn.chyuan.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 
 @Slf4j
 @Service

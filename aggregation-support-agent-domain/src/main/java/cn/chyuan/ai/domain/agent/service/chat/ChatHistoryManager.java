@@ -95,14 +95,8 @@ public class ChatHistoryManager {
         if (messages == null) return;
 
         int maxMessages = MAX_MESSAGE_PAIRS * 2;
-        while (messages.size() > maxMessages) {
-            // 移除最早的一对消息（用户 + 助手）
-            if (messages.size() >= 2) {
-                messages.remove(0);
-                messages.remove(0);
-            } else {
-                messages.remove(0);
-            }
+        if (messages.size() > maxMessages) {
+            messages.subList(0, messages.size() - maxMessages).clear();
         }
     }
 
