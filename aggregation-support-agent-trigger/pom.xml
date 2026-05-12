@@ -26,6 +26,11 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
         </dependency>
+        <!-- AOP — 用于 @RequireRole 权限校验 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
 
         <!-- 系统模块 -->
         <dependency>
