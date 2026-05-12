@@ -13,6 +13,14 @@ public enum ResponseCode {
     E0001("E0001", "智能体ID不存在"),
     E0002("E0002", "智能体MCP配置不在可加载范围"),
 
+    // 认证相关错误码
+    AUTH_FAIL("A0001", "用户名或密码错误"),
+    AUTH_USERNAME_EXISTS("A0002", "用户名已存在"),
+    AUTH_USER_DISABLED("A0003", "用户已被禁用"),
+    AUTH_TOKEN_INVALID("A0004", "Token无效或已过期"),
+    AUTH_PERMISSION_DENIED("A0005", "权限不足"),
+    AUTH_PARAM_INVALID("A0006", "参数校验失败"),
+
     ;
 
     private final String code;

@@ -101,6 +101,12 @@
             <groupId>cn.chyuan.ai</groupId>
             <artifactId>aggregation-support-agent-domain</artifactId>
         </dependency>
+
+        <!-- Spring Data Redis — 用于 Token 存储和缓存 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
