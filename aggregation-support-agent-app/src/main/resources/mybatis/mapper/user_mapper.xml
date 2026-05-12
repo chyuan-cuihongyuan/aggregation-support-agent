@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.chyuan.ai.infrastructure.persistent.mapper.UserMapper">
+
+    <resultMap id="UserMap" type="cn.chyuan.ai.infrastructure.dao.po.UserPO">
+        <id column="id" property="id"/>
+        <result column="username" property="username"/>
+        <result column="password_hash" property="passwordHash"/>
+        <result column="nickname" property="nickname"/>
+        <result column="email" property="email"/>
+        <result column="avatar" property="avatar"/>
+        <result column="role" property="role"/>
+        <result column="status" property="status"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectByUsername" parameterType="java.lang.String" resultMap="UserMap">
+        SELECT * FROM sys_user WHERE username = #{username}
+    </select>
+
+    <select id="selectById" parameterType="java.lang.Long" resultMap="UserMap">
+        SELECT * FROM sys_user WHERE id = #{id}
+    </select>
+
+    <insert id="insert" parameterType="cn.chyuan.ai.infrastructure.dao.po.UserPO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO sys_user (username, password_hash, nickname, email, avatar, role, status)
+        VALUES (#{username}, #{passwordHash}, #{nickname}, #{email}, #{avatar}, #{role}, #{status})
+    </insert>
+
+    <update id="update" parameterType="cn.chyuan.ai.infrastructure.dao.po.UserPO">
+        UPDATE sys_user
+        <set>
+            <if test="passwordHash != null">password_hash = #{passwordHash},</if>
+            <if test="nickname != null">nickname = #{nickname},</if>
+            <if test="email != null">email = #{email},</if>
+            <if test="avatar != null">avatar = #{avatar},</if>
+            <if test="role != null">role = #{role},</if>
+            <if test="status != null">status = #{status},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <select id="selectList" resultMap="UserMap">
+        SELECT * FROM sys_user ORDER BY create_time DESC LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="count" resultType="int">
+        SELECT COUNT(*) FROM sys_user
+    </select>
+
+</mapper>
