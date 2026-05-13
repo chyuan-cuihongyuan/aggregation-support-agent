@@ -5,161 +5,140 @@ import cn.chyuan.ai.api.dto.RegisterRequestDTO;
 import cn.chyuan.ai.api.dto.UserInfoDTO;
 import cn.chyuan.ai.api.response.Response;
 import cn.chyuan.ai.domain.auth.model.entity.UserEntity;
-import cn.chyuan.ai.domain.auth.model.valobj.TokenVO;
-import cn.chyuan.ai.domain.auth.service.TokenService;
-import cn.chyuan.ai.domain.auth.service.UserService;
+import cn.chyuan.ai.domain.auth.service.IAuthService;
+import cn.chyuan.ai.domain.auth.service.ITokenService;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
-import jakarta.servlet.http.Cookie;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.annotation.Resource;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletResponse;
+import java.text.SimpleDateFormat;
+
+/**
+ * 认证控制器 — 登录、注册、登出
+ */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/auth")
+@CrossOrigin(origins = "*")
 public class AuthController {
 
-    @Value("${auth.cookie.name:auth_token}")
-    private String cookieName;
+    @Resource
+    private IAuthService authService;
 
-    @Value("${auth.cookie.max-age:604800}")
-    private int cookieMaxAge;
+    @Resource
+    private ITokenService tokenService;
 
-    private final UserService userService;
-    private final TokenService tokenService;
+    private static final String COOKIE_NAME = "auth_token";
+    private static final int COOKIE_MAX_AGE = 24 * 60 * 60;
 
-    public AuthController(UserService userService, TokenService tokenService) {
-        this.userService = userService;
-        this.tokenService = tokenService;
-    }
-
-    @PostMapping("/register")
-    public Response<UserInfoDTO> register(@RequestBody RegisterRequestDTO request) {
+    /**
+     * 用户登录
+     */
+    @RequestMapping(value = "login", method = RequestMethod.POST)
+    public Response<UserInfoDTO> login(@RequestBody LoginRequestDTO requestDTO, HttpServletResponse response) {
         try {
-            UserEntity user = userService.register(
-                    request.getUsername(), request.getPassword(),
-                    request.getEmail(), request.getNickname());
+            UserEntity user = authService.login(requestDTO.getUsername(), requestDTO.getPassword());
+            String token = tokenService.generateToken(user.getId(), user.getUsername());
+            setAuthCookie(response, token);
+
             return Response.<UserInfoDTO>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
                     .data(toUserInfoDTO(user))
                     .build();
         } catch (AppException e) {
+            log.warn("登录失败: {} - {}", requestDTO.getUsername(), e.getInfo());
             return Response.<UserInfoDTO>builder()
                     .code(e.getCode())
-                    .info(e.getMessage())
+                    .info(e.getInfo())
+                    .build();
+        } catch (Exception e) {
+            log.error("登录异常: {}", requestDTO.getUsername(), e);
+            return Response.<UserInfoDTO>builder()
+                    .code(ResponseCode.UN_ERROR.getCode())
+                    .info("登录失败")
                     .build();
         }
     }
 
-    @PostMapping("/login")
-    public Response<UserInfoDTO> login(@RequestBody LoginRequestDTO request, HttpServletResponse response) {
+    /**
+     * 用户注册
+     */
+    @RequestMapping(value = "register", method = RequestMethod.POST)
+    public Response<UserInfoDTO> register(@RequestBody RegisterRequestDTO requestDTO, HttpServletResponse response) {
         try {
-            UserEntity user = userService.login(request.getUsername(), request.getPassword());
-            TokenVO tokenVO = tokenService.generateToken(user.getId(), user.getUsername(), user.getRole());
-            setCookie(response, tokenVO.getToken());
+            UserEntity user = authService.register(
+                    requestDTO.getUsername(),
+                    requestDTO.getPassword(),
+                    requestDTO.getPhone(),
+                    requestDTO.getEmail(),
+                    requestDTO.getNickname()
+            );
+
+            String token = tokenService.generateToken(user.getId(), user.getUsername());
+            setAuthCookie(response, token);
+
             return Response.<UserInfoDTO>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
                     .data(toUserInfoDTO(user))
                     .build();
         } catch (AppException e) {
+            log.warn("注册失败: {} - {}", requestDTO.getUsername(), e.getInfo());
             return Response.<UserInfoDTO>builder()
                     .code(e.getCode())
-                    .info(e.getMessage())
-                    .build();
-        }
-    }
-
-    @PostMapping("/logout")
-    public Response<Boolean> logout(HttpServletRequest request, HttpServletResponse response) {
-        try {
-            String token = extractToken(request);
-            if (token != null) {
-                tokenService.removeToken(token);
-            }
-            clearCookie(response);
-            return Response.<Boolean>builder()
-                    .code(ResponseCode.SUCCESS.getCode())
-                    .info(ResponseCode.SUCCESS.getInfo())
-                    .data(true)
+                    .info(e.getInfo())
                     .build();
         } catch (Exception e) {
-            log.error("登出失败", e);
-            return Response.<Boolean>builder()
+            log.error("注册异常: {}", requestDTO.getUsername(), e);
+            return Response.<UserInfoDTO>builder()
                     .code(ResponseCode.UN_ERROR.getCode())
-                    .info(ResponseCode.UN_ERROR.getInfo())
+                    .info("注册失败")
                     .build();
         }
     }
 
-    @PostMapping("/refresh")
-    public Response<Boolean> refresh(HttpServletRequest request, HttpServletResponse response) {
-        try {
-            String token = extractToken(request);
-            if (token == null) {
-                return Response.<Boolean>builder()
-                        .code("A0004").info("Token无效").build();
-            }
-            TokenVO newToken = tokenService.refreshToken(token);
-            if (newToken == null) {
-                return Response.<Boolean>builder()
-                        .code("A0004").info("Token刷新失败").build();
-            }
-            setCookie(response, newToken.getToken());
-            return Response.<Boolean>builder()
-                    .code(ResponseCode.SUCCESS.getCode())
-                    .info(ResponseCode.SUCCESS.getInfo())
-                    .data(true)
-                    .build();
-        } catch (Exception e) {
-            log.error("Token刷新失败", e);
-            return Response.<Boolean>builder()
-                    .code(ResponseCode.UN_ERROR.getCode())
-                    .info(ResponseCode.UN_ERROR.getInfo())
-                    .build();
-        }
-    }
-
-    private void setCookie(HttpServletResponse response, String token) {
-        Cookie cookie = new Cookie(cookieName, token);
-        cookie.setPath("/");
-        cookie.setHttpOnly(true);
-        cookie.setMaxAge(cookieMaxAge);
-        response.addCookie(cookie);
-    }
-
-    private void clearCookie(HttpServletResponse response) {
-        Cookie cookie = new Cookie(cookieName, "");
+    /**
+     * 用户登出
+     */
+    @RequestMapping(value = "logout", method = RequestMethod.POST)
+    public Response<Boolean> logout(HttpServletResponse response) {
+        Cookie cookie = new Cookie(COOKIE_NAME, "");
         cookie.setPath("/");
         cookie.setMaxAge(0);
+        cookie.setHttpOnly(true);
+        response.addCookie(cookie);
+
+        return Response.<Boolean>builder()
+                .code(ResponseCode.SUCCESS.getCode())
+                .info(ResponseCode.SUCCESS.getInfo())
+                .data(true)
+                .build();
+    }
+
+    private void setAuthCookie(HttpServletResponse response, String token) {
+        Cookie cookie = new Cookie(COOKIE_NAME, token);
+        cookie.setPath("/");
+        cookie.setMaxAge(COOKIE_MAX_AGE);
+        cookie.setHttpOnly(true);
         response.addCookie(cookie);
     }
 
-    private String extractToken(HttpServletRequest request) {
-        Cookie[] cookies = request.getCookies();
-        if (cookies == null) return null;
-        for (Cookie cookie : cookies) {
-            if (cookieName.equals(cookie.getName())) {
-                return cookie.getValue();
-            }
-        }
-        return null;
-    }
-
-    private UserInfoDTO toUserInfoDTO(UserEntity user) {
+    private UserInfoDTO toUserInfoDTO(UserEntity entity) {
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         UserInfoDTO dto = new UserInfoDTO();
-        dto.setId(user.getId());
-        dto.setUsername(user.getUsername());
-        dto.setNickname(user.getNickname());
-        dto.setEmail(user.getEmail());
-        dto.setAvatar(user.getAvatar());
-        dto.setRole(user.getRole());
-        dto.setStatus(user.getStatus());
-        dto.setCreateTime(user.getCreateTime());
+        dto.setId(entity.getId());
+        dto.setUsername(entity.getUsername());
+        dto.setNickname(entity.getNickname());
+        dto.setEmail(entity.getEmail());
+        dto.setAvatar(entity.getAvatar());
+        dto.setRole(entity.getRole());
+        dto.setStatus(entity.getStatus());
+        dto.setCreateTime(entity.getCreateTime() != null ? sdf.format(entity.getCreateTime()) : "");
         return dto;
     }
 }

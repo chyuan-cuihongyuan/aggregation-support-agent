@@ -1,16 +1,33 @@
 package cn.chyuan.ai.domain.auth.model.entity;
-import lombok.Data;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.io.Serializable;
+import java.util.Date;
+
+/**
+ * 用户实体
+ */
 @Data
-public class UserEntity {
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
+public class UserEntity implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
     private Long id;
     private String username;
-    private String passwordHash;
-    private String nickname;
+    private String password;
+    private String phone;
     private String email;
+    private String nickname;
     private String avatar;
     private String role;
     private Integer status;
-    private String createTime;
-    private String updateTime;
+    private Date createTime;
+    private Date updateTime;
 }

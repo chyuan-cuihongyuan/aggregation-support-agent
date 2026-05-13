@@ -1,101 +1,103 @@
 package cn.chyuan.ai.trigger.http;
 
-import cn.chyuan.ai.api.dto.*;
+import cn.chyuan.ai.api.dto.UserInfoDTO;
 import cn.chyuan.ai.api.response.Response;
+import cn.chyuan.ai.domain.auth.adapter.repository.IUserRepository;
 import cn.chyuan.ai.domain.auth.model.entity.UserEntity;
-import cn.chyuan.ai.domain.auth.service.UserService;
-import cn.chyuan.ai.trigger.annotation.RequireRole;
+import cn.chyuan.ai.domain.auth.service.ITokenService;
 import cn.chyuan.ai.types.enums.ResponseCode;
-import cn.chyuan.ai.types.exception.AppException;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.annotation.Resource;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
+import java.text.SimpleDateFormat;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * 用户管理控制器 — 用户信息查询、用户列表、状态和角色管理
+ */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/user")
+@CrossOrigin(origins = "*")
 public class UserController {
 
-    private final UserService userService;
+    @Resource
+    private IUserRepository userRepository;
 
-    public UserController(UserService userService) {
-        this.userService = userService;
-    }
+    @Resource
+    private ITokenService tokenService;
 
-    @GetMapping("/info")
-    public Response<UserInfoDTO> getCurrentUser(HttpServletRequest request) {
+    private static final String COOKIE_NAME = "auth_token";
+
+    /**
+     * 获取当前登录用户信息（从 Cookie 中的 Token 解析）
+     */
+    @RequestMapping(value = "info", method = RequestMethod.GET)
+    public Response<UserInfoDTO> getUserInfo(HttpServletRequest request) {
         try {
-            Long userId = (Long) request.getAttribute("userId");
-            UserEntity user = userService.getUserById(userId);
+            String token = getCookieValue(request, COOKIE_NAME);
+            if (token == null || token.isEmpty()) {
+                return Response.<UserInfoDTO>builder()
+                        .code(ResponseCode.E1003.getCode())
+                        .info("未登录")
+                        .build();
+            }
+
+            if (!tokenService.validateToken(token)) {
+                return Response.<UserInfoDTO>builder()
+                        .code(ResponseCode.E1003.getCode())
+                        .info("登录已过期")
+                        .build();
+            }
+
+            Long userId = tokenService.getUserIdFromToken(token);
+            UserEntity user = userRepository.queryById(userId);
             if (user == null) {
                 return Response.<UserInfoDTO>builder()
-                        .code("A0006").info("用户不存在").build();
+                        .code(ResponseCode.E1003.getCode())
+                        .info("用户不存在")
+                        .build();
             }
+
             return Response.<UserInfoDTO>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
-                    .data(toDTO(user))
+                    .data(toUserInfoDTO(user))
                     .build();
         } catch (Exception e) {
             log.error("获取用户信息失败", e);
             return Response.<UserInfoDTO>builder()
                     .code(ResponseCode.UN_ERROR.getCode())
-                    .info(ResponseCode.UN_ERROR.getInfo())
+                    .info("获取用户信息失败")
                     .build();
         }
     }
 
-    @PutMapping("/info")
-    public Response<Boolean> updateUserInfo(@RequestBody UpdateUserRequestDTO requestDTO,
-                                            HttpServletRequest request) {
-        try {
-            Long userId = (Long) request.getAttribute("userId");
-            userService.updateUserInfo(userId, requestDTO.getNickname(),
-                    requestDTO.getEmail(), requestDTO.getAvatar());
-            return Response.<Boolean>builder()
-                    .code(ResponseCode.SUCCESS.getCode())
-                    .info(ResponseCode.SUCCESS.getInfo())
-                    .data(true)
-                    .build();
-        } catch (AppException e) {
-            return Response.<Boolean>builder().code(e.getCode()).info(e.getMessage()).build();
-        }
-    }
-
-    @PutMapping("/password")
-    public Response<Boolean> changePassword(@RequestBody ChangePasswordRequestDTO requestDTO,
-                                            HttpServletRequest request) {
-        try {
-            Long userId = (Long) request.getAttribute("userId");
-            userService.changePassword(userId, requestDTO.getOldPassword(), requestDTO.getNewPassword());
-            return Response.<Boolean>builder()
-                    .code(ResponseCode.SUCCESS.getCode())
-                    .info(ResponseCode.SUCCESS.getInfo())
-                    .data(true)
-                    .build();
-        } catch (AppException e) {
-            return Response.<Boolean>builder().code(e.getCode()).info(e.getMessage()).build();
-        }
-    }
-
-    @GetMapping("/list")
-    @RequireRole("admin")
+    /**
+     * 查询用户列表（分页）
+     */
+    @RequestMapping(value = "list", method = RequestMethod.GET)
     public Response<Map<String, Object>> listUsers(
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int pageSize) {
+            @RequestParam(value = "page", defaultValue = "1") int page,
+            @RequestParam(value = "pageSize", defaultValue = "20") int pageSize) {
         try {
-            List<UserEntity> users = userService.listUsers(page, pageSize);
-            int total = userService.countUsers();
+            List<UserEntity> entities = userRepository.queryList(page, pageSize);
+            int total = userRepository.countAll();
+
+            List<UserInfoDTO> dtoList = entities.stream().map(this::toUserInfoDTO).collect(Collectors.toList());
+
             Map<String, Object> data = new HashMap<>();
-            data.put("list", users.stream().map(this::toDTO).collect(Collectors.toList()));
+            data.put("list", dtoList);
             data.put("total", total);
             data.put("page", page);
             data.put("pageSize", pageSize);
+
             return Response.<Map<String, Object>>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
@@ -105,53 +107,84 @@ public class UserController {
             log.error("查询用户列表失败", e);
             return Response.<Map<String, Object>>builder()
                     .code(ResponseCode.UN_ERROR.getCode())
-                    .info(ResponseCode.UN_ERROR.getInfo())
+                    .info("查询失败")
                     .build();
         }
     }
 
-    @PutMapping("/{id}/status")
-    @RequireRole("admin")
-    public Response<Boolean> updateStatus(@PathVariable Long id,
-                                          @RequestBody UpdateStatusRequestDTO requestDTO) {
+    /**
+     * 更新用户状态
+     */
+    @RequestMapping(value = "{userId}/status", method = RequestMethod.PUT)
+    public Response<Boolean> updateStatus(
+            @PathVariable("userId") Long userId,
+            @RequestBody Map<String, Integer> body) {
         try {
-            userService.updateStatus(id, requestDTO.getStatus());
+            Integer status = body.get("status");
+            userRepository.updateStatus(userId, status);
+            log.info("更新用户状态: userId={}, status={}", userId, status);
             return Response.<Boolean>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
                     .data(true)
                     .build();
-        } catch (AppException e) {
-            return Response.<Boolean>builder().code(e.getCode()).info(e.getMessage()).build();
+        } catch (Exception e) {
+            log.error("更新用户状态失败: userId={}", userId, e);
+            return Response.<Boolean>builder()
+                    .code(ResponseCode.UN_ERROR.getCode())
+                    .info("操作失败")
+                    .build();
         }
     }
 
-    @PutMapping("/{id}/role")
-    @RequireRole("admin")
-    public Response<Boolean> updateRole(@PathVariable Long id,
-                                        @RequestBody UpdateRoleRequestDTO requestDTO) {
+    /**
+     * 更新用户角色
+     */
+    @RequestMapping(value = "{userId}/role", method = RequestMethod.PUT)
+    public Response<Boolean> updateRole(
+            @PathVariable("userId") Long userId,
+            @RequestBody Map<String, String> body) {
         try {
-            userService.updateRole(id, requestDTO.getRole());
+            String role = body.get("role");
+            userRepository.updateRole(userId, role);
+            log.info("更新用户角色: userId={}, role={}", userId, role);
             return Response.<Boolean>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
                     .data(true)
                     .build();
-        } catch (AppException e) {
-            return Response.<Boolean>builder().code(e.getCode()).info(e.getMessage()).build();
+        } catch (Exception e) {
+            log.error("更新用户角色失败: userId={}", userId, e);
+            return Response.<Boolean>builder()
+                    .code(ResponseCode.UN_ERROR.getCode())
+                    .info("操作失败")
+                    .build();
         }
     }
 
-    private UserInfoDTO toDTO(UserEntity user) {
+    private String getCookieValue(HttpServletRequest request, String name) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies != null) {
+            for (Cookie cookie : cookies) {
+                if (name.equals(cookie.getName())) {
+                    return cookie.getValue();
+                }
+            }
+        }
+        return null;
+    }
+
+    private UserInfoDTO toUserInfoDTO(UserEntity entity) {
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         UserInfoDTO dto = new UserInfoDTO();
-        dto.setId(user.getId());
-        dto.setUsername(user.getUsername());
-        dto.setNickname(user.getNickname());
-        dto.setEmail(user.getEmail());
-        dto.setAvatar(user.getAvatar());
-        dto.setRole(user.getRole());
-        dto.setStatus(user.getStatus());
-        dto.setCreateTime(user.getCreateTime());
+        dto.setId(entity.getId());
+        dto.setUsername(entity.getUsername());
+        dto.setNickname(entity.getNickname());
+        dto.setEmail(entity.getEmail());
+        dto.setAvatar(entity.getAvatar());
+        dto.setRole(entity.getRole());
+        dto.setStatus(entity.getStatus());
+        dto.setCreateTime(entity.getCreateTime() != null ? sdf.format(entity.getCreateTime()) : "");
         return dto;
     }
 }

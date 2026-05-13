@@ -21,6 +21,11 @@ public enum ResponseCode {
     AUTH_PERMISSION_DENIED("A0005", "权限不足"),
     AUTH_PARAM_INVALID("A0006", "参数校验失败"),
 
+    E1001("E1001", "用户名已存在"),
+    E1002("E1002", "用户名或密码错误"),
+    E1003("E1003", "Token 无效或已过期"),
+    E1004("E1004", "账号已被禁用"),
+
     ;
 
     private final String code;
