@@ -27,27 +27,27 @@ public class UserService {
         validateUsername(username);
         validatePassword(password);
 
-        UserEntity existing = userRepository.queryUserByUsername(username);
+        UserEntity existing = userRepository.queryByUsername(username);
         if (existing != null) {
             throw new AppException("A0002", "用户名已存在");
         }
 
         UserEntity user = new UserEntity();
         user.setUsername(username);
-        user.setPasswordHash(passwordEncoder.encode(password));
+        user.setPassword(passwordEncoder.encode(password));
         user.setEmail(email != null ? email : "");
         user.setNickname(nickname != null ? nickname : username);
         user.setRole(UserRoleEnum.USER.getCode());
         user.setStatus(UserStatusEnum.ENABLED.getCode());
 
-        userRepository.insertUser(user);
+        userRepository.save(user);
         log.info("用户注册成功: username={}", username);
         return user;
     }
 
     public UserEntity login(String username, String password) {
-        UserEntity user = userRepository.queryUserByUsername(username);
-        if (user == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
+        UserEntity user = userRepository.queryByUsername(username);
+        if (user == null || !passwordEncoder.matches(password, user.getPassword())) {
             throw new AppException("A0001", "用户名或密码错误");
         }
         if (UserStatusEnum.DISABLED.getCode().equals(user.getStatus())) {
@@ -57,11 +57,11 @@ public class UserService {
     }
 
     public UserEntity getUserById(Long id) {
-        return userRepository.queryUserById(id);
+        return userRepository.queryById(id);
     }
 
     public void updateUserInfo(Long id, String nickname, String email, String avatar) {
-        UserEntity user = userRepository.queryUserById(id);
+        UserEntity user = userRepository.queryById(id);
         if (user == null) {
             throw new AppException("A0006", "用户不存在");
         }
@@ -73,42 +73,39 @@ public class UserService {
 
     public void changePassword(Long id, String oldPassword, String newPassword) {
         validatePassword(newPassword);
-        UserEntity user = userRepository.queryUserById(id);
+        UserEntity user = userRepository.queryById(id);
         if (user == null) {
             throw new AppException("A0006", "用户不存在");
         }
-        if (!passwordEncoder.matches(oldPassword, user.getPasswordHash())) {
+        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
             throw new AppException("A0001", "原密码错误");
         }
-        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.updateUser(user);
     }
 
     public List<UserEntity> listUsers(int page, int pageSize) {
-        int offset = (page - 1) * pageSize;
-        return userRepository.queryUserList(offset, pageSize);
+        return userRepository.queryList(page, pageSize);
     }
 
     public int countUsers() {
-        return userRepository.countUsers();
+        return userRepository.countAll();
     }
 
     public void updateStatus(Long id, Integer status) {
-        UserEntity user = userRepository.queryUserById(id);
+        UserEntity user = userRepository.queryById(id);
         if (user == null) {
             throw new AppException("A0006", "用户不存在");
         }
-        user.setStatus(status);
-        userRepository.updateUser(user);
+        userRepository.updateStatus(id, status);
     }
 
     public void updateRole(Long id, String role) {
-        UserEntity user = userRepository.queryUserById(id);
+        UserEntity user = userRepository.queryById(id);
         if (user == null) {
             throw new AppException("A0006", "用户不存在");
         }
-        user.setRole(role);
-        userRepository.updateUser(user);
+        userRepository.updateRole(id, role);
     }
 
     private void validateUsername(String username) {

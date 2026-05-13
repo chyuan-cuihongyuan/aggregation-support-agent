@@ -24,7 +24,6 @@ import java.util.stream.Collectors;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/user")
-@CrossOrigin(origins = "*")
 public class UserController {
 
     @Resource

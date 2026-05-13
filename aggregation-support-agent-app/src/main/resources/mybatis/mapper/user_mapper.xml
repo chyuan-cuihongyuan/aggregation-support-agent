@@ -53,4 +53,18 @@
         UPDATE user SET role = #{role}, update_time = NOW() WHERE id = #{id}
     </update>
 
+    <update id="updateUser" parameterType="cn.chyuan.ai.infrastructure.dao.po.UserPO">
+        UPDATE user
+        SET username = #{username},
+            password = #{password},
+            phone = #{phone},
+            email = #{email},
+            nickname = #{nickname},
+            avatar = #{avatar},
+            role = #{role},
+            status = #{status},
+            update_time = #{updateTime}
+        WHERE id = #{id}
+    </update>
+
 </mapper>

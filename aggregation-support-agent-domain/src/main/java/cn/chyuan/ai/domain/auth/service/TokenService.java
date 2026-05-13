@@ -14,7 +14,7 @@ import java.util.UUID;
 
 @Slf4j
 @Service
-public class TokenService {
+public class TokenService implements ITokenService {
 
     @Value("${auth.jwt.secret}")
     private String secret;
@@ -26,6 +26,11 @@ public class TokenService {
 
     public TokenService(ITokenRepository tokenRepository) {
         this.tokenRepository = tokenRepository;
+    }
+
+    @Override
+    public String generateToken(Long userId, String username) {
+        return generateToken(userId, username, "user").getToken();
     }
 
     public TokenVO generateToken(Long userId, String username, String role) {
@@ -50,6 +55,14 @@ public class TokenService {
         return TokenVO.builder().token(token).expireAt(expireDate.getTime()).build();
     }
 
+    @Override
+    public Long getUserIdFromToken(String token) {
+        Claims claims = parseToken(token);
+        if (claims == null) return null;
+        return Long.valueOf(claims.getSubject());
+    }
+
+    @Override
     public boolean validateToken(String token) {
         try {
             Claims claims = parseToken(token);

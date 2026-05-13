@@ -29,4 +29,7 @@ public interface IUserRepository {
 
     /** 更新用户角色 */
     void updateRole(Long id, String role);
+
+    /** 更新用户信息 */
+    void updateUser(UserEntity entity);
 }

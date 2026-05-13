@@ -18,7 +18,6 @@ import java.util.stream.Collectors;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/documents")
-@CrossOrigin(origins = "*")
 public class DocumentController {
 
     @Autowired(required = false)

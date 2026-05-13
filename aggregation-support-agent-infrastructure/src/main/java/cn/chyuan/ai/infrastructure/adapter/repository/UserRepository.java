@@ -71,6 +71,23 @@ public class UserRepository implements IUserRepository {
         userMapper.updateRole(id, role);
     }
 
+    @Override
+    public void updateUser(UserEntity entity) {
+        UserPO po = UserPO.builder()
+                .id(entity.getId())
+                .username(entity.getUsername())
+                .password(entity.getPassword())
+                .phone(entity.getPhone())
+                .email(entity.getEmail())
+                .nickname(entity.getNickname())
+                .avatar(entity.getAvatar())
+                .role(entity.getRole())
+                .status(entity.getStatus())
+                .updateTime(new java.util.Date())
+                .build();
+        userMapper.updateUser(po);
+    }
+
     private UserEntity toEntity(UserPO po) {
         return UserEntity.builder()
                 .id(po.getId())

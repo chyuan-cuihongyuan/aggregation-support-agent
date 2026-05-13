@@ -25,4 +25,6 @@ public interface UserMapper {
     void updateStatus(@Param("id") Long id, @Param("status") Integer status);
 
     void updateRole(@Param("id") Long id, @Param("role") String role);
+
+    void updateUser(UserPO record);
 }
