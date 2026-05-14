@@ -36,6 +36,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
         String path = request.getRequestURI();
 
+        // 跳过 OPTIONS 预检请求（CORS）
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         // 白名单和非API路径放行
         if (WHITE_LIST.contains(path) || !path.startsWith("/api/")) {
             filterChain.doFilter(request, response);

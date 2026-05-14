@@ -27,6 +27,7 @@ import com.google.genai.types.Content;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/")
+@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true", allowedHeaders = "*")
 public class AgentServiceController implements IAgentService {
 
     @Resource

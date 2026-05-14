@@ -127,11 +127,21 @@ public class EnhancedRagService implements IRagService {
 
     @Override
     public void uploadDocument(DocumentUploadCommand command) {
-        log.info("开始处理文档上传: fileName={}, contentLength={}", command.getFileName(), command.getContent().length());
+        // 优先使用 rawContent（支持 PDF/Word/HTML 等二进制格式），兼容旧版本使用 content
+        byte[] documentBytes;
+        if (command.getRawContent() != null) {
+            documentBytes = command.getRawContent();
+            log.info("开始处理文档上传(二进制): fileName={}, size={}", command.getFileName(), documentBytes.length);
+        } else if (command.getContent() != null) {
+            documentBytes = command.getContent().getBytes(StandardCharsets.UTF_8);
+            log.info("开始处理文档上传(文本): fileName={}, contentLength={}", command.getFileName(), command.getContent().length());
+        } else {
+            throw new IllegalArgumentException("文档内容不能为空：既没有 rawContent 也没有 content");
+        }
 
-        // 1. 解析文档：根据文件类型自动选择解析器
+        // 1. 解析文档：根据文件类型自动选择解析器（支持 PDF/Word/HTML/TXT/MD）
         ParsedDocumentVO parsedDocument = documentParserFactory.parse(
-                command.getContent().getBytes(StandardCharsets.UTF_8),
+                documentBytes,
                 command.getFileName(),
                 command.getMimeType()
         );

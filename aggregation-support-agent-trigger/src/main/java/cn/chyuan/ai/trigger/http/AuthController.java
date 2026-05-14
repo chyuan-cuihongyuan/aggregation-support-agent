@@ -23,6 +23,7 @@ import java.text.SimpleDateFormat;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/auth")
+@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true", allowedHeaders = "*")
 public class AuthController {
 
     @Resource
