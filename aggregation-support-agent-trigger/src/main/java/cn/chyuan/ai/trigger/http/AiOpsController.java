@@ -77,7 +77,8 @@ public class AiOpsController {
                                     }
                                 } catch (Exception e) {
                                     log.error("AIOps SSE 发送失败", e);
-                                    emitter.completeWithError(e);
+                                    // 注意：不要在这里调用 emitter.completeWithError(e)，
+                                    // 因为异常会传播到 onError 回调，避免重复完成导致 IllegalStateException
                                 }
                             },
                             emitter::completeWithError,
