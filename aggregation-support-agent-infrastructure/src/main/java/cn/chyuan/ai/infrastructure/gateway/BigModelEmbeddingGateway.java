@@ -72,6 +72,9 @@ public class BigModelEmbeddingGateway implements IEmbeddingService {
         return results.get(0);
     }
 
+    /** 智谱嵌入 API 单次最大批量数 */
+    private static final int MAX_BATCH_SIZE = 64;
+
     @Override
     public List<float[]> embedBatch(List<String> texts) {
         if (texts == null || texts.isEmpty()) {
@@ -79,6 +82,23 @@ public class BigModelEmbeddingGateway implements IEmbeddingService {
             return Collections.emptyList();
         }
 
+        if (texts.size() <= MAX_BATCH_SIZE) {
+            return doEmbedBatch(texts);
+        }
+
+        // 分片调用，每批最多 MAX_BATCH_SIZE 条
+        List<float[]> allResults = new ArrayList<>(texts.size());
+        for (int i = 0; i < texts.size(); i += MAX_BATCH_SIZE) {
+            int end = Math.min(i + MAX_BATCH_SIZE, texts.size());
+            List<String> batch = new ArrayList<>(texts.subList(i, end));
+            log.info("智谱嵌入分片调用: batch={}/{}, count={}", (i / MAX_BATCH_SIZE) + 1,
+                    (texts.size() + MAX_BATCH_SIZE - 1) / MAX_BATCH_SIZE, batch.size());
+            allResults.addAll(doEmbedBatch(batch));
+        }
+        return allResults;
+    }
+
+    private List<float[]> doEmbedBatch(List<String> texts) {
         try {
             JSONObject requestBody = new JSONObject();
             requestBody.put("model", modelName);

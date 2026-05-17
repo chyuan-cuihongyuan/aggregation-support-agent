@@ -59,6 +59,10 @@ public class ChatService implements IChatService {
 
     @Override
     public String createSession(String agentId, String userId) {
+        if (agentId == null || agentId.isBlank()) {
+            throw new AppException(ResponseCode.E0001.getCode(), "agentId 不能为空");
+        }
+
         AiAgentRegisterVO aiAgentRegisterVO = defaultArmoryFactory.getAiAgentRegisterVO(agentId);
 
         if (null == aiAgentRegisterVO) {
@@ -82,6 +86,9 @@ public class ChatService implements IChatService {
 
     @Override
     public List<String> handleMessage(String agentId, String userId, String message) {
+        if (agentId == null || agentId.isBlank()) {
+            throw new AppException(ResponseCode.E0001.getCode(), "agentId 不能为空");
+        }
 
         AiAgentRegisterVO aiAgentRegisterVO = defaultArmoryFactory.getAiAgentRegisterVO(agentId);
 
@@ -96,6 +103,9 @@ public class ChatService implements IChatService {
 
     @Override
     public List<String> handleMessage(String agentId, String userId, String sessionId, String message) {
+        if (agentId == null || agentId.isBlank()) {
+            throw new AppException(ResponseCode.E0001.getCode(), "agentId 不能为空");
+        }
 
         AiAgentRegisterVO aiAgentRegisterVO = defaultArmoryFactory.getAiAgentRegisterVO(agentId);
 
@@ -116,6 +126,10 @@ public class ChatService implements IChatService {
 
     @Override
     public Flowable<Event> handleMessageStream(String agentId, String userId, String sessionId, String message) {
+        if (agentId == null || agentId.isBlank()) {
+            throw new AppException(ResponseCode.E0001.getCode(), "agentId 不能为空");
+        }
+
         AiAgentRegisterVO aiAgentRegisterVO = defaultArmoryFactory.getAiAgentRegisterVO(agentId);
 
         if (null == aiAgentRegisterVO) {
@@ -133,6 +147,11 @@ public class ChatService implements IChatService {
 
     @Override
     public List<String> handleMessage(ChatCommandEntity chatCommandEntity) {
+        String agentId = chatCommandEntity.getAgentId();
+        if (agentId == null || agentId.isBlank()) {
+            throw new AppException(ResponseCode.E0001.getCode(), "agentId 不能为空");
+        }
+
         AiAgentRegisterVO aiAgentRegisterVO = defaultArmoryFactory.getAiAgentRegisterVO(chatCommandEntity.getAgentId());
 
         if (null == aiAgentRegisterVO) {
