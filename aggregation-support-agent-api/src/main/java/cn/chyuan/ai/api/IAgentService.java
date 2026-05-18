@@ -2,6 +2,8 @@ package cn.chyuan.ai.api;
 
 import cn.chyuan.ai.api.dto.*;
 import cn.chyuan.ai.api.response.Response;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
@@ -15,10 +17,10 @@ public interface IAgentService {
 
     Response<List<AiAgentConfigResponseDTO>> queryAiAgentConfigList();
 
-    Response<CreateSessionResponseDTO> createSession(CreateSessionRequestDTO requestDTO);
+    public Response<CreateSessionResponseDTO> createSession(HttpServletRequest request, CreateSessionRequestDTO requestDTO);
 
-    Response<ChatResponseDTO> chat(ChatRequestDTO requestDTO);
+    Response<ChatResponseDTO> chat(HttpServletRequest request, ChatRequestDTO requestDTO);
 
-    SseEmitter chatStream(ChatRequestDTO requestDTO);
+    SseEmitter chatStream(HttpServletRequest request, ChatRequestDTO requestDTO);
 
 }

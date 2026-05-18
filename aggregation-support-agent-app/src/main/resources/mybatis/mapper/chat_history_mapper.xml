@@ -27,6 +27,12 @@
         ORDER BY create_time ASC
     </select>
 
+    <select id="queryById" parameterType="java.lang.Long" resultMap="ChatHistoryMap">
+        SELECT id, user_id, agent_id, agent_name, session_id, question, answer, create_time, update_time
+        FROM chat_history
+        WHERE id = #{id}
+    </select>
+
     <delete id="deleteByUserId" parameterType="java.lang.String">
         DELETE FROM chat_history WHERE user_id = #{userId}
     </delete>

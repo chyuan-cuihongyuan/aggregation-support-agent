@@ -7,6 +7,7 @@ import cn.chyuan.ai.api.response.Response;
 import cn.chyuan.ai.domain.auth.model.entity.UserEntity;
 import cn.chyuan.ai.domain.auth.service.IAuthService;
 import cn.chyuan.ai.domain.auth.service.ITokenService;
+import cn.chyuan.ai.trigger.filter.JwtAuthFilter;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.text.SimpleDateFormat;
 
@@ -41,7 +43,7 @@ public class AuthController {
     public Response<UserInfoDTO> login(@RequestBody LoginRequestDTO requestDTO, HttpServletResponse response) {
         try {
             UserEntity user = authService.login(requestDTO.getUsername(), requestDTO.getPassword());
-            String token = tokenService.generateToken(user.getId(), user.getUsername());
+            String token = tokenService.generateToken(user.getId(), user.getUsername(), user.getRole());
             setAuthCookie(response, token);
 
             return Response.<UserInfoDTO>builder()
@@ -78,7 +80,7 @@ public class AuthController {
                     requestDTO.getNickname()
             );
 
-            String token = tokenService.generateToken(user.getId(), user.getUsername());
+            String token = tokenService.generateToken(user.getId(), user.getUsername(), user.getRole());
             setAuthCookie(response, token);
 
             return Response.<UserInfoDTO>builder()
@@ -105,7 +107,12 @@ public class AuthController {
      * 用户登出
      */
     @RequestMapping(value = "logout", method = RequestMethod.POST)
-    public Response<Boolean> logout(HttpServletResponse response) {
+    public Response<Boolean> logout(HttpServletRequest request, HttpServletResponse response) {
+        String token = (String) request.getAttribute(JwtAuthFilter.ATTR_AUTH_TOKEN);
+        if (token != null && !token.isEmpty()) {
+            tokenService.removeToken(token);
+        }
+
         Cookie cookie = new Cookie(COOKIE_NAME, "");
         cookie.setPath("/");
         cookie.setMaxAge(0);

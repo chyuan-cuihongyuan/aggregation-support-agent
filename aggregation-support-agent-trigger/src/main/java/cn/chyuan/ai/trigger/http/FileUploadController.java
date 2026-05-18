@@ -4,12 +4,15 @@ import cn.chyuan.ai.api.dto.UploadResponseDTO;
 import cn.chyuan.ai.api.response.Response;
 import cn.chyuan.ai.domain.rag.model.valobj.DocumentUploadCommand;
 import cn.chyuan.ai.domain.rag.service.IRagService;
+import cn.chyuan.ai.trigger.support.CurrentUserSupport;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * 文件上传控制器 — 处理文档上传并自动向量化存储到 Milvus
@@ -33,8 +36,8 @@ public class FileUploadController {
      */
     @RequestMapping(value = "upload", method = RequestMethod.POST)
     public Response<UploadResponseDTO> uploadDocument(
-            @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "userId", required = false, defaultValue = "") String userId) {
+            HttpServletRequest request,
+            @RequestParam("file") MultipartFile file) {
         try {
             if (file.isEmpty()) {
                 return Response.<UploadResponseDTO>builder()
@@ -65,7 +68,7 @@ public class FileUploadController {
                     .fileName(originalFilename)
                     .rawContent(file.getBytes())
                     .mimeType(contentType)
-                    .userId(userId)
+                    .userId(CurrentUserSupport.requireUserIdString(request))
                     .build();
 
             ragService.uploadDocument(command);

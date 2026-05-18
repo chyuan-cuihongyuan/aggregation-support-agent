@@ -1,8 +1,8 @@
 package cn.chyuan.ai.trigger.http;
 
 import cn.chyuan.ai.api.dto.AiOpsRequestDTO;
-import cn.chyuan.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import cn.chyuan.ai.domain.agent.service.IChatService;
+import cn.chyuan.ai.trigger.support.CurrentUserSupport;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
 import com.google.adk.events.Event;
@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * AIOps 智能运维控制器 — 提供一键告警分析接口，SSE 流式返回运维报告
@@ -45,13 +46,13 @@ public class AiOpsController {
      * @return ResponseBodyEmitter（SSE 流式响应）
      */
     @RequestMapping(value = "ai_ops", method = RequestMethod.POST, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter aiOpsAnalysis(@RequestBody AiOpsRequestDTO requestDTO) {
+    public SseEmitter aiOpsAnalysis(HttpServletRequest request, @RequestBody AiOpsRequestDTO requestDTO) {
         // 设置 10 分钟超时的 SSE Emitter
         SseEmitter emitter = new SseEmitter(AIOPS_TIMEOUT_MS);
 
         try {
             String agentId = requestDTO.getAgentId() != null ? requestDTO.getAgentId() : DEFAULT_AIOPS_AGENT_ID;
-            String userId = requestDTO.getUserId() != null ? requestDTO.getUserId() : "system";
+            String userId = CurrentUserSupport.requireUserIdString(request);
             String sessionId = requestDTO.getSessionId();
             String message = requestDTO.getAlertDescription() != null ? requestDTO.getAlertDescription() : "请分析当前所有活动告警";
 

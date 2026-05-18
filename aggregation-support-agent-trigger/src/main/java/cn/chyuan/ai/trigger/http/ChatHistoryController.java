@@ -6,10 +6,13 @@ import cn.chyuan.ai.api.response.Response;
 import cn.chyuan.ai.domain.agent.adapter.repository.IChatHistoryRepository;
 import cn.chyuan.ai.domain.agent.model.entity.ChatHistoryEntity;
 import cn.chyuan.ai.types.enums.ResponseCode;
+import cn.chyuan.ai.trigger.support.CurrentUserSupport;
+import cn.chyuan.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletRequest;
 import java.text.SimpleDateFormat;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -23,11 +26,12 @@ public class ChatHistoryController {
     private IChatHistoryRepository chatHistoryRepository;
 
     @RequestMapping(value = "chat_history/save", method = RequestMethod.POST)
-    public Response<Boolean> saveChatHistory(@RequestBody ChatHistorySaveDTO dto) {
+    public Response<Boolean> saveChatHistory(HttpServletRequest request, @RequestBody ChatHistorySaveDTO dto) {
         try {
-            log.info("保存对话历史 userId:{} agentId:{}", dto.getUserId(), dto.getAgentId());
+            String userId = CurrentUserSupport.requireUserIdString(request);
+            log.info("保存对话历史 userId:{} agentId:{}", userId, dto.getAgentId());
             ChatHistoryEntity entity = ChatHistoryEntity.builder()
-                    .userId(dto.getUserId())
+                    .userId(userId)
                     .agentId(dto.getAgentId())
                     .agentName(dto.getAgentName())
                     .sessionId(dto.getSessionId())
@@ -41,7 +45,7 @@ public class ChatHistoryController {
                     .data(true)
                     .build();
         } catch (Exception e) {
-            log.error("保存对话历史失败 userId:{}", dto.getUserId(), e);
+            log.error("保存对话历史失败 agentId:{}", dto.getAgentId(), e);
             return Response.<Boolean>builder()
                     .code(ResponseCode.UN_ERROR.getCode())
                     .info(ResponseCode.UN_ERROR.getInfo())
@@ -50,7 +54,8 @@ public class ChatHistoryController {
     }
 
     @RequestMapping(value = "chat_history/query", method = RequestMethod.GET)
-    public Response<List<ChatHistoryResponseDTO>> queryChatHistory(@RequestParam("userId") String userId) {
+    public Response<List<ChatHistoryResponseDTO>> queryChatHistory(HttpServletRequest request) {
+        String userId = CurrentUserSupport.requireUserIdString(request);
         try {
             log.info("查询对话历史 userId:{}", userId);
             List<ChatHistoryEntity> entities = chatHistoryRepository.queryByUserId(userId);
@@ -83,10 +88,18 @@ public class ChatHistoryController {
 
     @RequestMapping(value = "chat_history/delete", method = RequestMethod.POST)
     public Response<Boolean> deleteChatHistory(
-            @RequestParam("userId") String userId,
+            HttpServletRequest request,
             @RequestParam(value = "id", required = false) Long id) {
+        String userId = CurrentUserSupport.requireUserIdString(request);
         try {
             if (id != null) {
+                ChatHistoryEntity entity = chatHistoryRepository.queryById(id);
+                if (entity == null) {
+                    throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "对话历史不存在");
+                }
+                if (!userId.equals(entity.getUserId())) {
+                    throw new AppException(ResponseCode.AUTH_PERMISSION_DENIED.getCode(), "无权删除该对话历史");
+                }
                 log.info("删除单条对话历史 userId:{} id:{}", userId, id);
                 chatHistoryRepository.deleteById(id);
             } else {

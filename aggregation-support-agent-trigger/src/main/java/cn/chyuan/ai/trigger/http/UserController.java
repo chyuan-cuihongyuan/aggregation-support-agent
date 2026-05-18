@@ -9,13 +9,13 @@ import cn.chyuan.ai.api.response.Response;
 import cn.chyuan.ai.domain.auth.adapter.repository.IUserRepository;
 import cn.chyuan.ai.domain.auth.model.entity.UserEntity;
 import cn.chyuan.ai.domain.auth.service.IAuthService;
-import cn.chyuan.ai.domain.auth.service.ITokenService;
+import cn.chyuan.ai.trigger.annotation.RequireRole;
+import cn.chyuan.ai.trigger.support.CurrentUserSupport;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import java.text.SimpleDateFormat;
 import java.util.HashMap;
@@ -35,12 +35,7 @@ public class UserController {
     private IUserRepository userRepository;
 
     @Resource
-    private ITokenService tokenService;
-
-    @Resource
     private IAuthService authService;
-
-    private static final String COOKIE_NAME = "auth_token";
 
     /**
      * 获取当前登录用户信息（从 Cookie 中的 Token 解析）
@@ -48,22 +43,7 @@ public class UserController {
     @RequestMapping(value = "info", method = RequestMethod.GET)
     public Response<UserInfoDTO> getUserInfo(HttpServletRequest request) {
         try {
-            String token = getCookieValue(request, COOKIE_NAME);
-            if (token == null || token.isEmpty()) {
-                return Response.<UserInfoDTO>builder()
-                        .code(ResponseCode.E1003.getCode())
-                        .info("未登录")
-                        .build();
-            }
-
-            if (!tokenService.validateToken(token)) {
-                return Response.<UserInfoDTO>builder()
-                        .code(ResponseCode.E1003.getCode())
-                        .info("登录已过期")
-                        .build();
-            }
-
-            Long userId = tokenService.getUserIdFromToken(token);
+            Long userId = CurrentUserSupport.requireUserId(request);
             UserEntity user = userRepository.queryById(userId);
             if (user == null) {
                 return Response.<UserInfoDTO>builder()
@@ -90,6 +70,7 @@ public class UserController {
      * 查询用户列表（分页）
      */
     @RequestMapping(value = "list", method = RequestMethod.GET)
+    @RequireRole("admin")
     public Response<Map<String, Object>> listUsers(
             @RequestParam(value = "page", defaultValue = "1") int page,
             @RequestParam(value = "pageSize", defaultValue = "20") int pageSize) {
@@ -125,22 +106,7 @@ public class UserController {
     @RequestMapping(value = "update", method = RequestMethod.PUT)
     public Response<Boolean> updateUserInfo(HttpServletRequest request, @RequestBody UpdateUserRequestDTO updateDTO) {
         try {
-            String token = getCookieValue(request, COOKIE_NAME);
-            if (token == null || token.isEmpty()) {
-                return Response.<Boolean>builder()
-                        .code(ResponseCode.E1003.getCode())
-                        .info("未登录")
-                        .build();
-            }
-
-            if (!tokenService.validateToken(token)) {
-                return Response.<Boolean>builder()
-                        .code(ResponseCode.E1003.getCode())
-                        .info("登录已过期")
-                        .build();
-            }
-
-            Long userId = tokenService.getUserIdFromToken(token);
+            Long userId = CurrentUserSupport.requireUserId(request);
             UserEntity user = userRepository.queryById(userId);
             if (user == null) {
                 return Response.<Boolean>builder()
@@ -182,22 +148,7 @@ public class UserController {
     @RequestMapping(value = "change-password", method = RequestMethod.POST)
     public Response<Boolean> changePassword(HttpServletRequest request, @RequestBody ChangePasswordRequestDTO body) {
         try {
-            String token = getCookieValue(request, COOKIE_NAME);
-            if (token == null || token.isEmpty()) {
-                return Response.<Boolean>builder()
-                        .code(ResponseCode.E1003.getCode())
-                        .info("未登录")
-                        .build();
-            }
-
-            if (!tokenService.validateToken(token)) {
-                return Response.<Boolean>builder()
-                        .code(ResponseCode.E1003.getCode())
-                        .info("登录已过期")
-                        .build();
-            }
-
-            Long userId = tokenService.getUserIdFromToken(token);
+            Long userId = CurrentUserSupport.requireUserId(request);
             authService.changePassword(userId, body.getOldPassword(), body.getNewPassword());
 
             return Response.<Boolean>builder()
@@ -224,29 +175,9 @@ public class UserController {
      * 更新用户状态（仅管理员可操作）
      */
     @RequestMapping(value = "{userId}/status", method = RequestMethod.PUT)
-    public Response<Boolean> updateStatus(
-            HttpServletRequest request,
-            @PathVariable("userId") Long userId,
-            @RequestBody UpdateStatusRequestDTO body) {
+    @RequireRole("admin")
+    public Response<Boolean> updateStatus(@PathVariable("userId") Long userId, @RequestBody UpdateStatusRequestDTO body) {
         try {
-            // 验证当前用户是否为管理员
-            String token = getCookieValue(request, COOKIE_NAME);
-            if (token == null || !tokenService.validateToken(token)) {
-                return Response.<Boolean>builder()
-                        .code(ResponseCode.E1003.getCode())
-                        .info("未登录")
-                        .build();
-            }
-
-            Long currentUserId = tokenService.getUserIdFromToken(token);
-            UserEntity currentUser = userRepository.queryById(currentUserId);
-            if (currentUser == null || !"admin".equals(currentUser.getRole())) {
-                return Response.<Boolean>builder()
-                        .code(ResponseCode.E1003.getCode())
-                        .info("权限不足，仅管理员可操作")
-                        .build();
-            }
-
             userRepository.updateStatus(userId, body.getStatus());
             log.info("更新用户状态: userId={}, status={}", userId, body.getStatus());
             return Response.<Boolean>builder()
@@ -267,29 +198,9 @@ public class UserController {
      * 更新用户角色（仅管理员可操作）
      */
     @RequestMapping(value = "{userId}/role", method = RequestMethod.PUT)
-    public Response<Boolean> updateRole(
-            HttpServletRequest request,
-            @PathVariable("userId") Long userId,
-            @RequestBody UpdateRoleRequestDTO body) {
+    @RequireRole("admin")
+    public Response<Boolean> updateRole(@PathVariable("userId") Long userId, @RequestBody UpdateRoleRequestDTO body) {
         try {
-            // 验证当前用户是否为管理员
-            String token = getCookieValue(request, COOKIE_NAME);
-            if (token == null || !tokenService.validateToken(token)) {
-                return Response.<Boolean>builder()
-                        .code(ResponseCode.E1003.getCode())
-                        .info("未登录")
-                        .build();
-            }
-
-            Long currentUserId = tokenService.getUserIdFromToken(token);
-            UserEntity currentUser = userRepository.queryById(currentUserId);
-            if (currentUser == null || !"admin".equals(currentUser.getRole())) {
-                return Response.<Boolean>builder()
-                        .code(ResponseCode.E1003.getCode())
-                        .info("权限不足，仅管理员可操作")
-                        .build();
-            }
-
             userRepository.updateRole(userId, body.getRole());
             log.info("更新用户角色: userId={}, role={}", userId, body.getRole());
             return Response.<Boolean>builder()
@@ -304,18 +215,6 @@ public class UserController {
                     .info("操作失败")
                     .build();
         }
-    }
-
-    private String getCookieValue(HttpServletRequest request, String name) {
-        Cookie[] cookies = request.getCookies();
-        if (cookies != null) {
-            for (Cookie cookie : cookies) {
-                if (name.equals(cookie.getName())) {
-                    return cookie.getValue();
-                }
-            }
-        }
-        return null;
     }
 
     private UserInfoDTO toUserInfoDTO(UserEntity entity) {

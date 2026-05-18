@@ -10,6 +10,8 @@ public interface IChatHistoryRepository {
 
     List<ChatHistoryEntity> queryByUserId(String userId);
 
+    ChatHistoryEntity queryById(Long id);
+
     void deleteByUserId(String userId);
 
     void deleteById(Long id);

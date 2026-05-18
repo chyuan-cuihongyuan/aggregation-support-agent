@@ -36,17 +36,13 @@ public class ChatHistoryRepository implements IChatHistoryRepository {
     @Override
     public List<ChatHistoryEntity> queryByUserId(String userId) {
         List<ChatHistoryPO> poList = chatHistoryMapper.queryByUserId(userId);
-        return poList.stream().map(po -> ChatHistoryEntity.builder()
-                .id(po.getId())
-                .userId(po.getUserId())
-                .agentId(po.getAgentId())
-                .agentName(po.getAgentName())
-                .sessionId(po.getSessionId())
-                .question(po.getQuestion())
-                .answer(po.getAnswer())
-                .createTime(po.getCreateTime())
-                .updateTime(po.getUpdateTime())
-                .build()).collect(Collectors.toList());
+        return poList.stream().map(this::toEntity).collect(Collectors.toList());
+    }
+
+    @Override
+    public ChatHistoryEntity queryById(Long id) {
+        ChatHistoryPO po = chatHistoryMapper.queryById(id);
+        return po == null ? null : toEntity(po);
     }
 
     @Override
@@ -57,5 +53,19 @@ public class ChatHistoryRepository implements IChatHistoryRepository {
     @Override
     public void deleteById(Long id) {
         chatHistoryMapper.deleteById(id);
+    }
+
+    private ChatHistoryEntity toEntity(ChatHistoryPO po) {
+        return ChatHistoryEntity.builder()
+                .id(po.getId())
+                .userId(po.getUserId())
+                .agentId(po.getAgentId())
+                .agentName(po.getAgentName())
+                .sessionId(po.getSessionId())
+                .question(po.getQuestion())
+                .answer(po.getAnswer())
+                .createTime(po.getCreateTime())
+                .updateTime(po.getUpdateTime())
+                .build();
     }
 }

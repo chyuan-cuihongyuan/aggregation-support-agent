@@ -7,10 +7,13 @@ import cn.chyuan.ai.domain.rag.model.entity.DocumentMetadataEntity;
 import cn.chyuan.ai.domain.rag.model.valobj.SearchResultDetailVO;
 import cn.chyuan.ai.domain.rag.service.IRagService;
 import cn.chyuan.ai.types.enums.ResponseCode;
+import cn.chyuan.ai.trigger.support.CurrentUserSupport;
+import cn.chyuan.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -27,9 +30,9 @@ public class DocumentController {
     private IDocumentMetadataRepository documentMetadataRepository;
 
     @GetMapping
-    public Response<List<DocumentDTO>> listDocuments(
-            @RequestParam(value = "userId", required = false, defaultValue = "") String userId) {
+    public Response<List<DocumentDTO>> listDocuments(HttpServletRequest request) {
         try {
+            String userId = CurrentUserSupport.requireUserIdString(request);
             List<DocumentMetadataEntity> entities = documentMetadataRepository.queryByUserId(userId);
             List<DocumentDTO> dtos = entities.stream().map(this::toDTO).collect(Collectors.toList());
             return Response.<List<DocumentDTO>>builder()
@@ -47,7 +50,7 @@ public class DocumentController {
     }
 
     @GetMapping("/{documentId}")
-    public Response<DocumentDTO> getDocument(@PathVariable String documentId) {
+    public Response<DocumentDTO> getDocument(HttpServletRequest request, @PathVariable String documentId) {
         try {
             DocumentMetadataEntity entity = documentMetadataRepository.queryByDocumentId(documentId);
             if (entity == null) {
@@ -56,6 +59,7 @@ public class DocumentController {
                         .info("文档不存在")
                         .build();
             }
+            ensureDocumentOwner(request, entity);
             return Response.<DocumentDTO>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
@@ -71,12 +75,18 @@ public class DocumentController {
     }
 
     @DeleteMapping("/{documentId}")
-    public Response<Void> deleteDocument(
-            @PathVariable String documentId,
-            @RequestParam(value = "userId", required = false, defaultValue = "") String userId) {
+    public Response<Void> deleteDocument(HttpServletRequest request, @PathVariable String documentId) {
         try {
+            DocumentMetadataEntity entity = documentMetadataRepository.queryByDocumentId(documentId);
+            if (entity == null) {
+                return Response.<Void>builder()
+                        .code(ResponseCode.ILLEGAL_PARAMETER.getCode())
+                        .info("文档不存在")
+                        .build();
+            }
+            ensureDocumentOwner(request, entity);
             documentMetadataRepository.deleteByDocumentId(documentId);
-            log.info("文档已删除: documentId={}, userId={}", documentId, userId);
+            log.info("文档已删除: documentId={}, userId={}", documentId, entity.getUserId());
             return Response.<Void>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
@@ -150,5 +160,12 @@ public class DocumentController {
             dto.setChunkIndex(item.getChunkIndex());
             return dto;
         }).collect(Collectors.toList());
+    }
+
+    private void ensureDocumentOwner(HttpServletRequest request, DocumentMetadataEntity entity) {
+        String currentUserId = CurrentUserSupport.requireUserIdString(request);
+        if (!currentUserId.equals(entity.getUserId())) {
+            throw new AppException(ResponseCode.AUTH_PERMISSION_DENIED.getCode(), "无权访问该文档");
+        }
     }
 }

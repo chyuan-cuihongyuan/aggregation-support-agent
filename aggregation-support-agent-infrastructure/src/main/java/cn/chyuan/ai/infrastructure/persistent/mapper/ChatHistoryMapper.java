@@ -13,6 +13,8 @@ public interface ChatHistoryMapper {
 
     List<ChatHistoryPO> queryByUserId(@Param("userId") String userId);
 
+    ChatHistoryPO queryById(@Param("id") Long id);
+
     void deleteByUserId(@Param("userId") String userId);
 
     void deleteById(@Param("id") Long id);

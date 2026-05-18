@@ -30,10 +30,15 @@ public class TokenService implements ITokenService {
 
     @Override
     public String generateToken(Long userId, String username) {
-        return generateToken(userId, username, "user").getToken();
+        return generateToken(userId, username, "user");
     }
 
-    public TokenVO generateToken(Long userId, String username, String role) {
+    @Override
+    public String generateToken(Long userId, String username, String role) {
+        return doGenerateToken(userId, username, role).getToken();
+    }
+
+    private TokenVO doGenerateToken(Long userId, String username, String role) {
         String jti = UUID.randomUUID().toString().replace("-", "");
         Date now = new Date();
         Date expireDate = new Date(now.getTime() + expiration);
@@ -90,6 +95,7 @@ public class TokenService implements ITokenService {
         }
     }
 
+    @Override
     public void removeToken(String token) {
         Claims claims = parseToken(token);
         if (claims != null) {
@@ -109,7 +115,7 @@ public class TokenService implements ITokenService {
         String role = claims.get("role", String.class);
 
         removeToken(oldToken);
-        return generateToken(userId, username, role);
+        return doGenerateToken(userId, username, role);
     }
 
     private String buildRedisKey(Long userId, String jti) {

@@ -1,6 +1,7 @@
 package cn.chyuan.ai.trigger.aspect;
 
 import cn.chyuan.ai.trigger.annotation.RequireRole;
+import cn.chyuan.ai.trigger.filter.JwtAuthFilter;
 import cn.chyuan.ai.types.exception.AppException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -23,7 +24,7 @@ public class RoleCheckAspect {
         }
 
         HttpServletRequest request = attributes.getRequest();
-        String userRole = (String) request.getAttribute("role");
+        String userRole = (String) request.getAttribute(JwtAuthFilter.ATTR_ROLE);
 
         if (userRole == null || !userRole.equals(requireRole.value())) {
             throw new AppException("A0005", "权限不足");

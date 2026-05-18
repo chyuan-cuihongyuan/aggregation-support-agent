@@ -23,6 +23,11 @@ import java.util.Set;
 @Order(1)
 public class JwtAuthFilter extends OncePerRequestFilter {
 
+    public static final String ATTR_USER_ID = "userId";
+    public static final String ATTR_USERNAME = "username";
+    public static final String ATTR_ROLE = "role";
+    public static final String ATTR_AUTH_TOKEN = "authToken";
+
     @Resource
     private TokenService tokenService;
 
@@ -60,9 +65,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         // 解析用户信息放入 Request Attribute
         Claims claims = tokenService.parseToken(token);
         if (claims != null) {
-            request.setAttribute("userId", Long.valueOf(claims.getSubject()));
-            request.setAttribute("username", claims.get("username", String.class));
-            request.setAttribute("role", claims.get("role", String.class));
+            request.setAttribute(ATTR_USER_ID, Long.valueOf(claims.getSubject()));
+            request.setAttribute(ATTR_USERNAME, claims.get("username", String.class));
+            request.setAttribute(ATTR_ROLE, claims.get("role", String.class));
+            request.setAttribute(ATTR_AUTH_TOKEN, token);
         }
 
         filterChain.doFilter(request, response);

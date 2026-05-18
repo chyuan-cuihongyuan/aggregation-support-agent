@@ -5,6 +5,7 @@ import cn.chyuan.ai.api.dto.*;
 import cn.chyuan.ai.api.response.Response;
 import cn.chyuan.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.chyuan.ai.domain.agent.service.IChatService;
+import cn.chyuan.ai.trigger.support.CurrentUserSupport;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
@@ -15,9 +16,9 @@ import io.reactivex.rxjava3.schedulers.Schedulers;
 import org.springframework.http.MediaType;
 
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import java.util.stream.Collectors;
-import com.google.genai.types.Content;
 
 /**
  *
@@ -33,7 +34,6 @@ public class AgentServiceController implements IAgentService {
     private IChatService chatService;
 
     @RequestMapping(value = "query_ai_agent_config_list", method = RequestMethod.GET)
-    @Override
     public Response<List<AiAgentConfigResponseDTO>> queryAiAgentConfigList() {
         try {
             log.info("查询智能体配置列表");
@@ -70,11 +70,11 @@ public class AgentServiceController implements IAgentService {
     }
 
     @RequestMapping(value = "create_session", method = RequestMethod.POST)
-    @Override
-    public Response<CreateSessionResponseDTO> createSession(@RequestBody CreateSessionRequestDTO requestDTO) {
+    public Response<CreateSessionResponseDTO> createSession(HttpServletRequest request, @RequestBody CreateSessionRequestDTO requestDTO) {
         try {
-            log.info("创建会话 agentId:{} userId:{}", requestDTO.getAgentId(), requestDTO.getUserId());
-            String sessionId = chatService.createSession(requestDTO.getAgentId(), requestDTO.getUserId());
+            String userId = CurrentUserSupport.requireUserIdString(request);
+            log.info("创建会话 agentId:{} userId:{}", requestDTO.getAgentId(), userId);
+            String sessionId = chatService.createSession(requestDTO.getAgentId(), userId);
 
             CreateSessionResponseDTO responseDTO = new CreateSessionResponseDTO();
             responseDTO.setSessionId(sessionId);
@@ -100,24 +100,23 @@ public class AgentServiceController implements IAgentService {
     }
 
     @RequestMapping(value = "create_session", method = RequestMethod.GET)
-    public Response<CreateSessionResponseDTO> createSession(@RequestParam("agentId") String agentId, @RequestParam("userId") String userId) {
+    public Response<CreateSessionResponseDTO> createSession(HttpServletRequest request, @RequestParam("agentId") String agentId) {
         CreateSessionRequestDTO requestDTO = new CreateSessionRequestDTO();
         requestDTO.setAgentId(agentId);
-        requestDTO.setUserId(userId);
-        return createSession(requestDTO);
+        return createSession(request, requestDTO);
     }
 
     @RequestMapping(value = "chat", method = RequestMethod.POST)
-    @Override
-    public Response<ChatResponseDTO> chat(@RequestBody ChatRequestDTO requestDTO) {
+    public Response<ChatResponseDTO> chat(HttpServletRequest request, @RequestBody ChatRequestDTO requestDTO) {
         try {
-            log.info("智能体对话 agentId:{} userId:{}", requestDTO.getAgentId(), requestDTO.getUserId());
+            String userId = CurrentUserSupport.requireUserIdString(request);
+            log.info("智能体对话 agentId:{} userId:{}", requestDTO.getAgentId(), userId);
             String sessionId = requestDTO.getSessionId();
             if (sessionId == null || sessionId.isEmpty()) {
-                sessionId = chatService.createSession(requestDTO.getAgentId(), requestDTO.getUserId());
+                sessionId = chatService.createSession(requestDTO.getAgentId(), userId);
             }
 
-            List<String> messages = chatService.handleMessage(requestDTO.getAgentId(), requestDTO.getUserId(), sessionId, requestDTO.getMessage());
+            List<String> messages = chatService.handleMessage(requestDTO.getAgentId(), userId, sessionId, requestDTO.getMessage());
 
             ChatResponseDTO responseDTO = new ChatResponseDTO();
             responseDTO.setContent(String.join("\n", messages));
@@ -143,13 +142,13 @@ public class AgentServiceController implements IAgentService {
     }
 
     @RequestMapping(value = "chat_stream", method = RequestMethod.POST, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    @Override
-    public SseEmitter chatStream(@RequestBody ChatRequestDTO requestDTO) {
+    public SseEmitter chatStream(HttpServletRequest request, @RequestBody ChatRequestDTO requestDTO) {
         SseEmitter emitter = new SseEmitter(3 * 60 * 1000L);
         try {
+            String userId = CurrentUserSupport.requireUserIdString(request);
             // 仅记录请求元信息，不记录消息内容（可能包含敏感信息）
-            log.info("流式对话 agentId:{} userId:{} sessionId:{}", requestDTO.getAgentId(), requestDTO.getUserId(), requestDTO.getSessionId());
-            chatService.handleMessageStream(requestDTO.getAgentId(), requestDTO.getUserId(), requestDTO.getSessionId(), requestDTO.getMessage())
+            log.info("流式对话 agentId:{} userId:{} sessionId:{}", requestDTO.getAgentId(), userId, requestDTO.getSessionId());
+            chatService.handleMessageStream(requestDTO.getAgentId(), userId, requestDTO.getSessionId(), requestDTO.getMessage())
                     .subscribeOn(Schedulers.io())
                     .subscribe(
                             event -> {

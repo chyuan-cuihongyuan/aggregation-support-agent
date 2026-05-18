@@ -22,6 +22,10 @@
             <groupId>org.springframework</groupId>
             <artifactId>spring-webmvc</artifactId>
         </dependency>
+        <dependency>
+            <groupId>cn.chyuan.ai</groupId>
+            <artifactId>aggregation-support-agent-domain</artifactId>
+        </dependency>
     </dependencies>
 
 
