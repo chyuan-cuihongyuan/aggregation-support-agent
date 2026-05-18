@@ -1,5 +1,6 @@
 package cn.chyuan.ai.trigger.http;
 
+import cn.chyuan.ai.api.dto.UpdateUserRequestDTO;
 import cn.chyuan.ai.api.dto.UserInfoDTO;
 import cn.chyuan.ai.api.response.Response;
 import cn.chyuan.ai.domain.auth.adapter.repository.IUserRepository;
@@ -108,6 +109,63 @@ public class UserController {
             return Response.<Map<String, Object>>builder()
                     .code(ResponseCode.UN_ERROR.getCode())
                     .info("查询失败")
+                    .build();
+        }
+    }
+
+    /**
+     * 更新用户信息
+     */
+    @RequestMapping(value = "update", method = RequestMethod.PUT)
+    public Response<Boolean> updateUserInfo(HttpServletRequest request, @RequestBody UpdateUserRequestDTO updateDTO) {
+        try {
+            String token = getCookieValue(request, COOKIE_NAME);
+            if (token == null || token.isEmpty()) {
+                return Response.<Boolean>builder()
+                        .code(ResponseCode.E1003.getCode())
+                        .info("未登录")
+                        .build();
+            }
+
+            if (!tokenService.validateToken(token)) {
+                return Response.<Boolean>builder()
+                        .code(ResponseCode.E1003.getCode())
+                        .info("登录已过期")
+                        .build();
+            }
+
+            Long userId = tokenService.getUserIdFromToken(token);
+            UserEntity user = userRepository.queryById(userId);
+            if (user == null) {
+                return Response.<Boolean>builder()
+                        .code(ResponseCode.E1003.getCode())
+                        .info("用户不存在")
+                        .build();
+            }
+
+            // 更新用户信息
+            if (updateDTO.getNickname() != null) {
+                user.setNickname(updateDTO.getNickname());
+            }
+            if (updateDTO.getEmail() != null) {
+                user.setEmail(updateDTO.getEmail());
+            }
+            if (updateDTO.getAvatar() != null) {
+                user.setAvatar(updateDTO.getAvatar());
+            }
+            userRepository.updateUser(user);
+
+            log.info("更新用户信息: userId={}", userId);
+            return Response.<Boolean>builder()
+                    .code(ResponseCode.SUCCESS.getCode())
+                    .info(ResponseCode.SUCCESS.getInfo())
+                    .data(true)
+                    .build();
+        } catch (Exception e) {
+            log.error("更新用户信息失败", e);
+            return Response.<Boolean>builder()
+                    .code(ResponseCode.UN_ERROR.getCode())
+                    .info("更新失败")
                     .build();
         }
     }

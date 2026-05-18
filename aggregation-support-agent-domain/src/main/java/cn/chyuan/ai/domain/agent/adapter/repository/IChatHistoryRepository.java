@@ -11,4 +11,6 @@ public interface IChatHistoryRepository {
     List<ChatHistoryEntity> queryByUserId(String userId);
 
     void deleteByUserId(String userId);
+
+    void deleteById(Long id);
 }

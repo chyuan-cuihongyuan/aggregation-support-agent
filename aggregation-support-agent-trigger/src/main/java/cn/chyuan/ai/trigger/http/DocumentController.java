@@ -71,10 +71,12 @@ public class DocumentController {
     }
 
     @DeleteMapping("/{documentId}")
-    public Response<Void> deleteDocument(@PathVariable String documentId) {
+    public Response<Void> deleteDocument(
+            @PathVariable String documentId,
+            @RequestParam(value = "userId", required = false, defaultValue = "") String userId) {
         try {
             documentMetadataRepository.deleteByDocumentId(documentId);
-            log.info("文档已删除: {}", documentId);
+            log.info("文档已删除: documentId={}, userId={}", documentId, userId);
             return Response.<Void>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())

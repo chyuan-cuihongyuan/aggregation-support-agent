@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.chyuan.ai.infrastructure.persistent.mapper.AlertMapper">
+
+    <resultMap id="AlertMap" type="cn.chyuan.ai.infrastructure.dao.po.AlertPO">
+        <id column="id" property="id"/>
+        <result column="alert_id" property="alertId"/>
+        <result column="severity" property="severity"/>
+        <result column="name" property="name"/>
+        <result column="summary" property="summary"/>
+        <result column="host" property="host"/>
+        <result column="status" property="status"/>
+        <result column="source" property="source"/>
+        <result column="metrics_json" property="metricsJson"/>
+        <result column="labels_json" property="labelsJson"/>
+        <result column="description" property="description"/>
+        <result column="alert_time" property="alertTime"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="cn.chyuan.ai.infrastructure.dao.po.AlertPO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO alert (alert_id, severity, name, summary, host, status, source,
+                          metrics_json, labels_json, description, alert_time, create_time, update_time)
+        VALUES (#{alertId}, #{severity}, #{name}, #{summary}, #{host}, #{status}, #{source},
+                #{metricsJson}, #{labelsJson}, #{description}, #{alertTime}, #{createTime}, #{updateTime})
+    </insert>
+
+    <select id="queryByAlertId" parameterType="java.lang.String" resultMap="AlertMap">
+        SELECT id, alert_id, severity, name, summary, host, status, source,
+               metrics_json, labels_json, description, alert_time, create_time, update_time
+        FROM alert
+        WHERE alert_id = #{alertId}
+    </select>
+
+    <select id="queryActiveAlerts" resultMap="AlertMap">
+        SELECT id, alert_id, severity, name, summary, host, status, source,
+               metrics_json, labels_json, description, alert_time, create_time, update_time
+        FROM alert
+        WHERE status = 'active'
+        ORDER BY
+            CASE severity
+                WHEN 'critical' THEN 1
+                WHEN 'warning' THEN 2
+                WHEN 'info' THEN 3
+            END,
+            alert_time DESC
+    </select>
+
+    <select id="queryBySeverity" parameterType="java.lang.String" resultMap="AlertMap">
+        SELECT id, alert_id, severity, name, summary, host, status, source,
+               metrics_json, labels_json, description, alert_time, create_time, update_time
+        FROM alert
+        WHERE severity = #{severity} AND status = 'active'
+        ORDER BY alert_time DESC
+    </select>
+
+    <select id="queryAll" resultMap="AlertMap">
+        SELECT id, alert_id, severity, name, summary, host, status, source,
+               metrics_json, labels_json, description, alert_time, create_time, update_time
+        FROM alert
+        ORDER BY alert_time DESC
+        LIMIT #{offset}, #{limit}
+    </select>
+
+    <select id="countAll" resultType="int">
+        SELECT COUNT(*) FROM alert
+    </select>
+
+    <select id="countBySeverity" parameterType="java.lang.String" resultType="int">
+        SELECT COUNT(*) FROM alert WHERE severity = #{severity} AND status = 'active'
+    </select>
+
+    <update id="updateStatus">
+        UPDATE alert
+        SET status = #{status}, update_time = NOW()
+        WHERE alert_id = #{alertId}
+    </update>
+
+    <delete id="deleteByAlertId" parameterType="java.lang.String">
+        DELETE FROM alert WHERE alert_id = #{alertId}
+    </delete>
+
+</mapper>

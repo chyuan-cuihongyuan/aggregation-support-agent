@@ -31,4 +31,8 @@
         DELETE FROM chat_history WHERE user_id = #{userId}
     </delete>
 
+    <delete id="deleteById" parameterType="java.lang.Long">
+        DELETE FROM chat_history WHERE id = #{id}
+    </delete>
+
 </mapper>

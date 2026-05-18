@@ -53,4 +53,9 @@ public class ChatHistoryRepository implements IChatHistoryRepository {
     public void deleteByUserId(String userId) {
         chatHistoryMapper.deleteByUserId(userId);
     }
+
+    @Override
+    public void deleteById(Long id) {
+        chatHistoryMapper.deleteById(id);
+    }
 }

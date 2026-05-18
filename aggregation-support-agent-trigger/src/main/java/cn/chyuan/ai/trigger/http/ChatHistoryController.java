@@ -83,17 +83,24 @@ public class ChatHistoryController {
     }
 
     @RequestMapping(value = "chat_history/delete", method = RequestMethod.POST)
-    public Response<Boolean> deleteChatHistory(@RequestParam("userId") String userId) {
+    public Response<Boolean> deleteChatHistory(
+            @RequestParam("userId") String userId,
+            @RequestParam(value = "id", required = false) Long id) {
         try {
-            log.info("清空对话历史 userId:{}", userId);
-            chatHistoryRepository.deleteByUserId(userId);
+            if (id != null) {
+                log.info("删除单条对话历史 userId:{} id:{}", userId, id);
+                chatHistoryRepository.deleteById(id);
+            } else {
+                log.info("清空对话历史 userId:{}", userId);
+                chatHistoryRepository.deleteByUserId(userId);
+            }
             return Response.<Boolean>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
                     .data(true)
                     .build();
         } catch (Exception e) {
-            log.error("清空对话历史失败 userId:{}", userId, e);
+            log.error("删除对话历史失败 userId:{}", userId, e);
             return Response.<Boolean>builder()
                     .code(ResponseCode.UN_ERROR.getCode())
                     .info(ResponseCode.UN_ERROR.getInfo())
