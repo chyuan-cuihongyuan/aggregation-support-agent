@@ -27,7 +27,6 @@ import com.google.genai.types.Content;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/")
-@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true", allowedHeaders = "*")
 public class AgentServiceController implements IAgentService {
 
     @Resource
@@ -148,7 +147,8 @@ public class AgentServiceController implements IAgentService {
     public SseEmitter chatStream(@RequestBody ChatRequestDTO requestDTO) {
         SseEmitter emitter = new SseEmitter(3 * 60 * 1000L);
         try {
-            log.info("流式对话 agentId:{} userId:{} sessionId:{} message:{}", requestDTO.getAgentId(), requestDTO.getUserId(), requestDTO.getSessionId(), requestDTO.getMessage());
+            // 仅记录请求元信息，不记录消息内容（可能包含敏感信息）
+            log.info("流式对话 agentId:{} userId:{} sessionId:{}", requestDTO.getAgentId(), requestDTO.getUserId(), requestDTO.getSessionId());
             chatService.handleMessageStream(requestDTO.getAgentId(), requestDTO.getUserId(), requestDTO.getSessionId(), requestDTO.getMessage())
                     .subscribeOn(Schedulers.io())
                     .subscribe(

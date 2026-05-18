@@ -23,7 +23,6 @@ import java.text.SimpleDateFormat;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/auth")
-@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true", allowedHeaders = "*")
 public class AuthController {
 
     @Resource
@@ -125,7 +124,11 @@ public class AuthController {
         cookie.setPath("/");
         cookie.setMaxAge(COOKIE_MAX_AGE);
         cookie.setHttpOnly(true);
+        cookie.setSecure(true);
+        // 使用 Response Header 设置 SameSite 属性（Servlet API 不直接支持）
         response.addCookie(cookie);
+        response.setHeader("Set-Cookie", String.format("%s=%s; Path=/; Max-Age=%d; HttpOnly; Secure; SameSite=Strict",
+                COOKIE_NAME, token, COOKIE_MAX_AGE));
     }
 
     private UserInfoDTO toUserInfoDTO(UserEntity entity) {

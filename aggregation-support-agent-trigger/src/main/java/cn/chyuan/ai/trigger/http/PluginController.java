@@ -16,7 +16,6 @@ import java.util.*;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/plugins")
-@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true", allowedHeaders = "*")
 public class PluginController {
 
     @Autowired(required = false)

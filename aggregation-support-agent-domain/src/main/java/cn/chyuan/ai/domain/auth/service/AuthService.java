@@ -69,4 +69,20 @@ public class AuthService implements IAuthService {
     public UserEntity queryById(Long id) {
         return userRepository.queryById(id);
     }
+
+    @Override
+    public void changePassword(Long userId, String oldPassword, String newPassword) {
+        UserEntity user = userRepository.queryById(userId);
+        if (user == null) {
+            throw new AppException(ResponseCode.E1003.getCode(), "用户不存在");
+        }
+
+        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+            throw new AppException(ResponseCode.E1002.getCode(), "原密码错误");
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.updateUser(user);
+        log.info("用户密码修改成功: userId={}", userId);
+    }
 }

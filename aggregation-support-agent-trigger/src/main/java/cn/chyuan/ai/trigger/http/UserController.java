@@ -1,10 +1,14 @@
 package cn.chyuan.ai.trigger.http;
 
+import cn.chyuan.ai.api.dto.ChangePasswordRequestDTO;
+import cn.chyuan.ai.api.dto.UpdateRoleRequestDTO;
+import cn.chyuan.ai.api.dto.UpdateStatusRequestDTO;
 import cn.chyuan.ai.api.dto.UpdateUserRequestDTO;
 import cn.chyuan.ai.api.dto.UserInfoDTO;
 import cn.chyuan.ai.api.response.Response;
 import cn.chyuan.ai.domain.auth.adapter.repository.IUserRepository;
 import cn.chyuan.ai.domain.auth.model.entity.UserEntity;
+import cn.chyuan.ai.domain.auth.service.IAuthService;
 import cn.chyuan.ai.domain.auth.service.ITokenService;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import lombok.extern.slf4j.Slf4j;
@@ -25,7 +29,6 @@ import java.util.stream.Collectors;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/user")
-@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true", allowedHeaders = "*")
 public class UserController {
 
     @Resource
@@ -33,6 +36,9 @@ public class UserController {
 
     @Resource
     private ITokenService tokenService;
+
+    @Resource
+    private IAuthService authService;
 
     private static final String COOKIE_NAME = "auth_token";
 
@@ -171,16 +177,78 @@ public class UserController {
     }
 
     /**
-     * 更新用户状态
+     * 修改密码
+     */
+    @RequestMapping(value = "change-password", method = RequestMethod.POST)
+    public Response<Boolean> changePassword(HttpServletRequest request, @RequestBody ChangePasswordRequestDTO body) {
+        try {
+            String token = getCookieValue(request, COOKIE_NAME);
+            if (token == null || token.isEmpty()) {
+                return Response.<Boolean>builder()
+                        .code(ResponseCode.E1003.getCode())
+                        .info("未登录")
+                        .build();
+            }
+
+            if (!tokenService.validateToken(token)) {
+                return Response.<Boolean>builder()
+                        .code(ResponseCode.E1003.getCode())
+                        .info("登录已过期")
+                        .build();
+            }
+
+            Long userId = tokenService.getUserIdFromToken(token);
+            authService.changePassword(userId, body.getOldPassword(), body.getNewPassword());
+
+            return Response.<Boolean>builder()
+                    .code(ResponseCode.SUCCESS.getCode())
+                    .info(ResponseCode.SUCCESS.getInfo())
+                    .data(true)
+                    .build();
+        } catch (cn.chyuan.ai.types.exception.AppException e) {
+            log.warn("修改密码失败: {}", e.getInfo());
+            return Response.<Boolean>builder()
+                    .code(e.getCode())
+                    .info(e.getInfo())
+                    .build();
+        } catch (Exception e) {
+            log.error("修改密码异常", e);
+            return Response.<Boolean>builder()
+                    .code(ResponseCode.UN_ERROR.getCode())
+                    .info("修改密码失败")
+                    .build();
+        }
+    }
+
+    /**
+     * 更新用户状态（仅管理员可操作）
      */
     @RequestMapping(value = "{userId}/status", method = RequestMethod.PUT)
     public Response<Boolean> updateStatus(
+            HttpServletRequest request,
             @PathVariable("userId") Long userId,
-            @RequestBody Map<String, Integer> body) {
+            @RequestBody UpdateStatusRequestDTO body) {
         try {
-            Integer status = body.get("status");
-            userRepository.updateStatus(userId, status);
-            log.info("更新用户状态: userId={}, status={}", userId, status);
+            // 验证当前用户是否为管理员
+            String token = getCookieValue(request, COOKIE_NAME);
+            if (token == null || !tokenService.validateToken(token)) {
+                return Response.<Boolean>builder()
+                        .code(ResponseCode.E1003.getCode())
+                        .info("未登录")
+                        .build();
+            }
+
+            Long currentUserId = tokenService.getUserIdFromToken(token);
+            UserEntity currentUser = userRepository.queryById(currentUserId);
+            if (currentUser == null || !"admin".equals(currentUser.getRole())) {
+                return Response.<Boolean>builder()
+                        .code(ResponseCode.E1003.getCode())
+                        .info("权限不足，仅管理员可操作")
+                        .build();
+            }
+
+            userRepository.updateStatus(userId, body.getStatus());
+            log.info("更新用户状态: userId={}, status={}", userId, body.getStatus());
             return Response.<Boolean>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
@@ -196,16 +264,34 @@ public class UserController {
     }
 
     /**
-     * 更新用户角色
+     * 更新用户角色（仅管理员可操作）
      */
     @RequestMapping(value = "{userId}/role", method = RequestMethod.PUT)
     public Response<Boolean> updateRole(
+            HttpServletRequest request,
             @PathVariable("userId") Long userId,
-            @RequestBody Map<String, String> body) {
+            @RequestBody UpdateRoleRequestDTO body) {
         try {
-            String role = body.get("role");
-            userRepository.updateRole(userId, role);
-            log.info("更新用户角色: userId={}, role={}", userId, role);
+            // 验证当前用户是否为管理员
+            String token = getCookieValue(request, COOKIE_NAME);
+            if (token == null || !tokenService.validateToken(token)) {
+                return Response.<Boolean>builder()
+                        .code(ResponseCode.E1003.getCode())
+                        .info("未登录")
+                        .build();
+            }
+
+            Long currentUserId = tokenService.getUserIdFromToken(token);
+            UserEntity currentUser = userRepository.queryById(currentUserId);
+            if (currentUser == null || !"admin".equals(currentUser.getRole())) {
+                return Response.<Boolean>builder()
+                        .code(ResponseCode.E1003.getCode())
+                        .info("权限不足，仅管理员可操作")
+                        .build();
+            }
+
+            userRepository.updateRole(userId, body.getRole());
+            log.info("更新用户角色: userId={}, role={}", userId, body.getRole());
             return Response.<Boolean>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())

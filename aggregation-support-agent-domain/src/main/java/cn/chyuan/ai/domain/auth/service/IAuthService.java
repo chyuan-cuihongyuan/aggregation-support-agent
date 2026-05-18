@@ -15,4 +15,7 @@ public interface IAuthService {
 
     /** 根据 ID 查询用户 */
     UserEntity queryById(Long id);
+
+    /** 修改密码 */
+    void changePassword(Long userId, String oldPassword, String newPassword);
 }
