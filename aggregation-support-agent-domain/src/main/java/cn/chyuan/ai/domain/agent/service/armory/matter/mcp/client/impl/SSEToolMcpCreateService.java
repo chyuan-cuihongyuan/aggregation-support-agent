@@ -56,13 +56,24 @@ public class SSEToolMcpCreateService implements TooMcpCreateService {
         McpSyncClient mcpSyncClient = McpClient
                 .sync(sseClientTransport)
                 .requestTimeout(Duration.ofMillis(sseConfig.getRequestTimeout())).build();
-        McpSchema.InitializeResult initialize = mcpSyncClient.initialize();
 
-        log.info("tool sse mcp initialize {}", initialize);
+        try {
+            McpSchema.InitializeResult initialize = mcpSyncClient.initialize();
+            log.info("tool sse mcp initialize {}", initialize);
 
-        return SyncMcpToolCallbackProvider.builder()
-                .mcpClients(mcpSyncClient).build()
-                .getToolCallbacks();
+            return SyncMcpToolCallbackProvider.builder()
+                    .mcpClients(mcpSyncClient).build()
+                    .getToolCallbacks();
+        } catch (Exception e) {
+            log.error("tool sse mcp 初始化失败，跳过该 MCP 服务。name: {}, baseUri: {}, sseEndpoint: {}, 错误: {}",
+                    sseConfig.getName(), baseUri, sseEndpoint, e.getMessage());
+            try {
+                mcpSyncClient.close();
+            } catch (Exception ignored) {
+                // 关闭失败不影响主流程
+            }
+            return new ToolCallback[0];
+        }
     }
 
 }
