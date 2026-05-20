@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -207,7 +208,7 @@ public class ChatService implements IChatService {
         }
         try {
             Session session = runner.sessionService()
-                    .getSession(appName, userId, sessionId)
+                    .getSession(appName, userId, sessionId, Optional.empty())
                     .blockingGet();
             if (session != null) {
                 return sessionId;
