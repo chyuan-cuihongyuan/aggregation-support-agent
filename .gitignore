@@ -40,5 +40,15 @@ build/
 /.idea/
 .gitignore!/.gitignore
 /data/
-.claude/
 docs/maven/archetype/.idea/
+
+### Neo4j 数据文件 ###
+docs/dev-ops/neo4j/data/*
+!docs/dev-ops/neo4j/data/.gitkeep
+docs/dev-ops/neo4j/logs/*
+!docs/dev-ops/neo4j/logs/.gitkeep
+
+### Docker 数据卷 ###
+docs/dev-ops/mysql/data/*
+docs/dev-ops/redis/data/*
+docs/dev-ops/milvus/data/*

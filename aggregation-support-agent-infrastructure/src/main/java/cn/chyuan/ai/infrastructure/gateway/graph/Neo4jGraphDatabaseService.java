@@ -61,7 +61,7 @@ public class Neo4jGraphDatabaseService implements IGraphDatabaseService {
                 .bind(entity.getProperties() != null ? entity.getProperties() : Collections.emptyMap()).to("properties")
                 .bind(entity.getSourceDocumentId()).to("sourceDocumentId")
                 .bind(entity.getSourceChunkId()).to("sourceChunkId")
-                .bind(entity.getEmbedding() != null ? Arrays.stream(entity.getEmbedding()).boxed().collect(Collectors.toList()) : Collections.emptyList()).to("embedding")
+                .bind(entity.getEmbedding() != null ? floatArrayToList(entity.getEmbedding()) : Collections.emptyList()).to("embedding")
                 .run();
         return entity.getEntityId();
     }
@@ -120,7 +120,7 @@ public class Neo4jGraphDatabaseService implements IGraphDatabaseService {
 
     @Override
     public List<GraphEntity> findEntitiesByEmbedding(float[] embedding, int topK) {
-        List<Float> embeddingList = Arrays.stream(embedding).boxed().collect(Collectors.toList());
+        List<Float> embeddingList = floatArrayToList(embedding);
         try {
             return neo4jClient.query("""
                     CALL db.index.vector.queryNodes('entity_embedding', $topK, $embedding)
@@ -271,5 +271,14 @@ public class Neo4jGraphDatabaseService implements IGraphDatabaseService {
                 .sourceDocumentId(node.get("sourceDocumentId").asString(null))
                 .sourceChunkId(node.get("sourceChunkId").asString(null))
                 .build();
+    }
+
+    /** 将 float[] 转换为 List<Float> */
+    private List<Float> floatArrayToList(float[] array) {
+        List<Float> result = new ArrayList<>(array.length);
+        for (float f : array) {
+            result.add(f);
+        }
+        return result;
     }
 }

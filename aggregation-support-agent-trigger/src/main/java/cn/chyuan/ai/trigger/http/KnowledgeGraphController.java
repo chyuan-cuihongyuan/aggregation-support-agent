@@ -6,7 +6,7 @@ import cn.chyuan.ai.api.dto.GraphSubgraphDTO;
 import cn.chyuan.ai.domain.knowledgegraph.model.entity.GraphEntity;
 import cn.chyuan.ai.domain.knowledgegraph.model.valobj.SubgraphVO;
 import cn.chyuan.ai.domain.knowledgegraph.service.IKnowledgeGraphService;
-import cn.chyuan.ai.types.common.Response;
+import cn.chyuan.ai.api.response.Response;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
