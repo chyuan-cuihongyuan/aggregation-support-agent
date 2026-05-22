@@ -15,7 +15,7 @@
     ]
   },
   "hooks": {
-    "pre-session": [
+    "SessionStart": [
       {
         "command": "echo '=== 🟢 后端开发 Agent 已激活 ==='",
         "description": "显示后端 Agent 激活提示"

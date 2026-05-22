@@ -9,6 +9,7 @@ import cn.chyuan.ai.domain.auth.service.IAuthService;
 import cn.chyuan.ai.domain.auth.service.ITokenService;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
@@ -38,7 +39,7 @@ public class AuthController {
      * 用户登录
      */
     @RequestMapping(value = "login", method = RequestMethod.POST)
-    public Response<UserInfoDTO> login(@RequestBody LoginRequestDTO requestDTO, HttpServletResponse response) {
+    public Response<UserInfoDTO> login(@Valid @RequestBody LoginRequestDTO requestDTO, HttpServletResponse response) {
         try {
             UserEntity user = authService.login(requestDTO.getUsername(), requestDTO.getPassword());
             String token = tokenService.generateToken(user.getId(), user.getUsername());
@@ -68,7 +69,7 @@ public class AuthController {
      * 用户注册
      */
     @RequestMapping(value = "register", method = RequestMethod.POST)
-    public Response<UserInfoDTO> register(@RequestBody RegisterRequestDTO requestDTO, HttpServletResponse response) {
+    public Response<UserInfoDTO> register(@Valid @RequestBody RegisterRequestDTO requestDTO, HttpServletResponse response) {
         try {
             UserEntity user = authService.register(
                     requestDTO.getUsername(),
