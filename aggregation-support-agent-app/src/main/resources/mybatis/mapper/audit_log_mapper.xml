@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.chyuan.ai.infrastructure.persistent.mapper.AuditLogMapper">
+
+    <resultMap id="BaseResultMap" type="cn.chyuan.ai.infrastructure.dao.po.AuditLogPO">
+        <id column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="username" property="username"/>
+        <result column="action" property="action"/>
+        <result column="resource_type" property="resourceType"/>
+        <result column="resource_id" property="resourceId"/>
+        <result column="result" property="result"/>
+        <result column="trace_id" property="traceId"/>
+        <result column="detail" property="detail"/>
+        <result column="ip_address" property="ipAddress"/>
+        <result column="user_agent" property="userAgent"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <resultMap id="StatResultMap" type="cn.chyuan.ai.domain.audit.model.valobj.AuditStatVO">
+        <result column="group_key" property="groupKey"/>
+        <result column="total" property="total"/>
+        <result column="success_count" property="successCount"/>
+        <result column="failure_count" property="failureCount"/>
+    </resultMap>
+
+    <sql id="conditionWhere">
+        <where>
+            <if test="q.userId != null">AND user_id = #{q.userId}</if>
+            <if test="q.action != null and q.action != ''">AND action = #{q.action}</if>
+            <if test="q.resourceType != null and q.resourceType != ''">AND resource_type = #{q.resourceType}</if>
+            <if test="q.result != null and q.result != ''">AND result = #{q.result}</if>
+            <if test="q.startTime != null">AND create_time &gt;= #{q.startTime}</if>
+            <if test="q.endTime != null">AND create_time &lt;= #{q.endTime}</if>
+        </where>
+    </sql>
+
+    <insert id="insert" parameterType="cn.chyuan.ai.infrastructure.dao.po.AuditLogPO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO audit_log (user_id, username, action, resource_type, resource_id, result, trace_id, detail,
+                               ip_address, user_agent, create_time)
+        VALUES (#{userId}, #{username}, #{action}, #{resourceType}, #{resourceId}, #{result}, #{traceId}, #{detail},
+                #{ipAddress}, #{userAgent}, #{createTime})
+    </insert>
+
+    <select id="selectByCondition" resultMap="BaseResultMap">
+        SELECT id, user_id, username, action, resource_type, resource_id, result, trace_id, detail,
+               ip_address, user_agent, create_time
+        FROM audit_log
+        <include refid="conditionWhere"/>
+        ORDER BY create_time DESC, id DESC
+        <if test="q.pageSize != null and q.pageSize > 0">
+            LIMIT #{q.pageSize}
+            <if test="q.page != null and q.page > 0">
+                OFFSET ${(q.page - 1) * q.pageSize}
+            </if>
+        </if>
+    </select>
+
+    <select id="countByCondition" resultType="long">
+        SELECT COUNT(1) FROM audit_log
+        <include refid="conditionWhere"/>
+    </select>
+
+    <select id="statByAction" resultMap="StatResultMap">
+        SELECT action AS group_key,
+               COUNT(1) AS total,
+               SUM(CASE WHEN result = 'SUCCESS' THEN 1 ELSE 0 END) AS success_count,
+               SUM(CASE WHEN result = 'FAILURE' THEN 1 ELSE 0 END) AS failure_count
+        FROM audit_log
+        <include refid="conditionWhere"/>
+        GROUP BY action
+        ORDER BY total DESC
+    </select>
+
+    <select id="statByUser" resultMap="StatResultMap">
+        SELECT CAST(user_id AS CHAR) AS group_key,
+               COUNT(1) AS total,
+               SUM(CASE WHEN result = 'SUCCESS' THEN 1 ELSE 0 END) AS success_count,
+               SUM(CASE WHEN result = 'FAILURE' THEN 1 ELSE 0 END) AS failure_count
+        FROM audit_log
+        <include refid="conditionWhere"/>
+        GROUP BY user_id
+        ORDER BY total DESC
+    </select>
+
+</mapper>
