@@ -6,11 +6,16 @@ import cn.chyuan.ai.api.dto.UpdateStatusRequestDTO;
 import cn.chyuan.ai.api.dto.UpdateUserRequestDTO;
 import cn.chyuan.ai.api.dto.UserInfoDTO;
 import cn.chyuan.ai.api.response.Response;
+import cn.chyuan.ai.domain.audit.service.IAuditLogService;
 import cn.chyuan.ai.domain.auth.adapter.repository.IUserRepository;
 import cn.chyuan.ai.domain.auth.model.entity.UserEntity;
 import cn.chyuan.ai.domain.auth.service.IAuthService;
 import cn.chyuan.ai.trigger.annotation.RequireRole;
+import cn.chyuan.ai.trigger.filter.JwtAuthFilter;
+import cn.chyuan.ai.trigger.support.AuditContextSupport;
 import cn.chyuan.ai.trigger.support.CurrentUserSupport;
+import cn.chyuan.ai.types.enums.AuditAction;
+import cn.chyuan.ai.types.enums.AuditResult;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -36,6 +41,9 @@ public class UserController {
 
     @Resource
     private IAuthService authService;
+
+    @Resource
+    private IAuditLogService auditLogService;
 
     /**
      * 获取当前登录用户信息（从 Cookie 中的 Token 解析）
@@ -176,10 +184,23 @@ public class UserController {
      */
     @RequestMapping(value = "{userId}/status", method = RequestMethod.PUT)
     @RequireRole("admin")
-    public Response<Boolean> updateStatus(@PathVariable("userId") Long userId, @RequestBody UpdateStatusRequestDTO body) {
+    public Response<Boolean> updateStatus(HttpServletRequest request,
+                                          @PathVariable("userId") Long userId,
+                                          @RequestBody UpdateStatusRequestDTO body) {
+        String ip = AuditContextSupport.extractIp(request);
+        String ua = AuditContextSupport.extractUserAgent(request);
+        // 操作者审计字段
+        Object opUidAttr = request.getAttribute(JwtAuthFilter.ATTR_USER_ID);
+        Object opUnameAttr = request.getAttribute(JwtAuthFilter.ATTR_USERNAME);
+        Long opUserId = (opUidAttr instanceof Long) ? (Long) opUidAttr : 0L;
+        String opUsername = (opUnameAttr instanceof String) ? (String) opUnameAttr : "";
         try {
             userRepository.updateStatus(userId, body.getStatus());
             log.info("更新用户状态: userId={}, status={}", userId, body.getStatus());
+            // 修改状态成功审计
+            safeAuditUser(opUserId, opUsername, AuditAction.CHANGE_STATUS,
+                    String.valueOf(userId), AuditResult.SUCCESS,
+                    "目标状态=" + body.getStatus(), ip, ua);
             return Response.<Boolean>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
@@ -187,6 +208,9 @@ public class UserController {
                     .build();
         } catch (Exception e) {
             log.error("更新用户状态失败: userId={}", userId, e);
+            safeAuditUser(opUserId, opUsername, AuditAction.CHANGE_STATUS,
+                    String.valueOf(userId), AuditResult.FAILURE,
+                    "操作失败: " + e.getMessage(), ip, ua);
             return Response.<Boolean>builder()
                     .code(ResponseCode.UN_ERROR.getCode())
                     .info("操作失败")
@@ -199,10 +223,23 @@ public class UserController {
      */
     @RequestMapping(value = "{userId}/role", method = RequestMethod.PUT)
     @RequireRole("admin")
-    public Response<Boolean> updateRole(@PathVariable("userId") Long userId, @RequestBody UpdateRoleRequestDTO body) {
+    public Response<Boolean> updateRole(HttpServletRequest request,
+                                        @PathVariable("userId") Long userId,
+                                        @RequestBody UpdateRoleRequestDTO body) {
+        String ip = AuditContextSupport.extractIp(request);
+        String ua = AuditContextSupport.extractUserAgent(request);
+        // 操作者审计字段
+        Object opUidAttr = request.getAttribute(JwtAuthFilter.ATTR_USER_ID);
+        Object opUnameAttr = request.getAttribute(JwtAuthFilter.ATTR_USERNAME);
+        Long opUserId = (opUidAttr instanceof Long) ? (Long) opUidAttr : 0L;
+        String opUsername = (opUnameAttr instanceof String) ? (String) opUnameAttr : "";
         try {
             userRepository.updateRole(userId, body.getRole());
             log.info("更新用户角色: userId={}, role={}", userId, body.getRole());
+            // 修改角色成功审计
+            safeAuditUser(opUserId, opUsername, AuditAction.CHANGE_ROLE,
+                    String.valueOf(userId), AuditResult.SUCCESS,
+                    "目标角色=" + body.getRole(), ip, ua);
             return Response.<Boolean>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
@@ -210,6 +247,9 @@ public class UserController {
                     .build();
         } catch (Exception e) {
             log.error("更新用户角色失败: userId={}", userId, e);
+            safeAuditUser(opUserId, opUsername, AuditAction.CHANGE_ROLE,
+                    String.valueOf(userId), AuditResult.FAILURE,
+                    "操作失败: " + e.getMessage(), ip, ua);
             return Response.<Boolean>builder()
                     .code(ResponseCode.UN_ERROR.getCode())
                     .info("操作失败")
@@ -229,5 +269,22 @@ public class UserController {
         dto.setStatus(entity.getStatus());
         dto.setCreateTime(entity.getCreateTime() != null ? sdf.format(entity.getCreateTime()) : "");
         return dto;
+    }
+
+    /**
+     * 用户管理审计兜底 — 用于 CHANGE_ROLE / CHANGE_STATUS
+     */
+    private void safeAuditUser(Long opUserId, String opUsername, AuditAction action,
+                               String targetUserId, AuditResult result,
+                               String detail, String ip, String ua) {
+        try {
+            if (auditLogService != null) {
+                auditLogService.recordAsync(opUserId, opUsername, action,
+                        "USER", targetUserId == null ? "" : targetUserId,
+                        result, "", detail, ip, ua);
+            }
+        } catch (Exception ex) {
+            log.warn("审计调用失败：action={}, err={}", action, ex.getMessage());
+        }
     }
 }

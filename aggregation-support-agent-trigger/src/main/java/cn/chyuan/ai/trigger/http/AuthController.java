@@ -4,10 +4,14 @@ import cn.chyuan.ai.api.dto.LoginRequestDTO;
 import cn.chyuan.ai.api.dto.RegisterRequestDTO;
 import cn.chyuan.ai.api.dto.UserInfoDTO;
 import cn.chyuan.ai.api.response.Response;
+import cn.chyuan.ai.domain.audit.service.IAuditLogService;
 import cn.chyuan.ai.domain.auth.model.entity.UserEntity;
 import cn.chyuan.ai.domain.auth.service.IAuthService;
 import cn.chyuan.ai.domain.auth.service.ITokenService;
 import cn.chyuan.ai.trigger.filter.JwtAuthFilter;
+import cn.chyuan.ai.trigger.support.AuditContextSupport;
+import cn.chyuan.ai.types.enums.AuditAction;
+import cn.chyuan.ai.types.enums.AuditResult;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +37,9 @@ public class AuthController {
     @Resource
     private ITokenService tokenService;
 
+    @Resource
+    private IAuditLogService auditLogService;
+
     private static final String COOKIE_NAME = "auth_token";
     private static final int COOKIE_MAX_AGE = 24 * 60 * 60;
 
@@ -40,11 +47,19 @@ public class AuthController {
      * 用户登录
      */
     @RequestMapping(value = "login", method = RequestMethod.POST)
-    public Response<UserInfoDTO> login(@RequestBody LoginRequestDTO requestDTO, HttpServletResponse response) {
+    public Response<UserInfoDTO> login(@RequestBody LoginRequestDTO requestDTO,
+                                       HttpServletRequest request,
+                                       HttpServletResponse response) {
+        String ip = AuditContextSupport.extractIp(request);
+        String ua = AuditContextSupport.extractUserAgent(request);
         try {
             UserEntity user = authService.login(requestDTO.getUsername(), requestDTO.getPassword());
             String token = tokenService.generateToken(user.getId(), user.getUsername(), user.getRole());
             setAuthCookie(response, token);
+
+            // 登录成功审计
+            safeAudit(user.getId(), user.getUsername(), AuditAction.LOGIN,
+                    "USER", String.valueOf(user.getId()), AuditResult.SUCCESS, "", ip, ua);
 
             return Response.<UserInfoDTO>builder()
                     .code(ResponseCode.SUCCESS.getCode())
@@ -53,12 +68,18 @@ public class AuthController {
                     .build();
         } catch (AppException e) {
             log.warn("登录失败: {} - {}", requestDTO.getUsername(), e.getInfo());
+            // 登录失败审计
+            safeAudit(0L, requestDTO.getUsername(), AuditAction.LOGIN,
+                    "USER", "", AuditResult.FAILURE, e.getInfo(), ip, ua);
             return Response.<UserInfoDTO>builder()
                     .code(e.getCode())
                     .info(e.getInfo())
                     .build();
         } catch (Exception e) {
             log.error("登录异常: {}", requestDTO.getUsername(), e);
+            // 登录异常审计
+            safeAudit(0L, requestDTO.getUsername(), AuditAction.LOGIN,
+                    "USER", "", AuditResult.FAILURE, "登录异常: " + e.getMessage(), ip, ua);
             return Response.<UserInfoDTO>builder()
                     .code(ResponseCode.UN_ERROR.getCode())
                     .info("登录失败")
@@ -70,7 +91,11 @@ public class AuthController {
      * 用户注册
      */
     @RequestMapping(value = "register", method = RequestMethod.POST)
-    public Response<UserInfoDTO> register(@RequestBody RegisterRequestDTO requestDTO, HttpServletResponse response) {
+    public Response<UserInfoDTO> register(@RequestBody RegisterRequestDTO requestDTO,
+                                          HttpServletRequest request,
+                                          HttpServletResponse response) {
+        String ip = AuditContextSupport.extractIp(request);
+        String ua = AuditContextSupport.extractUserAgent(request);
         try {
             UserEntity user = authService.register(
                     requestDTO.getUsername(),
@@ -83,6 +108,10 @@ public class AuthController {
             String token = tokenService.generateToken(user.getId(), user.getUsername(), user.getRole());
             setAuthCookie(response, token);
 
+            // 注册成功审计
+            safeAudit(user.getId(), user.getUsername(), AuditAction.REGISTER,
+                    "USER", String.valueOf(user.getId()), AuditResult.SUCCESS, "", ip, ua);
+
             return Response.<UserInfoDTO>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
@@ -90,12 +119,18 @@ public class AuthController {
                     .build();
         } catch (AppException e) {
             log.warn("注册失败: {} - {}", requestDTO.getUsername(), e.getInfo());
+            // 注册失败审计
+            safeAudit(0L, requestDTO.getUsername(), AuditAction.REGISTER,
+                    "USER", "", AuditResult.FAILURE, e.getInfo(), ip, ua);
             return Response.<UserInfoDTO>builder()
                     .code(e.getCode())
                     .info(e.getInfo())
                     .build();
         } catch (Exception e) {
             log.error("注册异常: {}", requestDTO.getUsername(), e);
+            // 注册异常审计
+            safeAudit(0L, requestDTO.getUsername(), AuditAction.REGISTER,
+                    "USER", "", AuditResult.FAILURE, "注册异常: " + e.getMessage(), ip, ua);
             return Response.<UserInfoDTO>builder()
                     .code(ResponseCode.UN_ERROR.getCode())
                     .info("注册失败")
@@ -119,11 +154,37 @@ public class AuthController {
         cookie.setHttpOnly(true);
         response.addCookie(cookie);
 
+        // 登出审计 — userId/username 从 request attr 读取，失败兜底
+        Object uidAttr = request.getAttribute(JwtAuthFilter.ATTR_USER_ID);
+        Object unameAttr = request.getAttribute(JwtAuthFilter.ATTR_USERNAME);
+        Long uid = (uidAttr instanceof Long) ? (Long) uidAttr : 0L;
+        String uname = (unameAttr instanceof String) ? (String) unameAttr : "";
+        safeAudit(uid, uname, AuditAction.LOGOUT,
+                "USER", String.valueOf(uid), AuditResult.SUCCESS, "",
+                AuditContextSupport.extractIp(request),
+                AuditContextSupport.extractUserAgent(request));
+
         return Response.<Boolean>builder()
                 .code(ResponseCode.SUCCESS.getCode())
                 .info(ResponseCode.SUCCESS.getInfo())
                 .data(true)
                 .build();
+    }
+
+    /**
+     * 审计写入兜底 — service 异步实现内部已 try-catch，这里再兜一层防 NPE
+     */
+    private void safeAudit(Long userId, String username, AuditAction action,
+                           String resourceType, String resourceId, AuditResult result,
+                           String detail, String ip, String ua) {
+        try {
+            if (auditLogService != null) {
+                auditLogService.recordAsync(userId, username, action,
+                        resourceType, resourceId, result, "", detail, ip, ua);
+            }
+        } catch (Exception ex) {
+            log.warn("审计调用失败：action={}, err={}", action, ex.getMessage());
+        }
     }
 
     private void setAuthCookie(HttpServletResponse response, String token) {

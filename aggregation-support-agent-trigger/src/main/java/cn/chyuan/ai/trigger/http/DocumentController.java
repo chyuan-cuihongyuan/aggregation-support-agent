@@ -2,13 +2,19 @@ package cn.chyuan.ai.trigger.http;
 
 import cn.chyuan.ai.api.dto.*;
 import cn.chyuan.ai.api.response.Response;
+import cn.chyuan.ai.domain.audit.service.IAuditLogService;
 import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.rag.adapter.repository.IDocumentMetadataRepository;
 import cn.chyuan.ai.domain.rag.model.entity.DocumentMetadataEntity;
 import cn.chyuan.ai.domain.rag.model.valobj.SearchResultDetailVO;
 import cn.chyuan.ai.domain.rag.service.IRagService;
+import cn.chyuan.ai.trigger.filter.JwtAuthFilter;
+import cn.chyuan.ai.trigger.support.AuditContextSupport;
+import cn.chyuan.ai.types.enums.AuditAction;
+import cn.chyuan.ai.types.enums.AuditResult;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.trigger.support.CurrentUserSupport;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -28,6 +34,9 @@ public class DocumentController {
 
     @Autowired
     private IDocumentMetadataRepository documentMetadataRepository;
+
+    @Resource
+    private IAuditLogService auditLogService;
 
     @GetMapping
     public Response<List<DocumentDTO>> listDocuments(HttpServletRequest request) {
@@ -75,10 +84,19 @@ public class DocumentController {
 
     @DeleteMapping("/{documentId}")
     public Response<Void> deleteDocument(HttpServletRequest request, @PathVariable String documentId) {
+        String ip = AuditContextSupport.extractIp(request);
+        String ua = AuditContextSupport.extractUserAgent(request);
+        // 提取登录用户用于审计
+        Object uidAttr = request.getAttribute(JwtAuthFilter.ATTR_USER_ID);
+        Object unameAttr = request.getAttribute(JwtAuthFilter.ATTR_USERNAME);
+        Long auditUserId = (uidAttr instanceof Long) ? (Long) uidAttr : 0L;
+        String auditUsername = (unameAttr instanceof String) ? (String) unameAttr : "";
         try {
             TenantScopeVO scope = currentScope(request);
             DocumentMetadataEntity entity = documentMetadataRepository.queryByDocumentId(documentId, scope);
             if (entity == null) {
+                safeAuditDelete(auditUserId, auditUsername, documentId,
+                        AuditResult.FAILURE, "文档不存在", ip, ua);
                 return Response.<Void>builder()
                         .code(ResponseCode.ILLEGAL_PARAMETER.getCode())
                         .info("文档不存在")
@@ -90,12 +108,17 @@ public class DocumentController {
                 documentMetadataRepository.markDeletedByDocumentId(documentId, scope);
             }
             log.info("文档已软删除: documentId={}, userId={}", documentId, entity.getUserId());
+            // 删除成功审计
+            safeAuditDelete(auditUserId, auditUsername, documentId,
+                    AuditResult.SUCCESS, "", ip, ua);
             return Response.<Void>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
                     .build();
         } catch (Exception e) {
             log.error("删除文档失败: {}", documentId, e);
+            safeAuditDelete(auditUserId, auditUsername, documentId,
+                    AuditResult.FAILURE, "删除失败: " + e.getMessage(), ip, ua);
             return Response.<Void>builder()
                     .code(ResponseCode.UN_ERROR.getCode())
                     .info("删除失败: " + e.getMessage())
@@ -175,5 +198,21 @@ public class DocumentController {
 
     private TenantScopeVO currentScope(HttpServletRequest request) {
         return TenantScopeVO.singleUser(CurrentUserSupport.requireUserIdString(request));
+    }
+
+    /**
+     * 文档删除审计兜底
+     */
+    private void safeAuditDelete(Long userId, String username, String documentId,
+                                 AuditResult result, String detail, String ip, String ua) {
+        try {
+            if (auditLogService != null) {
+                auditLogService.recordAsync(userId, username, AuditAction.DELETE_DOC,
+                        "DOCUMENT", documentId == null ? "" : documentId,
+                        result, "", detail, ip, ua);
+            }
+        } catch (Exception ex) {
+            log.warn("审计调用失败：action=DELETE_DOC, err={}", ex.getMessage());
+        }
     }
 }
