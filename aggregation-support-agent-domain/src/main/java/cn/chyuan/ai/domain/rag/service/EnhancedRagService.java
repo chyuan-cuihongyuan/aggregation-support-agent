@@ -1,14 +1,19 @@
 package cn.chyuan.ai.domain.rag.service;
 
 import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
+import cn.chyuan.ai.domain.auth.support.RequestScopeContext;
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import cn.chyuan.ai.domain.rag.adapter.port.IDocumentParserFactory;
 import cn.chyuan.ai.domain.rag.adapter.repository.IDocumentMetadataRepository;
+import cn.chyuan.ai.domain.rag.adapter.repository.IRagTraceRepository;
 import cn.chyuan.ai.domain.rag.adapter.repository.IVectorStoreRepository;
 import cn.chyuan.ai.domain.rag.model.entity.DocumentChunkEntity;
 import cn.chyuan.ai.domain.rag.model.entity.DocumentMetadataEntity;
+import cn.chyuan.ai.domain.rag.model.entity.RagTraceEntity;
 import cn.chyuan.ai.domain.rag.model.valobj.DocumentUploadCommand;
 import cn.chyuan.ai.domain.rag.model.valobj.ParsedDocumentVO;
+import cn.chyuan.ai.domain.rag.model.valobj.RagSourceVO;
+import cn.chyuan.ai.domain.rag.model.valobj.SearchOutcomeVO;
 import cn.chyuan.ai.domain.rag.model.valobj.SearchResultDetailVO;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
 import cn.chyuan.ai.domain.rag.service.chunker.ParentChildChunker;
@@ -19,6 +24,7 @@ import cn.chyuan.ai.domain.rag.service.query.IQueryOptimizationService;
 import cn.chyuan.ai.domain.rag.service.rerank.IRerankService;
 import cn.chyuan.ai.domain.rag.service.reorder.LostInTheMiddleReorderer;
 import cn.chyuan.ai.domain.rag.service.retrieval.IBM25SearchService;
+import cn.chyuan.ai.domain.rag.support.RagSourceCollector;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -30,6 +36,7 @@ import jakarta.annotation.Resource;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -132,6 +139,9 @@ public class EnhancedRagService implements IRagService {
 
     @Resource
     private AnswerQualityEvaluator answerQualityEvaluator;
+
+    @Resource
+    private IRagTraceRepository ragTraceRepository;
 
     @Override
     public void uploadDocument(DocumentUploadCommand command) {
@@ -256,27 +266,147 @@ public class EnhancedRagService implements IRagService {
 
     @Override
     public List<VectorSearchResultVO> search(String query, int topK, TenantScopeVO scope) {
+        // 复用统一的内部检索流程，避免与 searchWithTrace 出现两套实现
+        return doSearchInternal(query, topK, scope).results;
+    }
+
+    /**
+     * 统一的检索内部流程 — 供 search 与 searchWithTrace 共用
+     * <p>
+     * 流程：Query 改写 → 多路召回（向量 + BM25 + 可选 Multi-Query）→ Rerank → Lost-in-the-Middle 重排
+     *
+     * @param query 用户查询文本
+     * @param topK  返回结果数量
+     * @param scope 租户作用域
+     * @return 内部检索输出（包含改写后的 query、最终结果与 rerank 是否生效）
+     */
+    private InternalSearchOutput doSearchInternal(String query, int topK, TenantScopeVO scope) {
         log.info("开始检索: query={}, topK={}", query, topK);
 
-        // 第二层：查询优化
+        // 第二层：查询优化（未启用时返回原 query）
         String optimizedQuery = optimizeQuery(query);
+        // 记录是否真正发生了改写：启用且与原 query 不同
+        String rewriteQuery = (queryRewriteEnabled && optimizedQuery != null && !optimizedQuery.equals(query))
+                ? optimizedQuery : null;
 
         // 第三层：多路召回
         List<VectorSearchResultVO> results = multiPathRetrieval(optimizedQuery, topK, scope);
 
-        // 第四层：Rerank精排
+        // 第四层：Rerank 精排
+        boolean rerankApplied = false;
         if (rerankEnabled && rerankService != null && rerankService.isAvailable()) {
             results = rerankService.rerank(optimizedQuery, results, topK);
+            rerankApplied = true;
         }
 
-        // Lost in the Middle重排：优化chunk排列顺序，提升LLM对关键内容的关注度
+        // Lost in the Middle 重排：优化 chunk 排列顺序，提升 LLM 对关键内容的关注度
         if (reorderEnabled) {
             results = lostInTheMiddleReorderer.reorder(results);
-            log.debug("Lost in the Middle重排完成");
+            log.debug("Lost in the Middle 重排完成");
         }
 
-        log.info("检索完成: resultCount={}", results.size());
-        return results;
+        log.info("检索完成: resultCount={}, rerankApplied={}", results.size(), rerankApplied);
+        return new InternalSearchOutput(rewriteQuery, results, rerankApplied);
+    }
+
+    /** 内部检索输出 — 仅在 service 内部使用 */
+    private static final class InternalSearchOutput {
+        final String rewriteQuery;
+        final List<VectorSearchResultVO> results;
+        final boolean rerankApplied;
+
+        InternalSearchOutput(String rewriteQuery, List<VectorSearchResultVO> results, boolean rerankApplied) {
+            this.rewriteQuery = rewriteQuery;
+            this.results = results;
+            this.rerankApplied = rerankApplied;
+        }
+    }
+
+    @Override
+    public SearchOutcomeVO searchWithTrace(String query, int topK, TenantScopeVO scope) {
+        // 强校验租户作用域，禁止跨租户检索
+        if (scope == null || scope.getTenantId() == null || scope.getTenantId().isEmpty()) {
+            throw new IllegalArgumentException("租户作用域不能为空");
+        }
+
+        String traceId = UUID.randomUUID().toString().replace("-", "");
+        log.info("开始带证据链检索: traceId={}, query={}, topK={}", traceId, query, topK);
+
+        // 复用统一的内部检索流程
+        InternalSearchOutput internal = doSearchInternal(query, topK, scope);
+        List<VectorSearchResultVO> rawResults = internal.results != null ? internal.results : Collections.emptyList();
+        // retrievalType: 经过 Rerank 标注为 rerank，否则标注为 hybrid（混合检索结果）
+        String retrievalType = internal.rerankApplied ? "rerank" : "hybrid";
+
+        // 将原始检索结果映射为证据 VO
+        List<RagSourceVO> sources = rawResults.stream()
+                .map(r -> toRagSourceVO(r, retrievalType))
+                .collect(Collectors.toList());
+
+        // 组装 RagTrace 实体并同步落库（失败不影响主流程）
+        // TODO: 将来改为 @Async 异步保存
+        try {
+            TenantScopeVO ctxScope = RequestScopeContext.get();
+            RagTraceEntity entity = RagTraceEntity.builder()
+                    .traceId(traceId)
+                    .tenantId(scope.getTenantId())
+                    .ownerUserId(scope.getOwnerUserId() != null ? scope.getOwnerUserId() : "")
+                    .sessionId("")
+                    .agentId("")
+                    .queryText(query)
+                    .rewriteText(internal.rewriteQuery)
+                    .retrievalTopk(topK)
+                    .sources(sources)
+                    .createTime(new Date())
+                    .build();
+            // 兼容：如果 RequestScopeContext 后续扩展出会话/智能体上下文，可以在此覆盖
+            if (ctxScope != null && entity.getOwnerUserId().isEmpty() && ctxScope.getOwnerUserId() != null) {
+                entity.setOwnerUserId(ctxScope.getOwnerUserId());
+            }
+            ragTraceRepository.save(entity);
+        } catch (Exception e) {
+            log.warn("RAG 检索追踪落库失败: traceId={}, err={}", traceId, e.getMessage());
+        }
+
+        // 写入收集器，便于 ChatService 出口取出 traceId 拼到响应
+        RagSourceCollector.setTraceId(traceId);
+
+        return SearchOutcomeVO.builder()
+                .traceId(traceId)
+                .originalQuery(query)
+                .rewriteQuery(internal.rewriteQuery)
+                .topK(topK)
+                .sources(sources)
+                .rawResults(rawResults)
+                .build();
+    }
+
+    /**
+     * VectorSearchResultVO → RagSourceVO 映射，snippet 截断为前 200 字符
+     */
+    private RagSourceVO toRagSourceVO(VectorSearchResultVO result, String retrievalType) {
+        Map<String, Object> metadata = result.getMetadata();
+        String documentId = metadata != null && metadata.get("documentId") != null
+                ? String.valueOf(metadata.get("documentId")) : null;
+        String documentName = metadata != null && metadata.get("_source") != null
+                ? String.valueOf(metadata.get("_source")) : null;
+        String chunkId = metadata != null && metadata.get("chunkId") != null
+                ? String.valueOf(metadata.get("chunkId")) : null;
+        Integer chunkIndex = metadata != null && metadata.get("chunkIndex") != null
+                ? ((Number) metadata.get("chunkIndex")).intValue() : null;
+
+        String content = result.getContent();
+        String snippet = content == null ? "" : (content.length() > 200 ? content.substring(0, 200) : content);
+
+        return RagSourceVO.builder()
+                .documentId(documentId)
+                .documentName(documentName)
+                .chunkId(chunkId)
+                .chunkIndex(chunkIndex)
+                .score(result.getScore())
+                .retrievalType(retrievalType)
+                .snippet(snippet)
+                .build();
     }
 
     @Override

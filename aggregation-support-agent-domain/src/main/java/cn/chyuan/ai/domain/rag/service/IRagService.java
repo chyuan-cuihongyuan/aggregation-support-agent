@@ -2,6 +2,7 @@ package cn.chyuan.ai.domain.rag.service;
 
 import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.rag.model.valobj.DocumentUploadCommand;
+import cn.chyuan.ai.domain.rag.model.valobj.SearchOutcomeVO;
 import cn.chyuan.ai.domain.rag.model.valobj.SearchResultDetailVO;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
 
@@ -42,6 +43,17 @@ public interface IRagService {
     List<VectorSearchResultVO> search(String query, int topK);
 
     List<VectorSearchResultVO> search(String query, int topK, TenantScopeVO scope);
+
+    /**
+     * 带证据链的检索 — 返回 traceId、改写后的 query、命中证据列表与原始结果，
+     * 同时异步落 rag_trace 表，供前端展示与后续审计。
+     *
+     * @param query 用户查询文本
+     * @param topK  返回结果数
+     * @param scope 租户作用域（必须非空）
+     * @return 完整检索输出
+     */
+    SearchOutcomeVO searchWithTrace(String query, int topK, TenantScopeVO scope);
 
     /**
      * Milvus 健康检查

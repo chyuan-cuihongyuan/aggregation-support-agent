@@ -4,16 +4,21 @@ import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import cn.chyuan.ai.domain.rag.adapter.port.IDocumentParserFactory;
 import cn.chyuan.ai.domain.rag.adapter.repository.IDocumentMetadataRepository;
+import cn.chyuan.ai.domain.rag.adapter.repository.IRagTraceRepository;
 import cn.chyuan.ai.domain.rag.adapter.repository.IVectorStoreRepository;
 import cn.chyuan.ai.domain.rag.model.entity.DocumentChunkEntity;
 import cn.chyuan.ai.domain.rag.model.entity.DocumentMetadataEntity;
+import cn.chyuan.ai.domain.rag.model.entity.RagTraceEntity;
 import cn.chyuan.ai.domain.rag.model.valobj.DocumentUploadCommand;
 import cn.chyuan.ai.domain.rag.model.valobj.ParsedDocumentVO;
+import cn.chyuan.ai.domain.rag.model.valobj.RagSourceVO;
+import cn.chyuan.ai.domain.rag.model.valobj.SearchOutcomeVO;
 import cn.chyuan.ai.domain.rag.model.valobj.SearchResultDetailVO;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
 import cn.chyuan.ai.domain.rag.service.chunker.SemanticChunker;
 import cn.chyuan.ai.domain.rag.service.retrieval.IBM25SearchService;
 import cn.chyuan.ai.domain.rag.service.retrieval.IHybridSearchService;
+import cn.chyuan.ai.domain.rag.support.RagSourceCollector;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -74,6 +79,9 @@ public class RagService implements IRagService {
 
     @Resource(name = "bm25SearchService")
     private IBM25SearchService bm25SearchService;
+
+    @Resource
+    private IRagTraceRepository ragTraceRepository;
 
     @Override
     public void uploadDocument(DocumentUploadCommand command) {
@@ -177,6 +185,107 @@ public class RagService implements IRagService {
 
         log.info("语义检索完成: resultCount={}", results.size());
         return results;
+    }
+
+    @Override
+    public SearchOutcomeVO searchWithTrace(String query, int topK, TenantScopeVO scope) {
+        // 强校验租户作用域，避免越权检索
+        if (scope == null) {
+            throw new IllegalArgumentException("租户作用域(scope)不能为空");
+        }
+        // topK 非法时回退默认值
+        int effectiveTopK = topK <= 0 ? defaultTopK : topK;
+
+        String traceId = UUID.randomUUID().toString().replace("-", "");
+
+        // 复用既有的向量检索逻辑，本期基础版不做 Query 改写
+        List<VectorSearchResultVO> rawResults = this.search(query, effectiveTopK, scope);
+
+        // 将检索结果转换为可展示的证据片段
+        List<RagSourceVO> sources = rawResults == null ? Collections.emptyList()
+                : rawResults.stream().map(this::convertToRagSource).collect(Collectors.toList());
+
+        // 同步落库审计 trace，落库失败不影响主流程
+        // TODO: 将来改为 @Async 异步保存，避免拖慢 RAG 主链路
+        try {
+            RagTraceEntity trace = RagTraceEntity.builder()
+                    .traceId(traceId)
+                    .tenantId(scope.getTenantId())
+                    .ownerUserId(scope.getOwnerUserId())
+                    .sessionId("")
+                    .agentId("")
+                    .queryText(query)
+                    .rewriteText(null)
+                    .retrievalTopk(effectiveTopK)
+                    .sources(sources)
+                    .build();
+            ragTraceRepository.save(trace);
+        } catch (Exception e) {
+            log.warn("RAG trace 落库失败，不影响主流程: traceId={}, err={}", traceId, e.getMessage());
+        }
+
+        // 写入收集器，便于 ChatService 出口取出 traceId 拼到响应
+        RagSourceCollector.setTraceId(traceId);
+
+        return SearchOutcomeVO.builder()
+                .traceId(traceId)
+                .originalQuery(query)
+                .rewriteQuery(null)
+                .topK(effectiveTopK)
+                .sources(sources)
+                .rawResults(rawResults)
+                .build();
+    }
+
+    /**
+     * 将向量检索结果转换为证据片段；snippet 截断 200 字符以控制 JSON 体积
+     */
+    private RagSourceVO convertToRagSource(VectorSearchResultVO result) {
+        Map<String, Object> metadata = result.getMetadata();
+        String documentId = null;
+        String documentName = null;
+        String chunkId = null;
+        Integer chunkIndex = null;
+        if (metadata != null) {
+            Object documentIdObj = metadata.get("documentId");
+            if (documentIdObj != null) {
+                documentId = documentIdObj.toString();
+            }
+            Object sourceObj = metadata.get("_source");
+            if (sourceObj == null) {
+                sourceObj = metadata.get("_file_name");
+            }
+            if (sourceObj != null) {
+                documentName = sourceObj.toString();
+            }
+            Object chunkIdObj = metadata.get("chunkId");
+            if (chunkIdObj == null) {
+                chunkIdObj = metadata.get("id");
+            }
+            if (chunkIdObj != null) {
+                chunkId = chunkIdObj.toString();
+            }
+            Object chunkIndexObj = metadata.get("chunkIndex");
+            if (chunkIndexObj instanceof Number) {
+                chunkIndex = ((Number) chunkIndexObj).intValue();
+            }
+        }
+
+        String content = result.getContent();
+        String snippet = null;
+        if (content != null) {
+            snippet = content.length() > 200 ? content.substring(0, 200) : content;
+        }
+
+        return RagSourceVO.builder()
+                .documentId(documentId)
+                .documentName(documentName)
+                .chunkId(chunkId)
+                .chunkIndex(chunkIndex)
+                .score(result.getScore())
+                .retrievalType("vector")
+                .snippet(snippet)
+                .build();
     }
 
     @Override

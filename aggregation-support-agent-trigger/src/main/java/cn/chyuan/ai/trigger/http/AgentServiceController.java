@@ -5,6 +5,8 @@ import cn.chyuan.ai.api.dto.*;
 import cn.chyuan.ai.api.response.Response;
 import cn.chyuan.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.chyuan.ai.domain.agent.service.IChatService;
+import cn.chyuan.ai.domain.rag.model.valobj.RagSourceVO;
+import cn.chyuan.ai.domain.rag.support.RagSourceCollector;
 import cn.chyuan.ai.trigger.support.CurrentUserSupport;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
@@ -17,7 +19,10 @@ import org.springframework.http.MediaType;
 
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -116,10 +121,21 @@ public class AgentServiceController implements IAgentService {
                 sessionId = chatService.createSession(requestDTO.getAgentId(), userId);
             }
 
-            List<String> messages = chatService.handleMessage(requestDTO.getAgentId(), userId, sessionId, requestDTO.getMessage());
+            List<String> messages;
+            List<RagSourceVO> sources;
+            String traceId;
+            try {
+                messages = chatService.handleMessage(requestDTO.getAgentId(), userId, sessionId, requestDTO.getMessage());
+            } finally {
+                // 出口统一 drain，确保异常路径也清理 ThreadLocal
+                traceId = RagSourceCollector.getTraceId();
+                sources = RagSourceCollector.drain();
+            }
 
             ChatResponseDTO responseDTO = new ChatResponseDTO();
             responseDTO.setContent(String.join("\n", messages));
+            responseDTO.setTraceId(traceId);
+            responseDTO.setSources(toSourceDTOList(sources));
 
             return Response.<ChatResponseDTO>builder()
                     .code(ResponseCode.SUCCESS.getCode())
@@ -175,14 +191,51 @@ public class AgentServiceController implements IAgentService {
                                     // 因为异常会传播到 onError 回调，避免重复完成导致 IllegalStateException
                                 }
                             },
-                            emitter::completeWithError,
-                            emitter::complete
+                            err -> {
+                                // 错误路径仍需 drain，防止 ThreadLocal 泄漏
+                                RagSourceCollector.drain();
+                                emitter.completeWithError(err);
+                            },
+                            () -> {
+                                // complete 之前追发 sources 事件，再 complete
+                                try {
+                                    String traceId = RagSourceCollector.getTraceId();
+                                    List<RagSourceVO> sources = RagSourceCollector.drain();
+                                    Map<String, Object> payload = new HashMap<>();
+                                    payload.put("traceId", traceId);
+                                    payload.put("sources", toSourceDTOList(sources));
+                                    emitter.send(SseEmitter.event().name("sources").data(payload));
+                                } catch (Exception sendErr) {
+                                    log.warn("追发 sources 事件失败", sendErr);
+                                }
+                                emitter.complete();
+                            }
                     );
         } catch (Exception e) {
             log.error("流式对话失败", e);
+            // 异常路径下兜底清理 ThreadLocal
+            RagSourceCollector.drain();
             emitter.completeWithError(e);
         }
         return emitter;
+    }
+
+    /**
+     * 将领域层 RAG 证据 VO 列表转为 API 层 DTO 列表，避免 api 模块依赖 domain 模块
+     */
+    private List<RagSourceDTO> toSourceDTOList(List<RagSourceVO> sources) {
+        if (sources == null || sources.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return sources.stream().map(vo -> RagSourceDTO.builder()
+                .documentId(vo.getDocumentId())
+                .documentName(vo.getDocumentName())
+                .chunkId(vo.getChunkId())
+                .chunkIndex(vo.getChunkIndex())
+                .score(vo.getScore())
+                .retrievalType(vo.getRetrievalType())
+                .snippet(vo.getSnippet())
+                .build()).collect(Collectors.toList());
     }
 
 }

@@ -1,9 +1,11 @@
 package cn.chyuan.ai.domain.agent.service.armory.matter.mcp.server;
 
 import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
+import cn.chyuan.ai.domain.auth.support.RequestScopeContext;
+import cn.chyuan.ai.domain.rag.model.valobj.SearchOutcomeVO;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
 import cn.chyuan.ai.domain.rag.service.IRagService;
-import cn.chyuan.ai.domain.auth.support.RequestScopeContext;
+import cn.chyuan.ai.domain.rag.support.RagSourceCollector;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
@@ -11,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,9 +53,9 @@ public class InternalDocsTools {
      * <p>
      * 使用流程：
      * <ol>
-     *   <li>将查询文本通过嵌入模型转换为向量</li>
-     *   <li>在 Milvus 向量数据库中执行 L2 距离检索</li>
-     *   <li>返回最相关的 Top-K 个文档片段</li>
+     *   <li>调用 RagService.searchWithTrace，得到带证据链的检索输出</li>
+     *   <li>把命中证据 append 到 RagSourceCollector，供 ChatService 出口取回返回前端</li>
+     *   <li>把原始结果序列化为 JSON 字符串返回给 LLM（与既有行为兼容）</li>
      * </ol>
      *
      * @param query 自然语言查询文本，例如："支付服务 CPU 飙高的排查方案"
@@ -87,8 +90,17 @@ public class InternalDocsTools {
                 return objectMapper.writeValueAsString(errorResponse);
             }
 
-            // 调用 RAG 服务执行语义检索
-            List<VectorSearchResultVO> results = ragService.search(query, topK, scope);
+            // 调用 RAG 服务执行带证据链的语义检索
+            SearchOutcomeVO outcome = ragService.searchWithTrace(query, topK, scope);
+
+            // 把命中证据归集到收集器，ChatService 在出口统一 drain 后返回前端
+            if (outcome != null && outcome.getSources() != null) {
+                RagSourceCollector.append(outcome.getSources());
+            }
+
+            // 仍然基于 rawResults 序列化字符串回包给 LLM，行为与改造前一致
+            List<VectorSearchResultVO> results = outcome != null && outcome.getRawResults() != null
+                    ? outcome.getRawResults() : Collections.emptyList();
 
             // 构建返回结果
             Map<String, Object> response = new HashMap<>();

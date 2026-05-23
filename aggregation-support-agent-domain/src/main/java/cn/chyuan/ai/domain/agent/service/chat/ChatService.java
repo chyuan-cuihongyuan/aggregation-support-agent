@@ -9,6 +9,7 @@ import cn.chyuan.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import cn.chyuan.ai.domain.agent.model.valobj.properties.AiAgentAutoConfigProperties;
 import cn.chyuan.ai.domain.agent.service.IChatService;
 import cn.chyuan.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
+import cn.chyuan.ai.domain.rag.support.RagSourceCollector;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
 import com.google.adk.agents.RunConfig;
@@ -129,13 +130,22 @@ public class ChatService implements IChatService {
 
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
 
-        Content userMsg = Content.fromParts(Part.fromText(message));
-        Flowable<Event> events = runner.runAsync(userId, sessionId, userMsg);
+        // 开启 RAG 证据收集 — 收集器在 ThreadLocal 中，由调用方（Controller）在出口 drain 取走并清理
+        RagSourceCollector.begin();
 
-        List<String> outputs = new ArrayList<>();
-        events.blockingForEach(event -> outputs.add(event.stringifyContent()));
+        try {
+            Content userMsg = Content.fromParts(Part.fromText(message));
+            Flowable<Event> events = runner.runAsync(userId, sessionId, userMsg);
 
-        return outputs;
+            List<String> outputs = new ArrayList<>();
+            events.blockingForEach(event -> outputs.add(event.stringifyContent()));
+
+            return outputs;
+        } catch (RuntimeException e) {
+            // 异常路径下兜底清理 ThreadLocal，避免 Tomcat 工作线程复用时残留旧数据
+            RagSourceCollector.drain();
+            throw e;
+        }
     }
 
     @Override
@@ -152,6 +162,9 @@ public class ChatService implements IChatService {
         }
 
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
+
+        // 开启 RAG 证据收集 — 由 Controller 在 SSE complete / error 回调中 drain 并追发 sources 事件
+        RagSourceCollector.begin();
 
         Content userMsg = Content.fromParts(Part.fromText(message));
         RunConfig runConfig = RunConfig.builder()
