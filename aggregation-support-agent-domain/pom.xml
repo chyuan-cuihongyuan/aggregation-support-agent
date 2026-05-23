@@ -56,7 +56,7 @@
         <!-- JWT Token 生成和解析 -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt</artifactId>
+            <artifactId>jjwt-api</artifactId>
         </dependency>
         <!-- BCrypt 密码加密 -->
         <dependency>
