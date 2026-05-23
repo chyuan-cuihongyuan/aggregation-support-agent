@@ -26,15 +26,15 @@ public class AuditLogRepository implements IAuditLogRepository {
     public void save(AuditLogEntity entity) {
         AuditLogPO po = AuditLogPO.builder()
                 .userId(entity.getUserId() != null ? entity.getUserId() : 0L)
-                .username(safe(entity.getUsername()))
-                .action(entity.getAction())
-                .resourceType(safe(entity.getResourceType()))
-                .resourceId(safe(entity.getResourceId()))
-                .result(entity.getResult() != null ? entity.getResult() : "SUCCESS")
-                .traceId(safe(entity.getTraceId()))
-                .detail(truncate(safe(entity.getDetail()), 1024))
-                .ipAddress(truncate(safe(entity.getIpAddress()), 64))
-                .userAgent(truncate(safe(entity.getUserAgent()), 256))
+                .username(truncate(entity.getUsername(), 64))
+                .action(truncate(safe(entity.getAction()), 32))
+                .resourceType(truncate(entity.getResourceType(), 32))
+                .resourceId(truncate(entity.getResourceId(), 128))
+                .result(truncate(entity.getResult() != null ? entity.getResult() : "SUCCESS", 16))
+                .traceId(truncate(entity.getTraceId(), 64))
+                .detail(truncate(entity.getDetail(), 1024))
+                .ipAddress(truncate(entity.getIpAddress(), 64))
+                .userAgent(truncate(entity.getUserAgent(), 256))
                 .createTime(entity.getCreateTime() != null ? entity.getCreateTime() : new Date())
                 .build();
         auditLogMapper.insert(po);
@@ -82,8 +82,19 @@ public class AuditLogRepository implements IAuditLogRepository {
         return s == null ? "" : s;
     }
 
+    /**
+     * 字符串截断到最大长度（按 Java UTF-16 code unit 计，即 {@link String#length()}）
+     * <p>
+     * surrogate pair 安全：若 max 位置正好落在 surrogate pair 的 high surrogate 上，
+     * 自动回退 1 位避免产生无效 UTF-16，否则写入 MySQL utf8mb4 时可能报错或乱码。
+     */
     private static String truncate(String s, int max) {
         if (s == null) return "";
-        return s.length() > max ? s.substring(0, max) : s;
+        if (s.length() <= max) return s;
+        int end = max;
+        if (Character.isHighSurrogate(s.charAt(end - 1))) {
+            end--;
+        }
+        return s.substring(0, end);
     }
 }

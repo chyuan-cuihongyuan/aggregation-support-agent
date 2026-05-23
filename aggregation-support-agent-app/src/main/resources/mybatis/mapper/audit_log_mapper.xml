@@ -74,7 +74,7 @@
     </select>
 
     <select id="statByUser" resultMap="StatResultMap">
-        SELECT CAST(user_id AS CHAR) AS group_key,
+        SELECT user_id AS group_key,
                COUNT(1) AS total,
                SUM(CASE WHEN result = 'SUCCESS' THEN 1 ELSE 0 END) AS success_count,
                SUM(CASE WHEN result = 'FAILURE' THEN 1 ELSE 0 END) AS failure_count

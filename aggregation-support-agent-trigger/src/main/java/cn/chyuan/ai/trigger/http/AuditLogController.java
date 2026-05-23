@@ -26,11 +26,18 @@ import java.util.Map;
  * <p>
  * 所有接口均要求 admin 角色，提供审计日志多条件分页查询与按 action / user 聚合统计。
  * 与 RAG trace 管理员接口一致：绕过 RequestScopeContext，由 {@link RequireRole}("admin") 把关。
+ * <p>
+ * 聚合接口同样接收 userId / action / resourceType / result 等过滤字段，避免"聚合接口给出的统计与
+ * 分页接口看到的明细对不上"的体验问题；pageSize 在 controller 层 clamp 到 {@value #MAX_PAGE_SIZE}，
+ * 防止恶意大值打爆 DB 与内存。
  */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/audit")
 public class AuditLogController {
+
+    /** 单页最大记录数，避免 pageSize 过大引发 OOM/慢查询 */
+    private static final int MAX_PAGE_SIZE = 100;
 
     @Resource
     private IAuditLogService auditLogService;
@@ -52,6 +59,9 @@ public class AuditLogController {
             @RequestParam(value = "page", defaultValue = "1") int page,
             @RequestParam(value = "pageSize", defaultValue = "20") int pageSize) {
         try {
+            int normalizedPage = Math.max(page, 1);
+            int normalizedPageSize = clampPageSize(pageSize);
+
             AuditQueryVO query = AuditQueryVO.builder()
                     .userId(userId)
                     .action(action)
@@ -59,8 +69,8 @@ public class AuditLogController {
                     .result(result)
                     .startTime(startTime)
                     .endTime(endTime)
-                    .page(page)
-                    .pageSize(pageSize)
+                    .page(normalizedPage)
+                    .pageSize(normalizedPageSize)
                     .build();
 
             List<AuditLogEntity> list = auditLogService.queryByCondition(query);
@@ -69,8 +79,8 @@ public class AuditLogController {
             Map<String, Object> data = new HashMap<>();
             data.put("list", list);
             data.put("total", total);
-            data.put("page", page);
-            data.put("pageSize", pageSize);
+            data.put("page", normalizedPage);
+            data.put("pageSize", normalizedPageSize);
 
             return Response.<Map<String, Object>>builder()
                     .code(ResponseCode.SUCCESS.getCode())
@@ -86,36 +96,52 @@ public class AuditLogController {
         }
     }
 
-    /** 管理员视角 — 按 action 聚合 */
+    /** 管理员视角 — 按 action 聚合（接收同名过滤字段，保持与 /list 一致的语义） */
     @RequestMapping(value = "/stats/by_action", method = RequestMethod.GET)
     @RequireRole("admin")
     public Response<List<AuditStatVO>> statByAction(
+            @RequestParam(value = "userId", required = false) Long userId,
+            @RequestParam(value = "action", required = false) String action,
+            @RequestParam(value = "resourceType", required = false) String resourceType,
+            @RequestParam(value = "result", required = false) String result,
             @RequestParam(value = "startTime", required = false)
             @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") Date startTime,
             @RequestParam(value = "endTime", required = false)
             @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") Date endTime) {
-        return doStat(auditLogService::statByAction, startTime, endTime, "by_action");
+        return doStat(auditLogService::statByAction, userId, action, resourceType, result, startTime, endTime, "by_action");
     }
 
-    /** 管理员视角 — 按 userId 聚合 */
+    /** 管理员视角 — 按 userId 聚合（接收同名过滤字段） */
     @RequestMapping(value = "/stats/by_user", method = RequestMethod.GET)
     @RequireRole("admin")
     public Response<List<AuditStatVO>> statByUser(
+            @RequestParam(value = "userId", required = false) Long userId,
+            @RequestParam(value = "action", required = false) String action,
+            @RequestParam(value = "resourceType", required = false) String resourceType,
+            @RequestParam(value = "result", required = false) String result,
             @RequestParam(value = "startTime", required = false)
             @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") Date startTime,
             @RequestParam(value = "endTime", required = false)
             @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") Date endTime) {
-        return doStat(auditLogService::statByUser, startTime, endTime, "by_user");
+        return doStat(auditLogService::statByUser, userId, action, resourceType, result, startTime, endTime, "by_user");
     }
 
-    /** 通用聚合执行封装：构造 query 并捕获异常 */
+    /** 通用聚合执行封装：构造 query 时透传全部过滤字段，确保聚合与明细查询条件一致 */
     private Response<List<AuditStatVO>> doStat(
             java.util.function.Function<AuditQueryVO, List<AuditStatVO>> fn,
+            Long userId,
+            String action,
+            String resourceType,
+            String result,
             Date startTime,
             Date endTime,
             String tag) {
         try {
             AuditQueryVO query = AuditQueryVO.builder()
+                    .userId(userId)
+                    .action(action)
+                    .resourceType(resourceType)
+                    .result(result)
                     .startTime(startTime)
                     .endTime(endTime)
                     .build();
@@ -132,5 +158,12 @@ public class AuditLogController {
                     .info(ResponseCode.UN_ERROR.getInfo())
                     .build();
         }
+    }
+
+    private int clampPageSize(int pageSize) {
+        if (pageSize <= 0) {
+            return 20;
+        }
+        return Math.min(pageSize, MAX_PAGE_SIZE);
     }
 }

@@ -100,11 +100,18 @@ public class AuditLogService implements IAuditLogService {
         return v == null ? "" : v;
     }
 
-    /** detail 截断到 MAX_DETAIL_LENGTH */
+    /** detail 截断到 MAX_DETAIL_LENGTH（UTF-16 surrogate pair 安全：不切断半个 emoji） */
     private static String truncate(String v) {
         if (v == null) {
             return "";
         }
-        return v.length() <= MAX_DETAIL_LENGTH ? v : v.substring(0, MAX_DETAIL_LENGTH);
+        if (v.length() <= MAX_DETAIL_LENGTH) {
+            return v;
+        }
+        int end = MAX_DETAIL_LENGTH;
+        if (Character.isHighSurrogate(v.charAt(end - 1))) {
+            end--;
+        }
+        return v.substring(0, end);
     }
 }
