@@ -205,25 +205,19 @@ public class RagService implements IRagService {
         List<RagSourceVO> sources = rawResults == null ? Collections.emptyList()
                 : rawResults.stream().map(this::convertToRagSource).collect(Collectors.toList());
 
-        // 异步落库审计 trace（@Async("ragTraceExecutor")），保留 try/catch 双保险：
-        // 1) 异步代理本身极少抛异常，但万一线程池未就绪/Bean 未注入，主链路也不能挂
-        // 2) 异步任务内部异常已由 Repository 内部 warn 记录
-        try {
-            RagTraceEntity trace = RagTraceEntity.builder()
-                    .traceId(traceId)
-                    .tenantId(scope.getTenantId())
-                    .ownerUserId(scope.getOwnerUserId())
-                    .sessionId("")
-                    .agentId("")
-                    .queryText(query)
-                    .rewriteText(null)
-                    .retrievalTopk(effectiveTopK)
-                    .sources(sources)
-                    .build();
-            ragTraceRepository.save(trace);
-        } catch (Exception e) {
-            log.warn("RAG trace 落库失败，不影响主流程: traceId={}, err={}", traceId, e.getMessage());
-        }
+        // 异步落库 RAG 追踪（@Async("ragTraceExecutor")），Repository 内部全量 try/catch，异常不会传播到此
+        RagTraceEntity trace = RagTraceEntity.builder()
+                .traceId(traceId)
+                .tenantId(scope.getTenantId())
+                .ownerUserId(scope.getOwnerUserId())
+                .sessionId("")
+                .agentId("")
+                .queryText(query)
+                .rewriteText(null)
+                .retrievalTopk(effectiveTopK)
+                .sources(sources)
+                .build();
+        ragTraceRepository.save(trace);
 
         // 写入收集器，便于 ChatService 出口取出 traceId 拼到响应
         RagSourceCollector.setTraceId(traceId);

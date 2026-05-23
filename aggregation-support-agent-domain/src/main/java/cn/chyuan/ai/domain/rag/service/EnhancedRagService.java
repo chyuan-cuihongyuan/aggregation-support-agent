@@ -343,30 +343,25 @@ public class EnhancedRagService implements IRagService {
                 .map(r -> toRagSourceVO(r, retrievalType))
                 .collect(Collectors.toList());
 
-        // 异步落库 RagTrace（@Async("ragTraceExecutor")），保留 try/catch 兜底防御
-        // 异步任务内部异常已由 Repository 内部 warn 记录
-        try {
-            TenantScopeVO ctxScope = RequestScopeContext.get();
-            RagTraceEntity entity = RagTraceEntity.builder()
-                    .traceId(traceId)
-                    .tenantId(scope.getTenantId())
-                    .ownerUserId(scope.getOwnerUserId() != null ? scope.getOwnerUserId() : "")
-                    .sessionId("")
-                    .agentId("")
-                    .queryText(query)
-                    .rewriteText(internal.rewriteQuery)
-                    .retrievalTopk(topK)
-                    .sources(sources)
-                    .createTime(new Date())
-                    .build();
-            // 兼容：如果 RequestScopeContext 后续扩展出会话/智能体上下文，可以在此覆盖
-            if (ctxScope != null && entity.getOwnerUserId().isEmpty() && ctxScope.getOwnerUserId() != null) {
-                entity.setOwnerUserId(ctxScope.getOwnerUserId());
-            }
-            ragTraceRepository.save(entity);
-        } catch (Exception e) {
-            log.warn("RAG 检索追踪落库失败: traceId={}, err={}", traceId, e.getMessage());
+        // 异步落库 RagTrace（@Async("ragTraceExecutor")），Repository 内部全量 try/catch，异常不会传播到此
+        TenantScopeVO ctxScope = RequestScopeContext.get();
+        RagTraceEntity entity = RagTraceEntity.builder()
+                .traceId(traceId)
+                .tenantId(scope.getTenantId())
+                .ownerUserId(scope.getOwnerUserId() != null ? scope.getOwnerUserId() : "")
+                .sessionId("")
+                .agentId("")
+                .queryText(query)
+                .rewriteText(internal.rewriteQuery)
+                .retrievalTopk(topK)
+                .sources(sources)
+                .createTime(new Date())
+                .build();
+        // 兼容：如果 RequestScopeContext 后续扩展出会话/智能体上下文，可以在此覆盖
+        if (ctxScope != null && entity.getOwnerUserId().isEmpty() && ctxScope.getOwnerUserId() != null) {
+            entity.setOwnerUserId(ctxScope.getOwnerUserId());
         }
+        ragTraceRepository.save(entity);
 
         // 写入收集器，便于 ChatService 出口取出 traceId 拼到响应
         RagSourceCollector.setTraceId(traceId);

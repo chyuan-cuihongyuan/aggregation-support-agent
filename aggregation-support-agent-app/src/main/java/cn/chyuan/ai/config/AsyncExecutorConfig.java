@@ -6,7 +6,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
+import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 审计 / RAG-Trace 异步线程池配置 — 与项目根 {@code ThreadPoolConfig} 解耦
@@ -52,8 +54,12 @@ public class AsyncExecutorConfig {
     /**
      * RAG 检索追踪专用线程池
      * <p>
-     * 拒绝策略：{@link ThreadPoolExecutor.DiscardPolicy} — 当队列满且线程数达上限时，
-     * 静默丢弃后续 trace 写入，确保 RAG 主链路**不被审计阻塞**（性能优先于完整审计）。
+     * 拒绝策略：自定义 {@link RejectedExecutionHandler} — 语义保持 {@code DiscardPolicy} 的丢弃行为，
+     * 但每丢弃一条 trace 写入即记录 warn 日志（带累计计数 + 队列水位），
+     * 解决"静默丢弃 → 数据缺失无可观测信号"的问题。
+     * <p>
+     * 选型说明：RAG 主链路对延迟敏感，trace 写入只是审计旁路；当负载尖峰打满队列时优先丢 trace，
+     * 但运维仍需要知道丢了多少条、什么时段。
      */
     @Bean("ragTraceExecutor")
     public AsyncTaskExecutor ragTraceExecutor() {
@@ -63,12 +69,38 @@ public class AsyncExecutorConfig {
         executor.setQueueCapacity(2000);
         executor.setKeepAliveSeconds(60);
         executor.setThreadNamePrefix("rag-trace-async-");
-        // 优先保护 RAG 主链路，队列满时静默丢弃 trace 写入
-        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardPolicy());
+        // 优先保护 RAG 主链路，队列满时丢弃 trace 写入但留下可观测日志
+        executor.setRejectedExecutionHandler(new LoggingDiscardPolicy("ragTraceExecutor"));
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(10);
         executor.initialize();
         log.info("初始化 RAG 追踪异步线程池 ragTraceExecutor: core={}, max={}, queue={}", 4, 16, 2000);
         return executor;
+    }
+
+    /**
+     * 带日志的丢弃策略 — 等价于 {@link ThreadPoolExecutor.DiscardPolicy}，但每次丢弃写入 warn 日志。
+     * <p>
+     * 同名线程池的所有丢弃事件累加到一个计数器，日志每条都包含累计值与当前队列大小，
+     * 便于在 ELK / Grafana 上聚合统计与告警；同时避免日志爆炸由调用方在告警侧做采样。
+     */
+    private static final class LoggingDiscardPolicy implements RejectedExecutionHandler {
+        private final String executorName;
+        private final AtomicLong discardCount = new AtomicLong(0);
+
+        LoggingDiscardPolicy(String executorName) {
+            this.executorName = executorName;
+        }
+
+        @Override
+        public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
+            long discarded = discardCount.incrementAndGet();
+            log.warn("[{}] 队列已满，静默丢弃异步任务: 累计丢弃={}, 当前队列={}, 活跃线程={}, 线程池大小={}",
+                    executorName,
+                    discarded,
+                    executor.getQueue().size(),
+                    executor.getActiveCount(),
+                    executor.getPoolSize());
+        }
     }
 }
