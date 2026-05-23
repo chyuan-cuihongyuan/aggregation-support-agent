@@ -14,7 +14,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.schedulers.Schedulers;
+import com.google.adk.events.Event;
 import org.springframework.http.MediaType;
 
 import jakarta.annotation.Resource;
@@ -160,12 +162,21 @@ public class AgentServiceController implements IAgentService {
     @RequestMapping(value = "chat_stream", method = RequestMethod.POST, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter chatStream(HttpServletRequest request, @RequestBody ChatRequestDTO requestDTO) {
         SseEmitter emitter = new SseEmitter(3 * 60 * 1000L);
+        RagSourceCollector.Holder requestHolder = null;
         try {
             String userId = CurrentUserSupport.requireUserIdString(request);
-            // 仅记录请求元信息，不记录消息内容（可能包含敏感信息）
             log.info("流式对话 agentId:{} userId:{} sessionId:{}", requestDTO.getAgentId(), userId, requestDTO.getSessionId());
-            chatService.handleMessageStream(requestDTO.getAgentId(), userId, requestDTO.getSessionId(), requestDTO.getMessage())
-                    .subscribeOn(Schedulers.io())
+            // handleMessageStream 内部在 HTTP 线程上调 RagSourceCollector.begin() 创建新 Holder，立刻取出引用
+            Flowable<Event> events = chatService.handleMessageStream(requestDTO.getAgentId(), userId, requestDTO.getSessionId(), requestDTO.getMessage());
+            requestHolder = RagSourceCollector.currentHolder();
+            final RagSourceCollector.Holder holderRef = requestHolder;
+            // HTTP 线程拿到引用后立即清理 ThreadLocal，避免 Tomcat 线程复用导致跨请求残留
+            RagSourceCollector.detach();
+            events.subscribeOn(Schedulers.io())
+                    // 订阅链运行在 RxJava IO worker 上：进入时把 Holder 注入子线程 ThreadLocal，
+                    // 让链路里的工具调用 append() / setTraceId() 能拿到正确 Holder；结束时清理
+                    .doOnSubscribe(s -> RagSourceCollector.attach(holderRef))
+                    .doFinally(RagSourceCollector::detach)
                     .subscribe(
                             event -> {
                                 try {
@@ -187,20 +198,16 @@ public class AgentServiceController implements IAgentService {
                                     }
                                 } catch (Exception e) {
                                     log.error("流式对话发送失败", e);
-                                    // 注意：不要在这里调用 emitter.completeWithError(e)，
-                                    // 因为异常会传播到 onError 回调，避免重复完成导致 IllegalStateException
                                 }
                             },
                             err -> {
-                                // 错误路径仍需 drain，防止 ThreadLocal 泄漏
-                                RagSourceCollector.drain();
+                                RagSourceCollector.drainHolder(holderRef);
                                 emitter.completeWithError(err);
                             },
                             () -> {
-                                // complete 之前追发 sources 事件，再 complete
                                 try {
-                                    String traceId = RagSourceCollector.getTraceId();
-                                    List<RagSourceVO> sources = RagSourceCollector.drain();
+                                    String traceId = holderRef == null ? "" : holderRef.getTraceId();
+                                    List<RagSourceVO> sources = RagSourceCollector.drainHolder(holderRef);
                                     Map<String, Object> payload = new HashMap<>();
                                     payload.put("traceId", traceId);
                                     payload.put("sources", toSourceDTOList(sources));
@@ -213,8 +220,8 @@ public class AgentServiceController implements IAgentService {
                     );
         } catch (Exception e) {
             log.error("流式对话失败", e);
-            // 异常路径下兜底清理 ThreadLocal
-            RagSourceCollector.drain();
+            RagSourceCollector.drainHolder(requestHolder);
+            RagSourceCollector.detach();
             emitter.completeWithError(e);
         }
         return emitter;

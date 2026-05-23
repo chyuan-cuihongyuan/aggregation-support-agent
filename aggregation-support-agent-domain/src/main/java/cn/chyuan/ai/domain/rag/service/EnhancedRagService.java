@@ -343,8 +343,8 @@ public class EnhancedRagService implements IRagService {
                 .map(r -> toRagSourceVO(r, retrievalType))
                 .collect(Collectors.toList());
 
-        // 组装 RagTrace 实体并同步落库（失败不影响主流程）
-        // TODO: 将来改为 @Async 异步保存
+        // 异步落库 RagTrace（@Async("ragTraceExecutor")），保留 try/catch 兜底防御
+        // 异步任务内部异常已由 Repository 内部 warn 记录
         try {
             TenantScopeVO ctxScope = RequestScopeContext.get();
             RagTraceEntity entity = RagTraceEntity.builder()

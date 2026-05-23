@@ -205,8 +205,9 @@ public class RagService implements IRagService {
         List<RagSourceVO> sources = rawResults == null ? Collections.emptyList()
                 : rawResults.stream().map(this::convertToRagSource).collect(Collectors.toList());
 
-        // 同步落库审计 trace，落库失败不影响主流程
-        // TODO: 将来改为 @Async 异步保存，避免拖慢 RAG 主链路
+        // 异步落库审计 trace（@Async("ragTraceExecutor")），保留 try/catch 双保险：
+        // 1) 异步代理本身极少抛异常，但万一线程池未就绪/Bean 未注入，主链路也不能挂
+        // 2) 异步任务内部异常已由 Repository 内部 warn 记录
         try {
             RagTraceEntity trace = RagTraceEntity.builder()
                     .traceId(traceId)

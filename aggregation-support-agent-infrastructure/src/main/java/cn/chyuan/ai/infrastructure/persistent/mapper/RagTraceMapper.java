@@ -1,5 +1,7 @@
 package cn.chyuan.ai.infrastructure.persistent.mapper;
 
+import cn.chyuan.ai.domain.rag.model.valobj.RagTraceAdminQueryVO;
+import cn.chyuan.ai.domain.rag.model.valobj.RagTraceStatVO;
 import cn.chyuan.ai.infrastructure.dao.po.RagTracePO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -24,4 +26,19 @@ public interface RagTraceMapper {
     List<RagTracePO> selectBySessionId(@Param("sessionId") String sessionId,
                                        @Param("tenantId") String tenantId,
                                        @Param("ownerUserId") String ownerUserId);
+
+    /** 管理员视角分页查询（不带租户作用域） */
+    List<RagTracePO> selectForAdmin(@Param("q") RagTraceAdminQueryVO query);
+
+    /** 管理员视角总数 */
+    long countForAdmin(@Param("q") RagTraceAdminQueryVO query);
+
+    /** 按 agentId 聚合 */
+    List<RagTraceStatVO> statByAgent(@Param("q") RagTraceAdminQueryVO query);
+
+    /** 按 ownerUserId 聚合 */
+    List<RagTraceStatVO> statByUser(@Param("q") RagTraceAdminQueryVO query);
+
+    /** 按日期聚合 */
+    List<RagTraceStatVO> statByDay(@Param("q") RagTraceAdminQueryVO query);
 }
