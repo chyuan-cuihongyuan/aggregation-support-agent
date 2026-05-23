@@ -14,6 +14,10 @@ import java.util.Date;
 public class DocumentMetadataEntity {
     private Long id;
     private String documentId;
+    private String tenantId;
+    private String ownerUserId;
+    private String visibility;
+    private Integer deletedFlag;
     private String fileName;
     private String fileExtension;
     private Long fileSize;

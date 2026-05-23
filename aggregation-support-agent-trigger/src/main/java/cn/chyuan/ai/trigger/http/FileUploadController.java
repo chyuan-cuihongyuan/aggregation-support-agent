@@ -2,6 +2,7 @@ package cn.chyuan.ai.trigger.http;
 
 import cn.chyuan.ai.api.dto.UploadResponseDTO;
 import cn.chyuan.ai.api.response.Response;
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.rag.model.valobj.DocumentUploadCommand;
 import cn.chyuan.ai.domain.rag.service.IRagService;
 import cn.chyuan.ai.trigger.support.CurrentUserSupport;
@@ -63,12 +64,14 @@ public class FileUploadController {
             String originalFilename = file.getOriginalFilename();
             String contentType = file.getContentType();
             log.info("接收文档上传: fileName={}, contentType={}, size={}", originalFilename, contentType, file.getSize());
+            TenantScopeVO scope = TenantScopeVO.singleUser(CurrentUserSupport.requireUserIdString(request));
 
             DocumentUploadCommand command = DocumentUploadCommand.builder()
                     .fileName(originalFilename)
                     .rawContent(file.getBytes())
                     .mimeType(contentType)
-                    .userId(CurrentUserSupport.requireUserIdString(request))
+                    .userId(scope.getOwnerUserId())
+                    .tenantId(scope.getTenantId())
                     .build();
 
             ragService.uploadDocument(command);

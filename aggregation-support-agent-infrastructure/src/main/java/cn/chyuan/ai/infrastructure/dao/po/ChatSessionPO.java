@@ -12,22 +12,16 @@ import java.util.Date;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class ChatHistoryPO implements Serializable {
+public class ChatSessionPO implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
     private Long id;
+    private String sessionId;
+    private String agentId;
     private String tenantId;
     private String ownerUserId;
-    private String userId;
-    private String agentId;
-    private String agentName;
-    private String sessionId;
-    private String question;
-    private String answer;
     private String traceId;
-    private Integer promptTokens;
-    private Integer completionTokens;
     private Date createTime;
     private Date updateTime;
 }

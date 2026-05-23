@@ -7,6 +7,9 @@ import java.util.Date;
 @Data
 public class DocumentDTO {
     private String documentId;
+    private String tenantId;
+    private String ownerUserId;
+    private String visibility;
     private String fileName;
     private String fileExtension;
     private Long fileSize;

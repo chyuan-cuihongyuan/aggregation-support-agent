@@ -1,5 +1,6 @@
 package cn.chyuan.ai.domain.rag.service.retrieval;
 
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
 
 import java.util.List;
@@ -21,6 +22,8 @@ public interface IBM25SearchService {
      */
     List<VectorSearchResultVO> search(String query, int topK);
 
+    List<VectorSearchResultVO> search(String query, int topK, TenantScopeVO scope);
+
     /**
      * 添加文档到BM25索引
      *
@@ -29,6 +32,8 @@ public interface IBM25SearchService {
      */
     void addDocument(String docId, String content);
 
+    void addDocument(String docId, String content, java.util.Map<String, Object> metadata);
+
     /**
      * 批量添加文档
      *
@@ -36,12 +41,16 @@ public interface IBM25SearchService {
      */
     void addDocuments(java.util.Map<String, String> documents);
 
+    void addDocuments(java.util.Map<String, String> documents, java.util.Map<String, java.util.Map<String, Object>> metadataByDocId);
+
     /**
      * 删除文档
      *
      * @param docId 文档ID
      */
     void removeDocument(String docId);
+
+    void removeDocument(String docId, TenantScopeVO scope);
 
     /**
      * 清空索引

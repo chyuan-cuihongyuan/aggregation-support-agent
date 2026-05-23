@@ -29,4 +29,7 @@ public class DocumentUploadCommand {
     /** 上传用户ID */
     private String userId;
 
+    /** 租户ID */
+    private String tenantId;
+
 }

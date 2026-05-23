@@ -1,5 +1,6 @@
 package cn.chyuan.ai.infrastructure.gateway.retrieval;
 
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
 import cn.chyuan.ai.domain.rag.service.retrieval.IBM25SearchService;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
@@ -81,6 +82,15 @@ public class ElasticsearchBM25SearchService implements IBM25SearchService {
                             .properties("docId", p -> p
                                     .keyword(k -> k)
                             )
+                            .properties("documentId", p -> p
+                                    .keyword(k -> k)
+                            )
+                            .properties("tenantId", p -> p
+                                    .keyword(k -> k)
+                            )
+                            .properties("ownerUserId", p -> p
+                                    .keyword(k -> k)
+                            )
                     )
             );
             log.info("创建Elasticsearch索引: {}", indexName);
@@ -89,19 +99,28 @@ public class ElasticsearchBM25SearchService implements IBM25SearchService {
 
     @Override
     public List<VectorSearchResultVO> search(String query, int topK) {
+        return search(query, topK, null);
+    }
+
+    @Override
+    public List<VectorSearchResultVO> search(String query, int topK, TenantScopeVO scope) {
         log.info("Elasticsearch BM25检索: query={}, topK={}", query, topK);
 
         try {
             SearchResponse<Map> response = esClient.search(s -> s
                             .index(indexName)
-                            .query(q -> q
-                                    .multiMatch(m -> m
-                                            .fields("content")
-                                            .query(query)
-                                            .type(co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType.BestFields)
-                                            .fuzziness("AUTO")
-                                    )
-                            )
+                            .query(q -> q.bool(b -> {
+                                b.must(m -> m.multiMatch(mm -> mm
+                                        .fields("content")
+                                        .query(query)
+                                        .type(co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType.BestFields)
+                                        .fuzziness("AUTO")));
+                                if (scope != null) {
+                                    b.filter(f -> f.term(t -> t.field("tenantId").value(scope.getTenantId())));
+                                    b.filter(f -> f.term(t -> t.field("ownerUserId").value(scope.getOwnerUserId())));
+                                }
+                                return b;
+                            }))
                             .size(topK),
                     Map.class
             );
@@ -112,9 +131,15 @@ public class ElasticsearchBM25SearchService implements IBM25SearchService {
                 if (source != null) {
                     String content = (String) source.get("content");
                     String docId = (String) source.get("docId");
+                    String documentId = (String) source.get("documentId");
+                    String tenantId = (String) source.get("tenantId");
+                    String ownerUserId = (String) source.get("ownerUserId");
 
                     Map<String, Object> metadata = new HashMap<>();
                     metadata.put("docId", docId);
+                    metadata.put("documentId", documentId);
+                    metadata.put("tenantId", tenantId);
+                    metadata.put("ownerUserId", ownerUserId);
                     metadata.put("retrievalType", "bm25");
                     metadata.put("esScore", hit.score());
 
@@ -137,10 +162,16 @@ public class ElasticsearchBM25SearchService implements IBM25SearchService {
 
     @Override
     public void addDocument(String docId, String content) {
+        addDocument(docId, content, Collections.emptyMap());
+    }
+
+    @Override
+    public void addDocument(String docId, String content, Map<String, Object> metadata) {
         try {
             Map<String, Object> doc = new HashMap<>();
             doc.put("docId", docId);
             doc.put("content", content);
+            doc.putAll(metadata);
 
             esClient.index(i -> i
                     .index(indexName)
@@ -156,6 +187,11 @@ public class ElasticsearchBM25SearchService implements IBM25SearchService {
 
     @Override
     public void addDocuments(Map<String, String> documents) {
+        addDocuments(documents, Collections.emptyMap());
+    }
+
+    @Override
+    public void addDocuments(Map<String, String> documents, Map<String, Map<String, Object>> metadataByDocId) {
         try {
             var bulkRequest = new co.elastic.clients.elasticsearch.core.BulkRequest.Builder();
 
@@ -163,6 +199,7 @@ public class ElasticsearchBM25SearchService implements IBM25SearchService {
                 Map<String, Object> doc = new HashMap<>();
                 doc.put("docId", entry.getKey());
                 doc.put("content", entry.getValue());
+                doc.putAll(metadataByDocId.getOrDefault(entry.getKey(), Collections.emptyMap()));
 
                 bulkRequest.operations(op -> op
                         .index(idx -> idx
@@ -182,10 +219,22 @@ public class ElasticsearchBM25SearchService implements IBM25SearchService {
 
     @Override
     public void removeDocument(String docId) {
+        removeDocument(docId, null);
+    }
+
+    @Override
+    public void removeDocument(String docId, TenantScopeVO scope) {
         try {
-            esClient.delete(d -> d
+            esClient.deleteByQuery(d -> d
                     .index(indexName)
-                    .id(docId)
+                    .query(q -> q.bool(b -> {
+                        b.must(m -> m.term(t -> t.field("documentId").value(docId)));
+                        if (scope != null) {
+                            b.filter(f -> f.term(t -> t.field("tenantId").value(scope.getTenantId())));
+                            b.filter(f -> f.term(t -> t.field("ownerUserId").value(scope.getOwnerUserId())));
+                        }
+                        return b;
+                    }))
             );
             log.debug("Elasticsearch删除文档: docId={}", docId);
         } catch (IOException e) {

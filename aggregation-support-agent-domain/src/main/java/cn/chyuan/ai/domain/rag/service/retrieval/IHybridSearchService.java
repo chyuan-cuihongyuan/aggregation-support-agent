@@ -1,5 +1,6 @@
 package cn.chyuan.ai.domain.rag.service.retrieval;
 
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
 
 import java.util.List;
@@ -25,6 +26,8 @@ public interface IHybridSearchService {
      */
     List<VectorSearchResultVO> search(String query, int topK);
 
+    List<VectorSearchResultVO> search(String query, int topK, TenantScopeVO scope);
+
     /**
      * 混合检索 — 支持自定义权重
      *
@@ -36,6 +39,8 @@ public interface IHybridSearchService {
      */
     List<VectorSearchResultVO> search(String query, int topK, double vectorWeight, double bm25Weight);
 
+    List<VectorSearchResultVO> search(String query, int topK, double vectorWeight, double bm25Weight, TenantScopeVO scope);
+
     /**
      * 仅向量检索
      *
@@ -45,6 +50,8 @@ public interface IHybridSearchService {
      */
     List<VectorSearchResultVO> vectorSearch(String query, int topK);
 
+    List<VectorSearchResultVO> vectorSearch(String query, int topK, TenantScopeVO scope);
+
     /**
      * 仅BM25检索
      *
@@ -53,6 +60,8 @@ public interface IHybridSearchService {
      * @return 检索结果
      */
     List<VectorSearchResultVO> bm25Search(String query, int topK);
+
+    List<VectorSearchResultVO> bm25Search(String query, int topK, TenantScopeVO scope);
 
     /**
      * 判断混合检索是否可用

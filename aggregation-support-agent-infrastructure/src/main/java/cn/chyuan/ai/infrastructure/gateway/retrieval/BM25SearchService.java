@@ -1,5 +1,6 @@
 package cn.chyuan.ai.infrastructure.gateway.retrieval;
 
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
 import cn.chyuan.ai.domain.rag.service.retrieval.IBM25SearchService;
 import lombok.extern.slf4j.Slf4j;
@@ -7,6 +8,7 @@ import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
@@ -42,6 +44,9 @@ public class BM25SearchService implements IBM25SearchService {
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
     private static final String FIELD_ID = "docId";
+    private static final String FIELD_DOCUMENT_ID = "documentId";
+    private static final String FIELD_TENANT_ID = "tenantId";
+    private static final String FIELD_OWNER_USER_ID = "ownerUserId";
     private static final String FIELD_CONTENT = "content";
 
     @PostConstruct
@@ -80,6 +85,11 @@ public class BM25SearchService implements IBM25SearchService {
 
     @Override
     public List<VectorSearchResultVO> search(String query, int topK) {
+        return search(query, topK, null);
+    }
+
+    @Override
+    public List<VectorSearchResultVO> search(String query, int topK, TenantScopeVO scope) {
         log.info("BM25检索: query={}, topK={}", query, topK);
 
         lock.readLock().lock();
@@ -99,9 +109,10 @@ public class BM25SearchService implements IBM25SearchService {
                 // 构建查询
                 QueryParser parser = new QueryParser(FIELD_CONTENT, analyzer);
                 Query parsedQuery = parser.parse(QueryParser.escape(query));
+                Query finalQuery = buildScopedQuery(parsedQuery, scope);
 
                 // 执行检索
-                TopDocs topDocs = searcher.search(parsedQuery, topK);
+                TopDocs topDocs = searcher.search(finalQuery, topK);
 
                 // 构建结果
                 List<VectorSearchResultVO> results = new ArrayList<>();
@@ -109,9 +120,15 @@ public class BM25SearchService implements IBM25SearchService {
                     Document doc = searcher.doc(scoreDoc.doc);
                     String docId = doc.get(FIELD_ID);
                     String content = doc.get(FIELD_CONTENT);
+                    String documentId = doc.get(FIELD_DOCUMENT_ID);
+                    String tenantId = doc.get(FIELD_TENANT_ID);
+                    String ownerUserId = doc.get(FIELD_OWNER_USER_ID);
 
                     Map<String, Object> metadata = new HashMap<>();
                     metadata.put("docId", docId);
+                    metadata.put("documentId", documentId);
+                    metadata.put("tenantId", tenantId);
+                    metadata.put("ownerUserId", ownerUserId);
                     metadata.put("retrievalType", "bm25");
 
                     results.add(VectorSearchResultVO.builder()
@@ -137,12 +154,14 @@ public class BM25SearchService implements IBM25SearchService {
 
     @Override
     public void addDocument(String docId, String content) {
+        addDocument(docId, content, Collections.emptyMap());
+    }
+
+    @Override
+    public void addDocument(String docId, String content, Map<String, Object> metadata) {
         lock.writeLock().lock();
         try {
-            Document doc = new Document();
-            doc.add(new TextField(FIELD_ID, docId, Field.Store.YES));
-            doc.add(new TextField(FIELD_CONTENT, content, Field.Store.YES));
-            indexWriter.addDocument(doc);
+            indexWriter.addDocument(buildDocument(docId, content, metadata));
             indexWriter.commit();
             searcherManager.maybeRefresh();
             log.debug("BM25添加文档: docId={}", docId);
@@ -155,13 +174,19 @@ public class BM25SearchService implements IBM25SearchService {
 
     @Override
     public void addDocuments(Map<String, String> documents) {
+        addDocuments(documents, Collections.emptyMap());
+    }
+
+    @Override
+    public void addDocuments(Map<String, String> documents, Map<String, Map<String, Object>> metadataByDocId) {
         lock.writeLock().lock();
         try {
             for (Map.Entry<String, String> entry : documents.entrySet()) {
-                Document doc = new Document();
-                doc.add(new TextField(FIELD_ID, entry.getKey(), Field.Store.YES));
-                doc.add(new TextField(FIELD_CONTENT, entry.getValue(), Field.Store.YES));
-                indexWriter.addDocument(doc);
+                indexWriter.addDocument(buildDocument(
+                        entry.getKey(),
+                        entry.getValue(),
+                        metadataByDocId.getOrDefault(entry.getKey(), Collections.emptyMap())
+                ));
             }
             indexWriter.commit();
             searcherManager.maybeRefresh();
@@ -175,9 +200,22 @@ public class BM25SearchService implements IBM25SearchService {
 
     @Override
     public void removeDocument(String docId) {
+        removeDocument(docId, null);
+    }
+
+    @Override
+    public void removeDocument(String docId, TenantScopeVO scope) {
         lock.writeLock().lock();
         try {
-            indexWriter.deleteDocuments(new Term(FIELD_ID, docId));
+            if (scope == null) {
+                indexWriter.deleteDocuments(new Term(FIELD_DOCUMENT_ID, docId));
+            } else {
+                BooleanQuery.Builder builder = new BooleanQuery.Builder();
+                builder.add(new TermQuery(new Term(FIELD_DOCUMENT_ID, docId)), BooleanClause.Occur.MUST);
+                builder.add(new TermQuery(new Term(FIELD_TENANT_ID, scope.getTenantId())), BooleanClause.Occur.MUST);
+                builder.add(new TermQuery(new Term(FIELD_OWNER_USER_ID, scope.getOwnerUserId())), BooleanClause.Occur.MUST);
+                indexWriter.deleteDocuments(builder.build());
+            }
             indexWriter.commit();
             searcherManager.maybeRefresh();
             log.debug("BM25删除文档: docId={}", docId);
@@ -210,6 +248,36 @@ public class BM25SearchService implements IBM25SearchService {
         } finally {
             lock.readLock().unlock();
         }
+    }
+
+    private Query buildScopedQuery(Query baseQuery, TenantScopeVO scope) {
+        if (scope == null) {
+            return baseQuery;
+        }
+        BooleanQuery.Builder builder = new BooleanQuery.Builder();
+        builder.add(baseQuery, BooleanClause.Occur.MUST);
+        builder.add(new TermQuery(new Term(FIELD_TENANT_ID, scope.getTenantId())), BooleanClause.Occur.MUST);
+        builder.add(new TermQuery(new Term(FIELD_OWNER_USER_ID, scope.getOwnerUserId())), BooleanClause.Occur.MUST);
+        return builder.build();
+    }
+
+    private Document buildDocument(String docId, String content, Map<String, Object> metadata) {
+        Document doc = new Document();
+        doc.add(new StringField(FIELD_ID, docId, Field.Store.YES));
+        doc.add(new TextField(FIELD_CONTENT, content, Field.Store.YES));
+        Object documentId = metadata.get("documentId");
+        if (documentId != null) {
+            doc.add(new StringField(FIELD_DOCUMENT_ID, String.valueOf(documentId), Field.Store.YES));
+        }
+        Object tenantId = metadata.get("tenantId");
+        if (tenantId != null) {
+            doc.add(new StringField(FIELD_TENANT_ID, String.valueOf(tenantId), Field.Store.YES));
+        }
+        Object ownerUserId = metadata.get("ownerUserId");
+        if (ownerUserId != null) {
+            doc.add(new StringField(FIELD_OWNER_USER_ID, String.valueOf(ownerUserId), Field.Store.YES));
+        }
+        return doc;
     }
 
 }

@@ -1,5 +1,6 @@
 package cn.chyuan.ai.domain.rag.adapter.repository;
 
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.rag.model.entity.DocumentChunkEntity;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
 
@@ -32,6 +33,10 @@ public interface IVectorStoreRepository {
      * @return 检索结果列表，按相似度降序排列
      */
     List<VectorSearchResultVO> search(float[] queryVector, int topK);
+
+    List<VectorSearchResultVO> search(float[] queryVector, int topK, TenantScopeVO scope);
+
+    void deleteByDocumentId(String documentId, TenantScopeVO scope);
 
     /**
      * 健康检查 — 检查向量数据库连接是否正常

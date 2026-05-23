@@ -1,5 +1,6 @@
 package cn.chyuan.ai.infrastructure.gateway.retrieval;
 
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import cn.chyuan.ai.domain.rag.adapter.repository.IVectorStoreRepository;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
@@ -71,20 +72,30 @@ public class HybridSearchService implements IHybridSearchService {
 
     @Override
     public List<VectorSearchResultVO> search(String query, int topK) {
-        return search(query, topK, defaultVectorWeight, defaultBm25Weight);
+        return search(query, topK, defaultVectorWeight, defaultBm25Weight, null);
+    }
+
+    @Override
+    public List<VectorSearchResultVO> search(String query, int topK, TenantScopeVO scope) {
+        return search(query, topK, defaultVectorWeight, defaultBm25Weight, scope);
     }
 
     @Override
     public List<VectorSearchResultVO> search(String query, int topK, double vectorWeight, double bm25Weight) {
+        return search(query, topK, vectorWeight, bm25Weight, null);
+    }
+
+    @Override
+    public List<VectorSearchResultVO> search(String query, int topK, double vectorWeight, double bm25Weight, TenantScopeVO scope) {
         log.info("混合检索: query={}, topK={}, vectorWeight={}, bm25Weight={}",
                 query, topK, vectorWeight, bm25Weight);
 
         // 1. 向量检索
-        List<VectorSearchResultVO> vectorResults = vectorSearch(query, vectorTopK);
+        List<VectorSearchResultVO> vectorResults = vectorSearch(query, vectorTopK, scope);
         log.debug("向量检索结果: count={}", vectorResults.size());
 
         // 2. BM25检索
-        List<VectorSearchResultVO> bm25Results = bm25Search(query, bm25TopK);
+        List<VectorSearchResultVO> bm25Results = bm25Search(query, bm25TopK, scope);
         log.debug("BM25检索结果: count={}", bm25Results.size());
 
         // 3. 融合结果
@@ -108,9 +119,14 @@ public class HybridSearchService implements IHybridSearchService {
 
     @Override
     public List<VectorSearchResultVO> vectorSearch(String query, int topK) {
+        return vectorSearch(query, topK, null);
+    }
+
+    @Override
+    public List<VectorSearchResultVO> vectorSearch(String query, int topK, TenantScopeVO scope) {
         try {
             float[] queryVector = embeddingService.embed(query);
-            List<VectorSearchResultVO> results = vectorStoreRepository.search(queryVector, topK);
+            List<VectorSearchResultVO> results = vectorStoreRepository.search(queryVector, topK, scope);
 
             // 标记检索类型
             for (VectorSearchResultVO result : results) {
@@ -129,8 +145,13 @@ public class HybridSearchService implements IHybridSearchService {
 
     @Override
     public List<VectorSearchResultVO> bm25Search(String query, int topK) {
+        return bm25Search(query, topK, null);
+    }
+
+    @Override
+    public List<VectorSearchResultVO> bm25Search(String query, int topK, TenantScopeVO scope) {
         try {
-            return bm25SearchService.search(query, topK);
+            return bm25SearchService.search(query, topK, scope);
         } catch (Exception e) {
             log.error("BM25检索失败: {}", e.getMessage());
             return new ArrayList<>();

@@ -1,5 +1,6 @@
 package cn.chyuan.ai.domain.rag.service;
 
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.rag.model.valobj.DocumentUploadCommand;
 import cn.chyuan.ai.domain.rag.model.valobj.SearchResultDetailVO;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
@@ -27,6 +28,8 @@ public interface IRagService {
      */
     void uploadDocument(DocumentUploadCommand command);
 
+    void deleteDocument(String documentId, TenantScopeVO scope);
+
     /**
      * 语义检索 — 根据自然语言查询搜索最相关的文档片段
      * <p>
@@ -37,6 +40,8 @@ public interface IRagService {
      * @return 检索结果列表，按相似度降序排列
      */
     List<VectorSearchResultVO> search(String query, int topK);
+
+    List<VectorSearchResultVO> search(String query, int topK, TenantScopeVO scope);
 
     /**
      * Milvus 健康检查
@@ -53,5 +58,7 @@ public interface IRagService {
      * @return 分组检索结果详情
      */
     SearchResultDetailVO searchWithDetails(String query, int topK);
+
+    SearchResultDetailVO searchWithDetails(String query, int topK, TenantScopeVO scope);
 
 }

@@ -1,5 +1,6 @@
 package cn.chyuan.ai.domain.rag.service;
 
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import cn.chyuan.ai.domain.rag.adapter.port.IDocumentParserFactory;
 import cn.chyuan.ai.domain.rag.adapter.repository.IDocumentMetadataRepository;
@@ -90,6 +91,10 @@ public class RagService implements IRagService {
 
         DocumentMetadataEntity metadata = DocumentMetadataEntity.builder()
                 .documentId(documentId)
+                .tenantId(command.getTenantId() != null ? command.getTenantId() : command.getUserId())
+                .ownerUserId(command.getUserId() != null ? command.getUserId() : "")
+                .visibility("private")
+                .deletedFlag(0)
                 .fileName(fileName)
                 .fileExtension(extension)
                 .fileSize(fileSize)
@@ -119,6 +124,10 @@ public class RagService implements IRagService {
                 return;
             }
 
+            for (DocumentChunkEntity chunk : chunks) {
+                enrichChunkMetadata(chunk, documentId, metadata);
+            }
+
             List<String> texts = chunks.stream().map(DocumentChunkEntity::getContent).collect(Collectors.toList());
             List<float[]> vectors = embeddingService.embedBatch(texts);
 
@@ -143,14 +152,28 @@ public class RagService implements IRagService {
     }
 
     @Override
+    public void deleteDocument(String documentId, TenantScopeVO scope) {
+        vectorStoreRepository.deleteByDocumentId(documentId, scope);
+        if (bm25SearchService != null) {
+            bm25SearchService.removeDocument(documentId, scope);
+        }
+        documentMetadataRepository.markDeletedByDocumentId(documentId, scope);
+    }
+
+    @Override
     public List<VectorSearchResultVO> search(String query, int topK) {
+        return search(query, topK, null);
+    }
+
+    @Override
+    public List<VectorSearchResultVO> search(String query, int topK, TenantScopeVO scope) {
         log.info("语义检索: query={}, topK={}", query, topK);
 
         // 1. 将查询文本嵌入为向量
         float[] queryVector = embeddingService.embed(query);
 
         // 2. 在 Milvus 中执行 L2 距离相似性检索
-        List<VectorSearchResultVO> results = vectorStoreRepository.search(queryVector, topK);
+        List<VectorSearchResultVO> results = vectorStoreRepository.search(queryVector, topK, scope);
 
         log.info("语义检索完成: resultCount={}", results.size());
         return results;
@@ -163,6 +186,11 @@ public class RagService implements IRagService {
 
     @Override
     public SearchResultDetailVO searchWithDetails(String query, int topK) {
+        return searchWithDetails(query, topK, null);
+    }
+
+    @Override
+    public SearchResultDetailVO searchWithDetails(String query, int topK, TenantScopeVO scope) {
         log.info("检索测试: query={}, topK={}", query, topK);
 
         List<VectorSearchResultVO> vectorResults = Collections.emptyList();
@@ -171,11 +199,11 @@ public class RagService implements IRagService {
 
         try {
             if (hybridSearchService != null && hybridSearchService.isAvailable()) {
-                vectorResults = hybridSearchService.vectorSearch(query, topK);
+                vectorResults = hybridSearchService.vectorSearch(query, topK, scope);
             } else if (vectorStoreRepository != null) {
                 List<float[]> queryVectors = embeddingService.embedBatch(Collections.singletonList(query));
                 if (!queryVectors.isEmpty()) {
-                    vectorResults = vectorStoreRepository.search(queryVectors.get(0), topK);
+                    vectorResults = vectorStoreRepository.search(queryVectors.get(0), topK, scope);
                 }
             }
         } catch (Exception e) {
@@ -184,7 +212,7 @@ public class RagService implements IRagService {
 
         try {
             if (bm25SearchService != null) {
-                bm25Results = bm25SearchService.search(query, topK);
+                bm25Results = bm25SearchService.search(query, topK, scope);
             }
         } catch (Exception e) {
             log.error("BM25检索失败: {}", e.getMessage());
@@ -192,7 +220,7 @@ public class RagService implements IRagService {
 
         try {
             if (hybridSearchService != null && hybridSearchService.isAvailable()) {
-                hybridResults = hybridSearchService.search(query, topK);
+                hybridResults = hybridSearchService.search(query, topK, scope);
             }
         } catch (Exception e) {
             log.error("混合检索失败: {}", e.getMessage());
@@ -387,6 +415,14 @@ public class RagService implements IRagService {
                 .content(content)
                 .metadata(metadata)
                 .build();
+    }
+
+    private void enrichChunkMetadata(DocumentChunkEntity chunk, String documentId, DocumentMetadataEntity metadataEntity) {
+        Map<String, Object> metadata = chunk.getMetadata();
+        metadata.put("documentId", documentId);
+        metadata.put("tenantId", metadataEntity.getTenantId());
+        metadata.put("ownerUserId", metadataEntity.getOwnerUserId());
+        metadata.put("visibility", metadataEntity.getVisibility());
     }
 
     /** 章节内部类 */

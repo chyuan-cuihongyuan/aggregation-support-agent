@@ -2,6 +2,7 @@ package cn.chyuan.ai.domain.agent.service.armory.matter.mcp.server;
 
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
 import cn.chyuan.ai.domain.rag.service.IRagService;
+import cn.chyuan.ai.domain.auth.support.RequestScopeContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
@@ -75,7 +76,7 @@ public class InternalDocsTools {
 
         try {
             // 调用 RAG 服务执行语义检索
-            List<VectorSearchResultVO> results = ragService.search(query, topK);
+            List<VectorSearchResultVO> results = ragService.search(query, topK, RequestScopeContext.get());
 
             // 构建返回结果
             Map<String, Object> response = new HashMap<>();

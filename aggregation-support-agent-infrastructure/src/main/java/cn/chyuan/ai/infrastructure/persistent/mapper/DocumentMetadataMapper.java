@@ -1,5 +1,6 @@
 package cn.chyuan.ai.infrastructure.persistent.mapper;
 
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.infrastructure.dao.po.DocumentMetadataPO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -10,9 +11,12 @@ import java.util.List;
 public interface DocumentMetadataMapper {
     void insert(DocumentMetadataPO record);
 
-    List<DocumentMetadataPO> queryByUserId(@Param("userId") String userId);
+    List<DocumentMetadataPO> queryByScope(@Param("scope") TenantScopeVO scope);
 
     DocumentMetadataPO queryByDocumentId(@Param("documentId") String documentId);
+
+    DocumentMetadataPO queryByDocumentIdAndScope(@Param("documentId") String documentId,
+                                                 @Param("scope") TenantScopeVO scope);
 
     void updateStatus(@Param("documentId") String documentId,
                       @Param("processingStatus") String processingStatus,
@@ -21,5 +25,6 @@ public interface DocumentMetadataMapper {
                       @Param("sectionCount") Integer sectionCount,
                       @Param("errorMessage") String errorMessage);
 
-    void deleteByDocumentId(@Param("documentId") String documentId);
+    void markDeletedByDocumentId(@Param("documentId") String documentId,
+                                 @Param("scope") TenantScopeVO scope);
 }

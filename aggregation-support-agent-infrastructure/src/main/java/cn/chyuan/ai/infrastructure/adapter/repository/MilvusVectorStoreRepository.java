@@ -1,5 +1,6 @@
 package cn.chyuan.ai.infrastructure.adapter.repository;
 
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.rag.adapter.repository.IVectorStoreRepository;
 import cn.chyuan.ai.domain.rag.model.entity.DocumentChunkEntity;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
@@ -19,6 +20,7 @@ import io.milvus.param.collection.FieldType;
 import io.milvus.param.collection.FlushParam;
 import io.milvus.param.collection.HasCollectionParam;
 import io.milvus.param.collection.LoadCollectionParam;
+import io.milvus.param.dml.DeleteParam;
 import io.milvus.param.dml.InsertParam;
 import io.milvus.param.dml.SearchParam;
 import io.milvus.param.index.CreateIndexParam;
@@ -237,6 +239,11 @@ public class MilvusVectorStoreRepository implements IVectorStoreRepository {
      */
     @Override
     public List<VectorSearchResultVO> search(float[] queryVector, int topK) {
+        return search(queryVector, topK, null);
+    }
+
+    @Override
+    public List<VectorSearchResultVO> search(float[] queryVector, int topK, TenantScopeVO scope) {
         String collectionName = milvusConfigProperties.getCollectionName();
         try {
             // 将 float[] 转换为 List<Float>
@@ -247,7 +254,7 @@ public class MilvusVectorStoreRepository implements IVectorStoreRepository {
             List<List<Float>> vectors = Collections.singletonList(queryVectorList);
 
             // 构建搜索参数
-            SearchParam searchParam = SearchParam.newBuilder()
+            SearchParam.Builder searchBuilder = SearchParam.newBuilder()
                     .withCollectionName(collectionName)
                     .withVectorFieldName(FIELD_VECTOR)
                     .withTopK(topK)
@@ -255,8 +262,11 @@ public class MilvusVectorStoreRepository implements IVectorStoreRepository {
                     .withVectors(vectors)
                     .withParams(SEARCH_PARAMS)
                     .addOutField(FIELD_CONTENT)
-                    .addOutField(FIELD_METADATA)
-                    .build();
+                    .addOutField(FIELD_METADATA);
+            if (scope != null) {
+                searchBuilder.withExpr(buildScopeExpr(scope));
+            }
+            SearchParam searchParam = searchBuilder.build();
 
             // 执行搜索
             R<SearchResults> searchResult = milvusServiceClient.search(searchParam);
@@ -307,6 +317,28 @@ public class MilvusVectorStoreRepository implements IVectorStoreRepository {
         }
     }
 
+    @Override
+    public void deleteByDocumentId(String documentId, TenantScopeVO scope) {
+        String collectionName = milvusConfigProperties.getCollectionName();
+        try {
+            String expr = buildDocumentExpr(documentId, scope);
+            R<MutationResult> result = milvusServiceClient.delete(DeleteParam.newBuilder()
+                    .withCollectionName(collectionName)
+                    .withExpr(expr)
+                    .build());
+            if (result.getStatus() != R.Status.Success.getCode()) {
+                throw new RuntimeException("Milvus删除失败: " + result.getMessage());
+            }
+            milvusServiceClient.flush(FlushParam.newBuilder()
+                    .addCollectionName(collectionName)
+                    .build());
+            log.info("Milvus文档向量删除成功: documentId={}", documentId);
+        } catch (Exception e) {
+            log.error("Milvus文档向量删除失败: documentId={}", documentId, e);
+            throw new RuntimeException("Milvus文档向量删除失败", e);
+        }
+    }
+
     /**
      * 健康检查 — 检查 Milvus 向量数据库连接是否正常
      * <p>
@@ -354,6 +386,23 @@ public class MilvusVectorStoreRepository implements IVectorStoreRepository {
         } else {
             log.info("Milvus 集合已加载到内存: {}", collectionName);
         }
+    }
+
+    private String buildScopeExpr(TenantScopeVO scope) {
+        return "metadata[\"tenantId\"] == \"" + escapeExprValue(scope.getTenantId()) + "\""
+                + " && metadata[\"ownerUserId\"] == \"" + escapeExprValue(scope.getOwnerUserId()) + "\"";
+    }
+
+    private String buildDocumentExpr(String documentId, TenantScopeVO scope) {
+        String expr = "metadata[\"documentId\"] == \"" + escapeExprValue(documentId) + "\"";
+        if (scope != null) {
+            expr = expr + " && " + buildScopeExpr(scope);
+        }
+        return expr;
+    }
+
+    private String escapeExprValue(String value) {
+        return value == null ? "" : value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
 }

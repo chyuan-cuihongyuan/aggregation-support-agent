@@ -5,6 +5,8 @@
     <resultMap id="DocumentMetadataMap" type="cn.chyuan.ai.infrastructure.dao.po.DocumentMetadataPO">
         <id column="id" property="id"/>
         <result column="document_id" property="documentId"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="owner_user_id" property="ownerUserId"/>
         <result column="file_name" property="fileName"/>
         <result column="file_extension" property="fileExtension"/>
         <result column="file_size" property="fileSize"/>
@@ -14,6 +16,8 @@
         <result column="section_count" property="sectionCount"/>
         <result column="processing_status" property="processingStatus"/>
         <result column="error_message" property="errorMessage"/>
+        <result column="visibility" property="visibility"/>
+        <result column="deleted_flag" property="deletedFlag"/>
         <result column="user_id" property="userId"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
@@ -21,23 +25,34 @@
 
     <insert id="insert" parameterType="cn.chyuan.ai.infrastructure.dao.po.DocumentMetadataPO"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO document_metadata (document_id, file_name, file_extension, file_size, mime_type,
+        INSERT INTO document_metadata (document_id, tenant_id, owner_user_id, file_name, file_extension, file_size, mime_type,
                                        total_chars, total_chunks, section_count, processing_status,
-                                       error_message, user_id, create_time, update_time)
-        VALUES (#{documentId}, #{fileName}, #{fileExtension}, #{fileSize}, #{mimeType},
+                                       error_message, visibility, deleted_flag, user_id, create_time, update_time)
+        VALUES (#{documentId}, #{tenantId}, #{ownerUserId}, #{fileName}, #{fileExtension}, #{fileSize}, #{mimeType},
                 #{totalChars}, #{totalChunks}, #{sectionCount}, #{processingStatus},
-                #{errorMessage}, #{userId}, #{createTime}, #{updateTime})
+                #{errorMessage}, #{visibility}, #{deletedFlag}, #{userId}, #{createTime}, #{updateTime})
     </insert>
 
-    <select id="queryByUserId" resultMap="DocumentMetadataMap">
+    <select id="queryByScope" resultMap="DocumentMetadataMap">
         SELECT * FROM document_metadata
-        WHERE user_id = #{userId}
+        WHERE deleted_flag = 0
+          AND tenant_id = #{scope.tenantId}
+          AND owner_user_id = #{scope.ownerUserId}
         ORDER BY create_time DESC
     </select>
 
     <select id="queryByDocumentId" resultMap="DocumentMetadataMap">
         SELECT * FROM document_metadata
         WHERE document_id = #{documentId}
+          AND deleted_flag = 0
+    </select>
+
+    <select id="queryByDocumentIdAndScope" resultMap="DocumentMetadataMap">
+        SELECT * FROM document_metadata
+        WHERE document_id = #{documentId}
+          AND deleted_flag = 0
+          AND tenant_id = #{scope.tenantId}
+          AND owner_user_id = #{scope.ownerUserId}
     </select>
 
     <update id="updateStatus">
@@ -51,9 +66,14 @@
         WHERE document_id = #{documentId}
     </update>
 
-    <delete id="deleteByDocumentId">
-        DELETE FROM document_metadata
+    <update id="markDeletedByDocumentId">
+        UPDATE document_metadata
+        SET deleted_flag = 1,
+            update_time = NOW()
         WHERE document_id = #{documentId}
-    </delete>
+          AND tenant_id = #{scope.tenantId}
+          AND owner_user_id = #{scope.ownerUserId}
+          AND deleted_flag = 0
+    </update>
 
 </mapper>

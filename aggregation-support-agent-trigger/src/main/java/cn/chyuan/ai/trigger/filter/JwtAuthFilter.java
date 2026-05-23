@@ -1,6 +1,8 @@
 package cn.chyuan.ai.trigger.filter;
 
 import cn.chyuan.ai.domain.auth.service.TokenService;
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
+import cn.chyuan.ai.domain.auth.support.RequestScopeContext;
 import io.jsonwebtoken.Claims;
 import jakarta.annotation.Resource;
 import jakarta.servlet.FilterChain;
@@ -65,13 +67,19 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         // 解析用户信息放入 Request Attribute
         Claims claims = tokenService.parseToken(token);
         if (claims != null) {
-            request.setAttribute(ATTR_USER_ID, Long.valueOf(claims.getSubject()));
+            Long userId = Long.valueOf(claims.getSubject());
+            request.setAttribute(ATTR_USER_ID, userId);
             request.setAttribute(ATTR_USERNAME, claims.get("username", String.class));
             request.setAttribute(ATTR_ROLE, claims.get("role", String.class));
             request.setAttribute(ATTR_AUTH_TOKEN, token);
+            RequestScopeContext.set(TenantScopeVO.singleUser(String.valueOf(userId)));
         }
 
-        filterChain.doFilter(request, response);
+        try {
+            filterChain.doFilter(request, response);
+        } finally {
+            RequestScopeContext.clear();
+        }
     }
 
     private String extractToken(HttpServletRequest request) {

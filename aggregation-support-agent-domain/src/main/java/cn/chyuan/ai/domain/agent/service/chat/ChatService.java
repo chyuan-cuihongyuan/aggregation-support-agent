@@ -1,6 +1,9 @@
 package cn.chyuan.ai.domain.agent.service.chat;
 
+import cn.chyuan.ai.domain.agent.adapter.repository.IChatHistoryRepository;
 import cn.chyuan.ai.domain.agent.model.entity.ChatCommandEntity;
+import cn.chyuan.ai.domain.agent.model.entity.ChatSessionEntity;
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.chyuan.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import cn.chyuan.ai.domain.agent.model.valobj.properties.AiAgentAutoConfigProperties;
@@ -35,6 +38,9 @@ public class ChatService implements IChatService {
 
     @Resource
     private AiAgentAutoConfigProperties aiAgentAutoConfigProperties;
+
+    @Resource
+    private IChatHistoryRepository chatHistoryRepository;
 
     private final Cache<String, String> userSessions = CacheBuilder.newBuilder()
             .maximumSize(10000)
@@ -77,6 +83,13 @@ public class ChatService implements IChatService {
             return userSessions.get(sessionKey, () -> {
                 Session session = runner.sessionService().createSession(appName, userId)
                         .blockingGet();
+                chatHistoryRepository.saveSession(ChatSessionEntity.builder()
+                        .sessionId(session.id())
+                        .agentId(agentId)
+                        .tenantId(userId)
+                        .ownerUserId(userId)
+                        .traceId("")
+                        .build());
                 return session.id();
             });
         } catch (Exception e) {
@@ -106,6 +119,7 @@ public class ChatService implements IChatService {
         if (agentId == null || agentId.isBlank()) {
             throw new AppException(ResponseCode.E0001.getCode(), "agentId 不能为空");
         }
+        ensureSessionOwner(sessionId, agentId, userId);
 
         AiAgentRegisterVO aiAgentRegisterVO = defaultArmoryFactory.getAiAgentRegisterVO(agentId);
 
@@ -129,6 +143,7 @@ public class ChatService implements IChatService {
         if (agentId == null || agentId.isBlank()) {
             throw new AppException(ResponseCode.E0001.getCode(), "agentId 不能为空");
         }
+        ensureSessionOwner(sessionId, agentId, userId);
 
         AiAgentRegisterVO aiAgentRegisterVO = defaultArmoryFactory.getAiAgentRegisterVO(agentId);
 
@@ -192,6 +207,19 @@ public class ChatService implements IChatService {
         events.blockingForEach(event -> outputs.add(event.stringifyContent()));
 
         return outputs;
+    }
+
+    private void ensureSessionOwner(String sessionId, String agentId, String userId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return;
+        }
+        ChatSessionEntity sessionEntity = chatHistoryRepository.querySession(sessionId, TenantScopeVO.singleUser(userId));
+        if (sessionEntity == null) {
+            throw new AppException(ResponseCode.AUTH_PERMISSION_DENIED.getCode(), "会话不存在或无权访问");
+        }
+        if (!agentId.equals(sessionEntity.getAgentId())) {
+            throw new AppException(ResponseCode.AUTH_PERMISSION_DENIED.getCode(), "会话与智能体不匹配");
+        }
     }
 
 }

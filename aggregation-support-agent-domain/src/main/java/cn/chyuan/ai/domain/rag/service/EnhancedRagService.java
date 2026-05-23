@@ -1,9 +1,12 @@
 package cn.chyuan.ai.domain.rag.service;
 
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import cn.chyuan.ai.domain.rag.adapter.port.IDocumentParserFactory;
+import cn.chyuan.ai.domain.rag.adapter.repository.IDocumentMetadataRepository;
 import cn.chyuan.ai.domain.rag.adapter.repository.IVectorStoreRepository;
 import cn.chyuan.ai.domain.rag.model.entity.DocumentChunkEntity;
+import cn.chyuan.ai.domain.rag.model.entity.DocumentMetadataEntity;
 import cn.chyuan.ai.domain.rag.model.valobj.DocumentUploadCommand;
 import cn.chyuan.ai.domain.rag.model.valobj.ParsedDocumentVO;
 import cn.chyuan.ai.domain.rag.model.valobj.SearchResultDetailVO;
@@ -28,6 +31,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -102,6 +107,9 @@ public class EnhancedRagService implements IRagService {
     private IDocumentParserFactory documentParserFactory;
 
     @Resource
+    private IDocumentMetadataRepository documentMetadataRepository;
+
+    @Resource
     private SemanticChunker semanticChunker;
 
     @Resource
@@ -127,6 +135,26 @@ public class EnhancedRagService implements IRagService {
 
     @Override
     public void uploadDocument(DocumentUploadCommand command) {
+        String documentId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        long fileSize = command.getRawContent() != null ? command.getRawContent().length
+                : (command.getContent() != null ? command.getContent().length() : 0L);
+        String extension = resolveExtension(command.getFileName());
+
+        DocumentMetadataEntity metadata = DocumentMetadataEntity.builder()
+                .documentId(documentId)
+                .tenantId(command.getTenantId() != null ? command.getTenantId() : command.getUserId())
+                .ownerUserId(command.getUserId() != null ? command.getUserId() : "")
+                .visibility("private")
+                .deletedFlag(0)
+                .fileName(command.getFileName())
+                .fileExtension(extension)
+                .fileSize(fileSize)
+                .mimeType(command.getMimeType())
+                .processingStatus("processing")
+                .userId(command.getUserId() != null ? command.getUserId() : "")
+                .build();
+        documentMetadataRepository.save(metadata);
+
         // 优先使用 rawContent（支持 PDF/Word/HTML 等二进制格式），兼容旧版本使用 content
         byte[] documentBytes;
         if (command.getRawContent() != null) {
@@ -164,7 +192,12 @@ public class EnhancedRagService implements IRagService {
 
         if (chunks.isEmpty()) {
             log.warn("文档分块结果为空，跳过处理: {}", command.getFileName());
+            documentMetadataRepository.updateStatus(documentId, "success", 0, 0, 0, "文档分块结果为空");
             return;
+        }
+
+        for (DocumentChunkEntity chunk : chunks) {
+            enrichChunkMetadata(chunk, documentId, metadata);
         }
 
         // 3. 批量嵌入：将所有分块文本转换为向量
@@ -186,18 +219,50 @@ public class EnhancedRagService implements IRagService {
             addToBM25Index(chunks);
         }
 
+        int totalChars = parsedDocument.getTextContent() != null ? parsedDocument.getTextContent().length() : 0;
+        int sectionCount = parsedDocument.getSections() != null ? parsedDocument.getSections().size() : 0;
+        documentMetadataRepository.updateStatus(documentId, "success", chunks.size(), totalChars, sectionCount, "");
         log.info("文档上传处理完成: fileName={}, chunkCount={}", command.getFileName(), chunks.size());
     }
 
     @Override
+    public void deleteDocument(String documentId, TenantScopeVO scope) {
+        vectorStoreRepository.deleteByDocumentId(documentId, scope);
+        if (bm25Enabled) {
+            bm25SearchService.removeDocument(documentId, scope);
+        }
+        documentMetadataRepository.markDeletedByDocumentId(documentId, scope);
+    }
+
+    private String resolveExtension(String fileName) {
+        if (fileName == null || !fileName.contains(".")) {
+            return "";
+        }
+        return fileName.substring(fileName.lastIndexOf(".") + 1).toLowerCase();
+    }
+
+    private void enrichChunkMetadata(DocumentChunkEntity chunk, String documentId, DocumentMetadataEntity metadataEntity) {
+        Map<String, Object> metadata = chunk.getMetadata();
+        metadata.put("documentId", documentId);
+        metadata.put("tenantId", metadataEntity.getTenantId());
+        metadata.put("ownerUserId", metadataEntity.getOwnerUserId());
+        metadata.put("visibility", metadataEntity.getVisibility());
+    }
+
+    @Override
     public List<VectorSearchResultVO> search(String query, int topK) {
+        return search(query, topK, null);
+    }
+
+    @Override
+    public List<VectorSearchResultVO> search(String query, int topK, TenantScopeVO scope) {
         log.info("开始检索: query={}, topK={}", query, topK);
 
         // 第二层：查询优化
         String optimizedQuery = optimizeQuery(query);
 
         // 第三层：多路召回
-        List<VectorSearchResultVO> results = multiPathRetrieval(optimizedQuery, topK);
+        List<VectorSearchResultVO> results = multiPathRetrieval(optimizedQuery, topK, scope);
 
         // 第四层：Rerank精排
         if (rerankEnabled && rerankService != null && rerankService.isAvailable()) {
@@ -221,6 +286,11 @@ public class EnhancedRagService implements IRagService {
 
     @Override
     public SearchResultDetailVO searchWithDetails(String query, int topK) {
+        return searchWithDetails(query, topK, null);
+    }
+
+    @Override
+    public SearchResultDetailVO searchWithDetails(String query, int topK, TenantScopeVO scope) {
         log.info("检索测试(EnhancedRagService): query={}, topK={}", query, topK);
 
         List<VectorSearchResultVO> vectorResults = new ArrayList<>();
@@ -228,14 +298,14 @@ public class EnhancedRagService implements IRagService {
         List<VectorSearchResultVO> hybridResults;
 
         try {
-            vectorResults = vectorRetrieval(query, topK);
+            vectorResults = vectorRetrieval(query, topK, scope);
         } catch (Exception e) {
             log.error("向量检索失败: {}", e.getMessage());
         }
 
         try {
             if (bm25Enabled) {
-                bm25Results = bm25Retrieval(query, topK);
+                bm25Results = bm25Retrieval(query, topK, scope);
             }
         } catch (Exception e) {
             log.error("BM25检索失败: {}", e.getMessage());
@@ -296,13 +366,13 @@ public class EnhancedRagService implements IRagService {
     /**
      * 多路召回（第三层） — 向量检索和BM25检索并行执行
      */
-    private List<VectorSearchResultVO> multiPathRetrieval(String query, int topK) {
+    private List<VectorSearchResultVO> multiPathRetrieval(String query, int topK, TenantScopeVO scope) {
         // 并行执行向量检索和BM25检索
         CompletableFuture<List<VectorSearchResultVO>> vectorFuture =
-                CompletableFuture.supplyAsync(() -> vectorRetrieval(query, vectorTopK));
+                CompletableFuture.supplyAsync(() -> vectorRetrieval(query, vectorTopK, scope));
 
         CompletableFuture<List<VectorSearchResultVO>> bm25Future = bm25Enabled
-                ? CompletableFuture.supplyAsync(() -> bm25Retrieval(query, bm25TopK))
+                ? CompletableFuture.supplyAsync(() -> bm25Retrieval(query, bm25TopK, scope))
                 : CompletableFuture.completedFuture(Collections.emptyList());
 
         CompletableFuture.allOf(vectorFuture, bm25Future).join();
@@ -321,7 +391,7 @@ public class EnhancedRagService implements IRagService {
 
         // Multi-Query扩展检索（如果启用）
         if (multiQueryEnabled) {
-            List<VectorSearchResultVO> multiQueryResults = multiQueryRetrieval(query, vectorTopK);
+            List<VectorSearchResultVO> multiQueryResults = multiQueryRetrieval(query, vectorTopK, scope);
             if (!multiQueryResults.isEmpty()) {
                 allResults.add(multiQueryResults);
             }
@@ -339,10 +409,10 @@ public class EnhancedRagService implements IRagService {
     /**
      * 向量检索
      */
-    private List<VectorSearchResultVO> vectorRetrieval(String query, int topK) {
+    private List<VectorSearchResultVO> vectorRetrieval(String query, int topK, TenantScopeVO scope) {
         try {
             float[] queryVector = embeddingService.embed(query);
-            List<VectorSearchResultVO> results = vectorStoreRepository.search(queryVector, topK);
+            List<VectorSearchResultVO> results = vectorStoreRepository.search(queryVector, topK, scope);
 
             // 标记检索类型
             for (VectorSearchResultVO result : results) {
@@ -359,9 +429,9 @@ public class EnhancedRagService implements IRagService {
     /**
      * BM25检索
      */
-    private List<VectorSearchResultVO> bm25Retrieval(String query, int topK) {
+    private List<VectorSearchResultVO> bm25Retrieval(String query, int topK, TenantScopeVO scope) {
         try {
-            return bm25SearchService.search(query, topK);
+            return bm25SearchService.search(query, topK, scope);
         } catch (Exception e) {
             log.error("BM25检索失败: {}", e.getMessage());
             return new ArrayList<>();
@@ -371,14 +441,14 @@ public class EnhancedRagService implements IRagService {
     /**
      * Multi-Query扩展检索 — 所有扩展查询并行执行
      */
-    private List<VectorSearchResultVO> multiQueryRetrieval(String originalQuery, int topK) {
+    private List<VectorSearchResultVO> multiQueryRetrieval(String originalQuery, int topK, TenantScopeVO scope) {
         try {
             // 扩展查询
             List<String> expandedQueries = queryOptimizationService.expandQuery(originalQuery, multiQueryCount);
 
             // 并行执行所有扩展查询的向量检索
             List<CompletableFuture<List<VectorSearchResultVO>>> futures = expandedQueries.stream()
-                    .map(q -> CompletableFuture.supplyAsync(() -> vectorRetrieval(q, topK / expandedQueries.size() + 1)))
+                    .map(q -> CompletableFuture.supplyAsync(() -> vectorRetrieval(q, topK / expandedQueries.size() + 1, scope)))
                     .collect(Collectors.toList());
 
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
@@ -401,10 +471,12 @@ public class EnhancedRagService implements IRagService {
     private void addToBM25Index(List<DocumentChunkEntity> chunks) {
         try {
             java.util.Map<String, String> documents = new java.util.HashMap<>();
+            java.util.Map<String, java.util.Map<String, Object>> metadataByDocId = new java.util.HashMap<>();
             for (DocumentChunkEntity chunk : chunks) {
                 documents.put(chunk.getId(), chunk.getContent());
+                metadataByDocId.put(chunk.getId(), chunk.getMetadata());
             }
-            bm25SearchService.addDocuments(documents);
+            bm25SearchService.addDocuments(documents, metadataByDocId);
             log.info("添加到BM25索引: count={}", documents.size());
         } catch (Exception e) {
             log.warn("添加到BM25索引失败: {}", e.getMessage());
@@ -432,7 +504,7 @@ public class EnhancedRagService implements IRagService {
         // 2. 对每个查询进行向量检索
         List<List<VectorSearchResultVO>> allResults = new ArrayList<>();
         for (String expandedQuery : expandedQueries) {
-            List<VectorSearchResultVO> results = vectorRetrieval(expandedQuery, vectorTopK);
+            List<VectorSearchResultVO> results = vectorRetrieval(expandedQuery, vectorTopK, null);
             allResults.add(results);
         }
 
@@ -458,7 +530,7 @@ public class EnhancedRagService implements IRagService {
         log.info("HyDE假设文档生成完成: length={}", hypotheticalDoc.length());
 
         // 2. 用假设文档的向量检索
-        List<VectorSearchResultVO> results = vectorRetrieval(hypotheticalDoc, topK);
+        List<VectorSearchResultVO> results = vectorRetrieval(hypotheticalDoc, topK, null);
 
         // 3. Rerank精排（使用原始query）
         if (rerankEnabled && rerankService != null && rerankService.isAvailable()) {

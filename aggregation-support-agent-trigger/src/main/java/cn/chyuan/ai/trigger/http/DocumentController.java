@@ -2,13 +2,13 @@ package cn.chyuan.ai.trigger.http;
 
 import cn.chyuan.ai.api.dto.*;
 import cn.chyuan.ai.api.response.Response;
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.rag.adapter.repository.IDocumentMetadataRepository;
 import cn.chyuan.ai.domain.rag.model.entity.DocumentMetadataEntity;
 import cn.chyuan.ai.domain.rag.model.valobj.SearchResultDetailVO;
 import cn.chyuan.ai.domain.rag.service.IRagService;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.trigger.support.CurrentUserSupport;
-import cn.chyuan.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -32,8 +32,8 @@ public class DocumentController {
     @GetMapping
     public Response<List<DocumentDTO>> listDocuments(HttpServletRequest request) {
         try {
-            String userId = CurrentUserSupport.requireUserIdString(request);
-            List<DocumentMetadataEntity> entities = documentMetadataRepository.queryByUserId(userId);
+            TenantScopeVO scope = currentScope(request);
+            List<DocumentMetadataEntity> entities = documentMetadataRepository.queryByScope(scope);
             List<DocumentDTO> dtos = entities.stream().map(this::toDTO).collect(Collectors.toList());
             return Response.<List<DocumentDTO>>builder()
                     .code(ResponseCode.SUCCESS.getCode())
@@ -52,14 +52,13 @@ public class DocumentController {
     @GetMapping("/{documentId}")
     public Response<DocumentDTO> getDocument(HttpServletRequest request, @PathVariable String documentId) {
         try {
-            DocumentMetadataEntity entity = documentMetadataRepository.queryByDocumentId(documentId);
+            DocumentMetadataEntity entity = documentMetadataRepository.queryByDocumentId(documentId, currentScope(request));
             if (entity == null) {
                 return Response.<DocumentDTO>builder()
                         .code(ResponseCode.ILLEGAL_PARAMETER.getCode())
                         .info("文档不存在")
                         .build();
             }
-            ensureDocumentOwner(request, entity);
             return Response.<DocumentDTO>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
@@ -77,16 +76,20 @@ public class DocumentController {
     @DeleteMapping("/{documentId}")
     public Response<Void> deleteDocument(HttpServletRequest request, @PathVariable String documentId) {
         try {
-            DocumentMetadataEntity entity = documentMetadataRepository.queryByDocumentId(documentId);
+            TenantScopeVO scope = currentScope(request);
+            DocumentMetadataEntity entity = documentMetadataRepository.queryByDocumentId(documentId, scope);
             if (entity == null) {
                 return Response.<Void>builder()
                         .code(ResponseCode.ILLEGAL_PARAMETER.getCode())
                         .info("文档不存在")
                         .build();
             }
-            ensureDocumentOwner(request, entity);
-            documentMetadataRepository.deleteByDocumentId(documentId);
-            log.info("文档已删除: documentId={}, userId={}", documentId, entity.getUserId());
+            if (ragService != null) {
+                ragService.deleteDocument(documentId, scope);
+            } else {
+                documentMetadataRepository.markDeletedByDocumentId(documentId, scope);
+            }
+            log.info("文档已软删除: documentId={}, userId={}", documentId, entity.getUserId());
             return Response.<Void>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
@@ -101,7 +104,8 @@ public class DocumentController {
     }
 
     @PostMapping("/search")
-    public Response<SearchTestResultDTO> searchTest(@RequestBody SearchTestRequestDTO request) {
+    public Response<SearchTestResultDTO> searchTest(HttpServletRequest servletRequest,
+                                                    @RequestBody SearchTestRequestDTO request) {
         try {
             if (ragService == null) {
                 return Response.<SearchTestResultDTO>builder()
@@ -110,7 +114,11 @@ public class DocumentController {
                         .build();
             }
 
-            SearchResultDetailVO detail = ragService.searchWithDetails(request.getQuery(), request.getTopK());
+            SearchResultDetailVO detail = ragService.searchWithDetails(
+                    request.getQuery(),
+                    request.getTopK(),
+                    currentScope(servletRequest)
+            );
 
             SearchTestResultDTO dto = new SearchTestResultDTO();
             dto.setQuery(detail.getQuery());
@@ -135,6 +143,9 @@ public class DocumentController {
     private DocumentDTO toDTO(DocumentMetadataEntity entity) {
         DocumentDTO dto = new DocumentDTO();
         dto.setDocumentId(entity.getDocumentId());
+        dto.setTenantId(entity.getTenantId());
+        dto.setOwnerUserId(entity.getOwnerUserId());
+        dto.setVisibility(entity.getVisibility());
         dto.setFileName(entity.getFileName());
         dto.setFileExtension(entity.getFileExtension());
         dto.setFileSize(entity.getFileSize());
@@ -162,10 +173,7 @@ public class DocumentController {
         }).collect(Collectors.toList());
     }
 
-    private void ensureDocumentOwner(HttpServletRequest request, DocumentMetadataEntity entity) {
-        String currentUserId = CurrentUserSupport.requireUserIdString(request);
-        if (!currentUserId.equals(entity.getUserId())) {
-            throw new AppException(ResponseCode.AUTH_PERMISSION_DENIED.getCode(), "无权访问该文档");
-        }
+    private TenantScopeVO currentScope(HttpServletRequest request) {
+        return TenantScopeVO.singleUser(CurrentUserSupport.requireUserIdString(request));
     }
 }

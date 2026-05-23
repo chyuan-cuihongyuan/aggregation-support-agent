@@ -4,41 +4,89 @@
 
     <resultMap id="ChatHistoryMap" type="cn.chyuan.ai.infrastructure.dao.po.ChatHistoryPO">
         <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="owner_user_id" property="ownerUserId"/>
         <result column="user_id" property="userId"/>
         <result column="agent_id" property="agentId"/>
         <result column="agent_name" property="agentName"/>
         <result column="session_id" property="sessionId"/>
         <result column="question" property="question"/>
         <result column="answer" property="answer"/>
+        <result column="trace_id" property="traceId"/>
+        <result column="prompt_tokens" property="promptTokens"/>
+        <result column="completion_tokens" property="completionTokens"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
     </resultMap>
 
     <insert id="insert" parameterType="cn.chyuan.ai.infrastructure.dao.po.ChatHistoryPO"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO chat_history (user_id, agent_id, agent_name, session_id, question, answer, create_time, update_time)
-        VALUES (#{userId}, #{agentId}, #{agentName}, #{sessionId}, #{question}, #{answer}, #{createTime}, #{updateTime})
+        INSERT INTO chat_history (tenant_id, owner_user_id, user_id, agent_id, agent_name, session_id, question, answer,
+                                  trace_id, prompt_tokens, completion_tokens, create_time, update_time)
+        VALUES (#{tenantId}, #{ownerUserId}, #{userId}, #{agentId}, #{agentName}, #{sessionId}, #{question}, #{answer},
+                #{traceId}, #{promptTokens}, #{completionTokens}, #{createTime}, #{updateTime})
     </insert>
 
-    <select id="queryByUserId" parameterType="java.lang.String" resultMap="ChatHistoryMap">
-        SELECT id, user_id, agent_id, agent_name, session_id, question, answer, create_time, update_time
+    <select id="queryByScope" resultMap="ChatHistoryMap">
+        SELECT id, tenant_id, owner_user_id, user_id, agent_id, agent_name, session_id, question, answer,
+               trace_id, prompt_tokens, completion_tokens, create_time, update_time
         FROM chat_history
-        WHERE user_id = #{userId}
+        WHERE tenant_id = #{scope.tenantId}
+          AND owner_user_id = #{scope.ownerUserId}
         ORDER BY create_time ASC
     </select>
 
     <select id="queryById" parameterType="java.lang.Long" resultMap="ChatHistoryMap">
-        SELECT id, user_id, agent_id, agent_name, session_id, question, answer, create_time, update_time
+        SELECT id, tenant_id, owner_user_id, user_id, agent_id, agent_name, session_id, question, answer,
+               trace_id, prompt_tokens, completion_tokens, create_time, update_time
         FROM chat_history
         WHERE id = #{id}
     </select>
 
-    <delete id="deleteByUserId" parameterType="java.lang.String">
-        DELETE FROM chat_history WHERE user_id = #{userId}
+    <select id="queryByIdAndScope" resultMap="ChatHistoryMap">
+        SELECT id, tenant_id, owner_user_id, user_id, agent_id, agent_name, session_id, question, answer,
+               trace_id, prompt_tokens, completion_tokens, create_time, update_time
+        FROM chat_history
+        WHERE id = #{id}
+          AND tenant_id = #{scope.tenantId}
+          AND owner_user_id = #{scope.ownerUserId}
+    </select>
+
+    <delete id="deleteByScope">
+        DELETE FROM chat_history
+        WHERE tenant_id = #{scope.tenantId}
+          AND owner_user_id = #{scope.ownerUserId}
     </delete>
 
     <delete id="deleteById" parameterType="java.lang.Long">
         DELETE FROM chat_history WHERE id = #{id}
     </delete>
+
+    <delete id="deleteByIdAndScope">
+        DELETE FROM chat_history
+        WHERE id = #{id}
+          AND tenant_id = #{scope.tenantId}
+          AND owner_user_id = #{scope.ownerUserId}
+    </delete>
+
+    <insert id="insertSession" parameterType="cn.chyuan.ai.infrastructure.dao.po.ChatSessionPO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO chat_session (session_id, agent_id, tenant_id, owner_user_id, trace_id, create_time, update_time)
+        VALUES (#{sessionId}, #{agentId}, #{tenantId}, #{ownerUserId}, #{traceId}, #{createTime}, #{updateTime})
+    </insert>
+
+    <select id="querySession" resultType="cn.chyuan.ai.infrastructure.dao.po.ChatSessionPO">
+        SELECT id, session_id, agent_id, tenant_id, owner_user_id, trace_id, create_time, update_time
+        FROM chat_session
+        WHERE session_id = #{sessionId}
+    </select>
+
+    <select id="querySessionByScope" resultType="cn.chyuan.ai.infrastructure.dao.po.ChatSessionPO">
+        SELECT id, session_id, agent_id, tenant_id, owner_user_id, trace_id, create_time, update_time
+        FROM chat_session
+        WHERE session_id = #{sessionId}
+          AND tenant_id = #{scope.tenantId}
+          AND owner_user_id = #{scope.ownerUserId}
+    </select>
 
 </mapper>

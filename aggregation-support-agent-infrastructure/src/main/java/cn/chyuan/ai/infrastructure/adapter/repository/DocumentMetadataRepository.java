@@ -1,5 +1,6 @@
 package cn.chyuan.ai.infrastructure.adapter.repository;
 
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.rag.adapter.repository.IDocumentMetadataRepository;
 import cn.chyuan.ai.domain.rag.model.entity.DocumentMetadataEntity;
 import cn.chyuan.ai.infrastructure.dao.po.DocumentMetadataPO;
@@ -22,6 +23,8 @@ public class DocumentMetadataRepository implements IDocumentMetadataRepository {
         Date now = new Date();
         DocumentMetadataPO po = DocumentMetadataPO.builder()
                 .documentId(entity.getDocumentId())
+                .tenantId(entity.getTenantId())
+                .ownerUserId(entity.getOwnerUserId())
                 .fileName(entity.getFileName())
                 .fileExtension(entity.getFileExtension())
                 .fileSize(entity.getFileSize())
@@ -31,6 +34,8 @@ public class DocumentMetadataRepository implements IDocumentMetadataRepository {
                 .sectionCount(entity.getSectionCount() != null ? entity.getSectionCount() : 0)
                 .processingStatus(entity.getProcessingStatus())
                 .errorMessage(entity.getErrorMessage() != null ? entity.getErrorMessage() : "")
+                .visibility(entity.getVisibility() != null ? entity.getVisibility() : "private")
+                .deletedFlag(entity.getDeletedFlag() != null ? entity.getDeletedFlag() : 0)
                 .userId(entity.getUserId())
                 .createTime(now)
                 .updateTime(now)
@@ -39,8 +44,8 @@ public class DocumentMetadataRepository implements IDocumentMetadataRepository {
     }
 
     @Override
-    public List<DocumentMetadataEntity> queryByUserId(String userId) {
-        List<DocumentMetadataPO> poList = documentMetadataMapper.queryByUserId(userId);
+    public List<DocumentMetadataEntity> queryByScope(TenantScopeVO scope) {
+        List<DocumentMetadataPO> poList = documentMetadataMapper.queryByScope(scope);
         return poList.stream().map(this::toEntity).collect(Collectors.toList());
     }
 
@@ -51,20 +56,28 @@ public class DocumentMetadataRepository implements IDocumentMetadataRepository {
     }
 
     @Override
+    public DocumentMetadataEntity queryByDocumentId(String documentId, TenantScopeVO scope) {
+        DocumentMetadataPO po = documentMetadataMapper.queryByDocumentIdAndScope(documentId, scope);
+        return po != null ? toEntity(po) : null;
+    }
+
+    @Override
     public void updateStatus(String documentId, String status, Integer totalChunks,
                              Integer totalChars, Integer sectionCount, String errorMessage) {
         documentMetadataMapper.updateStatus(documentId, status, totalChunks, totalChars, sectionCount, errorMessage);
     }
 
     @Override
-    public void deleteByDocumentId(String documentId) {
-        documentMetadataMapper.deleteByDocumentId(documentId);
+    public void markDeletedByDocumentId(String documentId, TenantScopeVO scope) {
+        documentMetadataMapper.markDeletedByDocumentId(documentId, scope);
     }
 
     private DocumentMetadataEntity toEntity(DocumentMetadataPO po) {
         return DocumentMetadataEntity.builder()
                 .id(po.getId())
                 .documentId(po.getDocumentId())
+                .tenantId(po.getTenantId())
+                .ownerUserId(po.getOwnerUserId())
                 .fileName(po.getFileName())
                 .fileExtension(po.getFileExtension())
                 .fileSize(po.getFileSize())
@@ -74,6 +87,8 @@ public class DocumentMetadataRepository implements IDocumentMetadataRepository {
                 .sectionCount(po.getSectionCount())
                 .processingStatus(po.getProcessingStatus())
                 .errorMessage(po.getErrorMessage())
+                .visibility(po.getVisibility())
+                .deletedFlag(po.getDeletedFlag())
                 .userId(po.getUserId())
                 .createTime(po.getCreateTime())
                 .updateTime(po.getUpdateTime())
