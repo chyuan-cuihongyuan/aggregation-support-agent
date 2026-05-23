@@ -7,6 +7,7 @@ import cn.chyuan.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.annotation.Resource;
 
@@ -23,6 +24,7 @@ public class AuthService implements IAuthService {
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public UserEntity register(String username, String password, String phone, String email, String nickname) {
         UserEntity existing = userRepository.queryByUsername(username);
         if (existing != null) {

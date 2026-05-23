@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.chyuan.ai.infrastructure.persistent.mapper.ExtractionTaskMapper">
+
+    <resultMap id="ExtractionTaskMap" type="cn.chyuan.ai.infrastructure.dao.po.ExtractionTaskPO">
+        <id column="task_id" property="taskId"/>
+        <result column="document_id" property="documentId"/>
+        <result column="status" property="status"/>
+        <result column="total_chunks" property="totalChunks"/>
+        <result column="processed_chunks" property="processedChunks"/>
+        <result column="extracted_entities" property="extractedEntities"/>
+        <result column="extracted_relations" property="extractedRelations"/>
+        <result column="error_message" property="errorMessage"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="cn.chyuan.ai.infrastructure.dao.po.ExtractionTaskPO">
+        INSERT INTO extraction_task (task_id, document_id, status, total_chunks, processed_chunks,
+                                     extracted_entities, extracted_relations, error_message, created_at, updated_at)
+        VALUES (#{taskId}, #{documentId}, #{status}, #{totalChunks}, #{processedChunks},
+                #{extractedEntities}, #{extractedRelations}, #{errorMessage}, #{createdAt}, #{updatedAt})
+    </insert>
+
+    <select id="queryByTaskId" parameterType="java.lang.String" resultMap="ExtractionTaskMap">
+        SELECT task_id, document_id, status, total_chunks, processed_chunks,
+               extracted_entities, extracted_relations, error_message, created_at, updated_at
+        FROM extraction_task
+        WHERE task_id = #{taskId}
+    </select>
+
+    <select id="queryByDocumentId" parameterType="java.lang.String" resultMap="ExtractionTaskMap">
+        SELECT task_id, document_id, status, total_chunks, processed_chunks,
+               extracted_entities, extracted_relations, error_message, created_at, updated_at
+        FROM extraction_task
+        WHERE document_id = #{documentId}
+        LIMIT 1
+    </select>
+
+    <update id="updateStatus">
+        UPDATE extraction_task
+        SET status = #{status},
+            processed_chunks = #{processedChunks},
+            extracted_entities = #{extractedEntities},
+            extracted_relations = #{extractedRelations},
+            error_message = #{errorMessage},
+            updated_at = #{updateTime}
+        WHERE task_id = #{taskId}
+    </update>
+
+</mapper>

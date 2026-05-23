@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__deepwiki__ask_question",
+      "Bash(xxd)",
+      "Bash(git show *)",
+      "Read(//tmp/**)",
+      "Bash(xargs -I {} sh -c 'echo \"=== {} ===\"; head -15 {}')",
+      "Bash(git rm *)",
+      "Bash(mvn dependency:resolve -pl on-call-agent-infrastructure -q)",
+      "Bash(mvn clean *)",
+      "Bash(java -version)",
+      "Bash(mvn -version)",
+      "Read(//d/JDK/**)",
+      "Read(//c/Program Files/**)",
+      "Bash(where java *)",
+      "Bash(git mv *)",
+      "Bash(mvn compile *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --msg-filter 'sed \"s/Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>/Co-Authored-By: chyuan <chyuan18894909019@163.com>/g\"' -- --all)",
+      "Read(//e/Chyuan/1.java/project/code/**)",
+      "Bash(npx create-next-app@latest aggregation-support-agent-web --typescript --tailwind --eslint --app --src-dir --no-turbopack --import-alias \"@/*\" --use-npm --yes)",
+      "Bash(timeout 10 npm run dev)",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(npm install *)",
+      "Bash(npx shadcn@latest init --yes --defaults)",
+      "Bash(npx shadcn@latest add button card tabs dialog select input textarea progress scroll-area separator badge dropdown-menu sheet tooltip)",
+      "Bash(npm run *)",
+      "Bash(find e:\\\\\\\\Chyuan\\\\\\\\1.java\\\\\\\\project\\\\\\\\code\\\\\\\\aggregation-support-agent -name \"*.java\" -type f)",
+      "Bash(npm list *)",
+      "Bash(git status *)",
+      "Bash(npx shadcn@latest add button card tabs dialog select input textarea progress scroll-area separator badge dropdown-menu sheet tooltip --yes --overwrite)",
+      "Skill(superpowers:systematic-debugging)",
+      "Skill(superpowers:systematic-debugging:*)",
+      "Bash(chmod +x *)",
+      "Bash(claude --version)",
+      "Bash(npm update *)",
+      "Bash(claude plugin *)"
+    ]
+  }
+}

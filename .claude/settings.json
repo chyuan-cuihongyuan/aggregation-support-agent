@@ -1,0 +1,65 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mvn *)",
+      "Bash(maven *)",
+      "Bash(java *)",
+      "Bash(javac *)",
+      "Skill(superpowers:systematic-debugging)",
+      "Skill(superpowers:test-driven-development)",
+      "Read(src/**/*.java)",
+      "Edit(src/**/*.java)",
+      "Write(src/**/*.java)",
+      "Grep(**/*.java)",
+      "Glob(src/**/*.java)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "command": "echo '=== 🟢 后端开发 Agent 已激活 ==='",
+        "description": "显示后端 Agent 激活提示"
+      },
+      {
+        "command": "test -f pom.xml && echo '✅ Java + Spring Boot + Maven 环境就绪'",
+        "description": "验证后端项目环境"
+      },
+      {
+        "command": "echo '🔧 端口: 8091 | 职责: API开发 + 业务逻辑 + 数据操作'",
+        "description": "显示后端 Agent 职责"
+      }
+    ]
+  },
+  "metadata": {
+    "agentName": "后端开发 Agent",
+    "agentType": "backend",
+    "techStack": ["Java 17+", "Spring Boot", "Maven", "MySQL", "MyBatis Plus"],
+    "responsibilities": [
+      "RESTful API 开发",
+      "业务逻辑实现",
+      "数据库操作和集成",
+      "流式响应处理 (SSE)",
+      "后端性能优化"
+    ],
+    "port": 8091,
+    "devCommand": "mvn spring-boot:run",
+    "buildCommand": "mvn clean package"
+  },
+  "environment": {
+    "SERVER_PORT": "8091",
+    "DATABASE_URL": "jdbc:mysql://localhost:3306/agent_db",
+    "GATEWAY_URL": "http://127.0.0.1:8092"
+  },
+  "apiEndpoints": {
+    "baseURL": "http://127.0.0.1:8091",
+    "chat": "/api/v1/chat_stream",
+    "aiops": "/api/v1/ai_ops",
+    "graph": "/api/v1/graph/**",
+    "knowledge": "/api/v1/knowledge/**"
+  },
+  "collaboration": {
+    "frontendAgent": "aggregation-support-agent-web",
+    "gatewayAgent": "mcp-gateway-agent",
+    "businessAgent": "agent-add-oil"
+  }
+}

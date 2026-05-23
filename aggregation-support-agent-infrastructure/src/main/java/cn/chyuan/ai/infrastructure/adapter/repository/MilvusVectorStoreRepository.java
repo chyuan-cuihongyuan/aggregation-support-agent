@@ -11,6 +11,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import io.milvus.client.MilvusServiceClient;
 import io.milvus.grpc.DataType;
+import io.milvus.grpc.FlushResponse;
 import io.milvus.grpc.MutationResult;
 import io.milvus.grpc.SearchResults;
 import io.milvus.param.R;
@@ -29,12 +30,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
+import jakarta.annotation.PreDestroy;
 import jakarta.annotation.Resource;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Milvus 向量数据库仓库实现 — 管理 biz 集合的创建、向量插入和相似性检索
@@ -61,6 +67,23 @@ public class MilvusVectorStoreRepository implements IVectorStoreRepository {
 
     /** 搜索参数 — IVF_FLAT 索引的 nprobe 值 */
     private static final String SEARCH_PARAMS = "{\"nprobe\": 128}";
+
+    /** Flush 限流：最小间隔 15 秒（服务端限制 0.1 req/s = 每10秒1次，留安全余量） */
+    private static final long MIN_FLUSH_INTERVAL_MS = 15_000L;
+    /** Flush 重试最大次数 */
+    private static final int MAX_FLUSH_RETRIES = 3;
+    /** Flush 重试基础延迟 12 秒（指数退避：12s → 24s → 48s） */
+    private static final long FLUSH_RETRY_BASE_DELAY_MS = 12_000L;
+
+    /** 上次 flush 时间戳，用于 CAS 限流 */
+    private final AtomicLong lastFlushTime = new AtomicLong(0);
+
+    /** flush 专用单线程执行器，避免占用 ForkJoinPool.commonPool */
+    private final ExecutorService flushExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "milvus-flush");
+        t.setDaemon(true);
+        return t;
+    });
 
     @Resource
     private MilvusServiceClient milvusServiceClient;
@@ -214,10 +237,8 @@ public class MilvusVectorStoreRepository implements IVectorStoreRepository {
                 throw new RuntimeException("向量数据插入失败: " + insertResult.getMessage());
             }
 
-            // 刷新数据确保持久化
-            milvusServiceClient.flush(FlushParam.newBuilder()
-                    .addCollectionName(collectionName)
-                    .build());
+            // 异步刷新数据，带限流和退避重试
+            asyncFlush(collectionName);
 
             log.info("向量数据插入成功: collection={}, count={}", collectionName, chunks.size());
 
@@ -368,6 +389,94 @@ public class MilvusVectorStoreRepository implements IVectorStoreRepository {
         } catch (Exception e) {
             log.error("Milvus 健康检查失败: {}", e.getMessage(), e);
             return false;
+        }
+    }
+
+    /**
+     * 异步刷盘 — 带 CAS 限流，防止短时间内多次 flush 触发服务端限流
+     * <p>
+     * 限流策略：两次 flush 间隔至少 MIN_FLUSH_INTERVAL_MS（15秒），
+     * 通过 CAS 保证同一时刻只有一个 flush 任务提交。
+     * flush 失败不影响插入结果，Milvus 会自动定期刷盘。
+     *
+     * @param collectionName 集合名称
+     */
+    private void asyncFlush(String collectionName) {
+        long now = System.currentTimeMillis();
+        long last = lastFlushTime.get();
+
+        if (now - last < MIN_FLUSH_INTERVAL_MS) {
+            log.debug("跳过 flush：距上次 flush 不足 {}秒", MIN_FLUSH_INTERVAL_MS / 1000);
+            return;
+        }
+
+        if (!lastFlushTime.compareAndSet(last, now)) {
+            log.debug("跳过 flush：其他线程已提交 flush 任务");
+            return;
+        }
+
+        CompletableFuture.runAsync(() -> {
+            boolean success = flushWithRetry(collectionName);
+            if (!success) {
+                lastFlushTime.set(0);
+            }
+        }, flushExecutor).exceptionally(ex -> {
+            log.error("异步 flush 异常: {}", ex.getMessage());
+            lastFlushTime.set(0);
+            return null;
+        });
+    }
+
+    /**
+     * 带退避重试的 flush — 指数退避（12s → 24s → 48s），最多重试3次
+     * <p>
+     * 服务端 rate=0.1 表示每10秒允许1次请求，基础延迟12秒留有安全余量。
+     *
+     * @return true 表示 flush 成功，false 表示所有重试均失败
+     */
+    private boolean flushWithRetry(String collectionName) {
+        for (int attempt = 0; attempt < MAX_FLUSH_RETRIES; attempt++) {
+            try {
+                if (attempt > 0) {
+                    long delay = FLUSH_RETRY_BASE_DELAY_MS * (1L << (attempt - 1));
+                    log.info("flush 重试等待 {}ms (重试第{}次)", delay, attempt);
+                    Thread.sleep(delay);
+                }
+
+                R<FlushResponse> flushResult = milvusServiceClient.flush(FlushParam.newBuilder()
+                        .addCollectionName(collectionName)
+                        .build());
+                if (flushResult.getStatus() == R.Status.Success.getCode()) {
+                    log.info("异步 flush 成功: collection={}", collectionName);
+                    return true;
+                }
+                log.warn("flush 返回失败 (重试第{}/{}次): {}", attempt + 1, MAX_FLUSH_RETRIES, flushResult.getMessage());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("flush 重试被中断");
+                return false;
+            } catch (Exception e) {
+                log.warn("flush 异常 (重试第{}/{}次): {}", attempt + 1, MAX_FLUSH_RETRIES, e.getMessage());
+            }
+        }
+        log.error("flush 最终失败，数据将由 Milvus 自动刷盘: collection={}", collectionName);
+        return false;
+    }
+
+    /**
+     * 应用关闭时执行同步 flush，确保缓冲区数据持久化
+     */
+    @PreDestroy
+    public void shutdown() {
+        String collectionName = milvusConfigProperties.getCollectionName();
+        flushExecutor.shutdown();
+        try {
+            milvusServiceClient.flush(FlushParam.newBuilder()
+                    .addCollectionName(collectionName)
+                    .build());
+            log.info("应用关闭前 flush 完成: collection={}", collectionName);
+        } catch (Exception e) {
+            log.error("应用关闭前 flush 失败: {}", e.getMessage());
         }
     }
 

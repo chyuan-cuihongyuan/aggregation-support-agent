@@ -30,7 +30,7 @@ public class AiAgentAutoConfig implements ApplicationListener<ApplicationReadyEv
 
             armoryService.acceptArmoryAgents(new ArrayList<>(aiAgentAutoConfigProperties.getTables().values()));
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            log.error("Ai Agent 智能体装配异常", e);
         }
     }
 

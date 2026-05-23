@@ -22,12 +22,19 @@ public class ArmoryService implements IArmoryService {
     @Override
     public void acceptArmoryAgents(List<AiAgentConfigTableVO> tables) throws Exception {
         for (AiAgentConfigTableVO table : tables) {
-            StrategyHandler<ArmoryCommandEntity, DefaultArmoryFactory.DynamicContext, AiAgentRegisterVO> handler = defaultArmoryFactory.armoryStrategyHandler();
-            handler.apply(
-                    ArmoryCommandEntity.builder()
-                            .aiAgentConfigTableVO(table)
-                            .build(),
-                    new DefaultArmoryFactory.DynamicContext());
+            try {
+                StrategyHandler<ArmoryCommandEntity, DefaultArmoryFactory.DynamicContext, AiAgentRegisterVO> handler = defaultArmoryFactory.armoryStrategyHandler();
+                handler.apply(
+                        ArmoryCommandEntity.builder()
+                                .aiAgentConfigTableVO(table)
+                                .build(),
+                        new DefaultArmoryFactory.DynamicContext());
+            } catch (Exception e) {
+                log.error("智能体装配失败，跳过该智能体。app: {}, agent: {}, 错误: {}",
+                        table.getAppName(),
+                        table.getAgent() != null ? table.getAgent().getAgentName() : "unknown",
+                        e.getMessage(), e);
+            }
         }
     }
 

@@ -22,6 +22,22 @@ public class HealthCheckController {
     private IRagService ragService;
 
     /**
+     * 基础健康检查 — 不依赖任何服务
+     */
+    @RequestMapping(value = "health", method = RequestMethod.GET)
+    public Response<Map<String, Object>> healthCheck() {
+        Map<String, Object> data = new HashMap<>();
+        data.put("status", "UP");
+        data.put("timestamp", System.currentTimeMillis());
+
+        return Response.<Map<String, Object>>builder()
+                .code(ResponseCode.SUCCESS.getCode())
+                .info("服务运行正常")
+                .data(data)
+                .build();
+    }
+
+    /**
      * Milvus 健康检查 — 检查向量数据库连接是否正常
      */
     @RequestMapping(value = "milvus/health", method = RequestMethod.GET)
