@@ -1,5 +1,6 @@
 package cn.chyuan.ai.domain.agent.service.armory.matter.mcp.server;
 
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
 import cn.chyuan.ai.domain.rag.service.IRagService;
 import cn.chyuan.ai.domain.auth.support.RequestScopeContext;
@@ -75,8 +76,19 @@ public class InternalDocsTools {
         }
 
         try {
+            // 强校验作用域：禁止无作用域检索导致跨租户数据泄露
+            TenantScopeVO scope = RequestScopeContext.get();
+            if (scope == null) {
+                log.warn("RAG检索缺失租户作用域，拒绝执行: query={}", query);
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", true);
+                errorResponse.put("message", "缺失租户作用域，检索被拒绝");
+                errorResponse.put("query", query);
+                return objectMapper.writeValueAsString(errorResponse);
+            }
+
             // 调用 RAG 服务执行语义检索
-            List<VectorSearchResultVO> results = ragService.search(query, topK, RequestScopeContext.get());
+            List<VectorSearchResultVO> results = ragService.search(query, topK, scope);
 
             // 构建返回结果
             Map<String, Object> response = new HashMap<>();
