@@ -230,9 +230,8 @@ public class ChatService implements IChatService {
         if (sessionEntity == null) {
             throw new AppException(ResponseCode.AUTH_PERMISSION_DENIED.getCode(), "会话不存在或无权访问");
         }
-        if (!agentId.equals(sessionEntity.getAgentId())) {
-            throw new AppException(ResponseCode.AUTH_PERMISSION_DENIED.getCode(), "会话与智能体不匹配");
-        }
+        // 只检查用户权限，不检查智能体匹配
+        // 允许用户在任何智能体的会话中切换到其他智能体，保持上下文连续性
     }
 
 }
