@@ -1,8 +1,8 @@
 package cn.chyuan.ai.infrastructure.storage;
 
 import cn.chyuan.ai.domain.storage.service.IImageStorageService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
@@ -13,11 +13,16 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class ImageStorageConfiguration {
 
     private final LocalImageStorageService localImageStorageService;
-    private final CosImageStorageService cosImageStorageService;
+
+    @Autowired(required = false)
+    private CosImageStorageService cosImageStorageService;
+
+    public ImageStorageConfiguration(LocalImageStorageService localImageStorageService) {
+        this.localImageStorageService = localImageStorageService;
+    }
 
     /**
      * 本地文件系统存储服务（Primary当provider=local时）
@@ -38,6 +43,9 @@ public class ImageStorageConfiguration {
     @ConditionalOnProperty(prefix = "storage.image", name = "provider", havingValue = "cos")
     public IImageStorageService cosImageStorageServicePrimary() {
         log.info("启用腾讯云COS存储服务");
+        if (cosImageStorageService == null) {
+            throw new IllegalStateException("COS存储服务未配置，请检查 storage.image.cos 相关配置");
+        }
         return cosImageStorageService;
     }
 }

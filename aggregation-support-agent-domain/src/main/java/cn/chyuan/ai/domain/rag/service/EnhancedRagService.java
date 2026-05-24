@@ -2,6 +2,8 @@ package cn.chyuan.ai.domain.rag.service;
 
 import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.auth.support.RequestScopeContext;
+import cn.chyuan.ai.domain.knowledgegraph.service.IKnowledgeGraphService;
+import cn.chyuan.ai.domain.knowledgegraph.model.valobj.GraphSearchResultVO;
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import cn.chyuan.ai.domain.rag.adapter.port.IDocumentParserFactory;
 import cn.chyuan.ai.domain.rag.adapter.repository.IDocumentMetadataRepository;
@@ -104,6 +106,18 @@ public class EnhancedRagService implements IRagService {
     @Value("${rag.evaluation.enabled:false}")
     private boolean evaluationEnabled;
 
+    /** 是否启用知识图谱检索 */
+    @Value("${knowledge-graph.enabled:true}")
+    private boolean knowledgeGraphEnabled;
+
+    /** 知识图谱检索返回数量 */
+    @Value("${knowledge-graph.search.entity-top-k:10}")
+    private int graphEntityTopK;
+
+    /** 知识图谱子图遍历深度 */
+    @Value("${knowledge-graph.search.default-depth:2}")
+    private int graphDefaultDepth;
+
     @Resource
     private IEmbeddingService embeddingService;
 
@@ -133,6 +147,9 @@ public class EnhancedRagService implements IRagService {
 
     @Autowired(required = false)
     private IRerankService rerankService;
+
+    @Autowired(required = false)
+    private IKnowledgeGraphService knowledgeGraphService;
 
     @Resource
     private LostInTheMiddleReorderer lostInTheMiddleReorderer;
@@ -420,6 +437,7 @@ public class EnhancedRagService implements IRagService {
 
         List<VectorSearchResultVO> vectorResults = new ArrayList<>();
         List<VectorSearchResultVO> bm25Results = new ArrayList<>();
+        List<VectorSearchResultVO> graphResults = new ArrayList<>();
         List<VectorSearchResultVO> hybridResults;
 
         try {
@@ -436,9 +454,18 @@ public class EnhancedRagService implements IRagService {
             log.error("BM25检索失败: {}", e.getMessage());
         }
 
+        try {
+            if (knowledgeGraphEnabled && knowledgeGraphService != null) {
+                graphResults = graphRetrieval(query, graphEntityTopK);
+            }
+        } catch (Exception e) {
+            log.error("知识图谱检索失败: {}", e.getMessage());
+        }
+
         List<List<VectorSearchResultVO>> allResults = new ArrayList<>();
         if (!vectorResults.isEmpty()) allResults.add(vectorResults);
         if (!bm25Results.isEmpty()) allResults.add(bm25Results);
+        if (!graphResults.isEmpty()) allResults.add(graphResults);
 
         if (allResults.size() > 1) {
             hybridResults = resultFusionService.rrfFusion(allResults, topK);
@@ -450,6 +477,7 @@ public class EnhancedRagService implements IRagService {
                 .query(query)
                 .vectorResults(convertToItems(vectorResults))
                 .bm25Results(convertToItems(bm25Results))
+                .graphResults(convertToItems(graphResults))
                 .hybridResults(convertToItems(hybridResults))
                 .build();
     }
@@ -489,7 +517,7 @@ public class EnhancedRagService implements IRagService {
     }
 
     /**
-     * 多路召回（第三层） — 向量检索和BM25检索并行执行
+     * 多路召回（第三层） — 向量检索 + BM25检索 + 知识图谱检索并行执行
      */
     private List<VectorSearchResultVO> multiPathRetrieval(String query, int topK, TenantScopeVO scope) {
         // 并行执行向量检索和BM25检索
@@ -500,18 +528,42 @@ public class EnhancedRagService implements IRagService {
                 ? CompletableFuture.supplyAsync(() -> bm25Retrieval(query, bm25TopK, scope))
                 : CompletableFuture.completedFuture(Collections.emptyList());
 
-        CompletableFuture.allOf(vectorFuture, bm25Future).join();
+        // 知识图谱检索（第三路）
+        CompletableFuture<List<VectorSearchResultVO>> graphFuture =
+                (knowledgeGraphEnabled && knowledgeGraphService != null)
+                ? CompletableFuture.supplyAsync(() -> graphRetrieval(query, graphEntityTopK))
+                : CompletableFuture.completedFuture(Collections.emptyList());
+
+        // 设置超时时间，防止无限阻塞（默认30秒）
+        try {
+            CompletableFuture.allOf(vectorFuture, bm25Future, graphFuture)
+                    .get(30, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            log.warn("多路检索超时，使用已完成的结果继续处理");
+            // 取消未完成的任务
+            vectorFuture.cancel(true);
+            bm25Future.cancel(true);
+            graphFuture.cancel(true);
+        } catch (Exception e) {
+            log.error("多路检索异常: {}", e.getMessage());
+        }
 
         List<List<VectorSearchResultVO>> allResults = new ArrayList<>();
 
-        List<VectorSearchResultVO> vectorResults = vectorFuture.join();
+        // 安全获取结果，已完成的Future会立即返回，未完成的返回空列表
+        List<VectorSearchResultVO> vectorResults = safeGetFutureResult(vectorFuture, "向量检索");
         if (!vectorResults.isEmpty()) {
             allResults.add(vectorResults);
         }
 
-        List<VectorSearchResultVO> bm25Results = bm25Future.join();
+        List<VectorSearchResultVO> bm25Results = safeGetFutureResult(bm25Future, "BM25检索");
         if (!bm25Results.isEmpty()) {
             allResults.add(bm25Results);
+        }
+
+        List<VectorSearchResultVO> graphResults = safeGetFutureResult(graphFuture, "知识图谱检索");
+        if (!graphResults.isEmpty()) {
+            allResults.add(graphResults);
         }
 
         // Multi-Query扩展检索（如果启用）
@@ -527,8 +579,27 @@ public class EnhancedRagService implements IRagService {
             return allResults.get(0).stream().limit(topK).collect(Collectors.toList());
         }
 
+        // 如果没有结果，返回空列表
+        if (allResults.isEmpty()) {
+            return Collections.emptyList();
+        }
+
         // RRF融合
         return resultFusionService.rrfFusion(allResults, topK);
+    }
+
+    /**
+     * 安全获取Future结果，避免异常导致整个流程失败
+     */
+    private List<VectorSearchResultVO> safeGetFutureResult(CompletableFuture<List<VectorSearchResultVO>> future, String retrievalType) {
+        try {
+            if (future.isDone() && !future.isCancelled() && !future.isCompletedExceptionally()) {
+                return future.get();
+            }
+        } catch (Exception e) {
+            log.warn("{}结果获取失败: {}", retrievalType, e.getMessage());
+        }
+        return Collections.emptyList();
     }
 
     /**
@@ -559,6 +630,52 @@ public class EnhancedRagService implements IRagService {
             return bm25SearchService.search(query, topK, scope);
         } catch (Exception e) {
             log.error("BM25检索失败: {}", e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * 知识图谱检索 — 实体匹配 + 子图遍历，结果转换为统一格式参与RRF融合
+     */
+    private List<VectorSearchResultVO> graphRetrieval(String query, int topK) {
+        try {
+            GraphSearchResultVO graphResult = knowledgeGraphService.graphSearch(query, topK, graphDefaultDepth);
+            if (graphResult == null || graphResult.getMatchedEntities() == null
+                    || graphResult.getMatchedEntities().isEmpty()) {
+                return new ArrayList<>();
+            }
+
+            // 将图谱结果转换为 VectorSearchResultVO 格式，参与RRF融合
+            List<VectorSearchResultVO> results = new ArrayList<>();
+            float score = graphResult.getScore() != null ? graphResult.getScore() : 0.5f;
+
+            // 用子图描述作为内容
+            String content = graphResult.getSubgraphDescription();
+            if (content == null || content.isEmpty()) {
+                content = graphResult.getMatchedEntities().stream()
+                        .map(e -> e.getEntityName() + "(" + e.getEntityType() + ")")
+                        .collect(Collectors.joining(", "));
+            }
+
+            Map<String, Object> metadata = new java.util.HashMap<>();
+            metadata.put("retrievalType", "knowledge_graph");
+            metadata.put("matchedEntityCount", graphResult.getMatchedEntities().size());
+            metadata.put("matchedRelationCount",
+                    graphResult.getMatchedRelations() != null ? graphResult.getMatchedRelations().size() : 0);
+            metadata.put("subgraphDepth", graphDefaultDepth);
+
+            results.add(VectorSearchResultVO.builder()
+                    .content(content)
+                    .score(score)
+                    .metadata(metadata)
+                    .build());
+
+            log.info("知识图谱检索完成: matchedEntities={}, relations={}",
+                    graphResult.getMatchedEntities().size(),
+                    graphResult.getMatchedRelations() != null ? graphResult.getMatchedRelations().size() : 0);
+            return results;
+        } catch (Exception e) {
+            log.error("知识图谱检索失败: {}", e.getMessage());
             return new ArrayList<>();
         }
     }

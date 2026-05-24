@@ -15,6 +15,7 @@ public class SearchResultDetailVO {
     private String query;
     private List<SearchItem> vectorResults;
     private List<SearchItem> bm25Results;
+    private List<SearchItem> graphResults;
     private List<SearchItem> hybridResults;
 
     @Data
