@@ -17,16 +17,13 @@
   "hooks": {
     "SessionStart": [
       {
-        "command": "echo '=== 🟢 后端开发 Agent 已激活 ==='",
-        "description": "显示后端 Agent 激活提示"
-      },
-      {
-        "command": "test -f pom.xml && echo '✅ Java + Spring Boot + Maven 环境就绪'",
-        "description": "验证后端项目环境"
-      },
-      {
-        "command": "echo '🔧 端口: 8091 | 职责: API开发 + 业务逻辑 + 数据操作'",
-        "description": "显示后端 Agent 职责"
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '=== 🟢 后端开发 Agent 已激活 ===' && test -f pom.xml && echo '✅ Java + Spring Boot + Maven 环境就绪' && echo '🔧 端口: 8091 | 职责: API开发 + 业务逻辑 + 数据操作'"
+          }
+        ]
       }
     ]
   },
