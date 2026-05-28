@@ -121,6 +121,12 @@
             <version>5.6.269</version>
             <scope>compile</scope>
         </dependency>
+
+        <!-- Observability Client SDK -->
+        <dependency>
+            <groupId>cn.chyuan.ai</groupId>
+            <artifactId>agent-rag-observability-server-client</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

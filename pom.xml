@@ -269,6 +269,12 @@
                 <artifactId>aggregation-support-agent-trigger</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <!-- Observability Client SDK -->
+            <dependency>
+                <groupId>cn.chyuan.ai</groupId>
+                <artifactId>agent-rag-observability-server-client</artifactId>
+                <version>1.0</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 

@@ -7,6 +7,7 @@ import cn.chyuan.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.chyuan.ai.domain.agent.service.IChatService;
 import cn.chyuan.ai.domain.rag.model.valobj.RagSourceVO;
 import cn.chyuan.ai.domain.rag.support.RagSourceCollector;
+import cn.chyuan.ai.infrastructure.utils.ObservabilityHelper;
 import cn.chyuan.ai.trigger.support.CurrentUserSupport;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
@@ -25,6 +26,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
@@ -39,6 +42,9 @@ public class AgentServiceController implements IAgentService {
 
     @Resource
     private IChatService chatService;
+
+    @Resource
+    private ObservabilityHelper observabilityHelper;
 
     @RequestMapping(value = "query_ai_agent_config_list", method = RequestMethod.GET)
     public Response<List<AiAgentConfigResponseDTO>> queryAiAgentConfigList() {
@@ -115,6 +121,7 @@ public class AgentServiceController implements IAgentService {
 
     @RequestMapping(value = "chat", method = RequestMethod.POST)
     public Response<ChatResponseDTO> chat(HttpServletRequest request, @RequestBody ChatRequestDTO requestDTO) {
+        long start = System.currentTimeMillis();
         try {
             String userId = CurrentUserSupport.requireUserIdString(request);
             log.info("智能体对话 agentId:{} userId:{}", requestDTO.getAgentId(), userId);
@@ -138,6 +145,8 @@ public class AgentServiceController implements IAgentService {
             responseDTO.setContent(String.join("\n", messages));
             responseDTO.setTraceId(traceId);
             responseDTO.setSources(toSourceDTOList(sources));
+
+            observabilityHelper.reportChatResult(traceId, sessionId, userId, requestDTO.getMessage(), responseDTO.getContent(), "SUCCESS", (int)(System.currentTimeMillis() - start));
 
             return Response.<ChatResponseDTO>builder()
                     .code(ResponseCode.SUCCESS.getCode())
@@ -165,13 +174,23 @@ public class AgentServiceController implements IAgentService {
         RagSourceCollector.Holder requestHolder = null;
         try {
             String userId = CurrentUserSupport.requireUserIdString(request);
-            log.info("流式对话 agentId:{} userId:{} sessionId:{}", requestDTO.getAgentId(), userId, requestDTO.getSessionId());
+            String agentId = requestDTO.getAgentId();
+            String sessionId = requestDTO.getSessionId();
+            String message = requestDTO.getMessage();
+            
+            log.info("流式对话 agentId:{} userId:{} sessionId:{}", agentId, userId, sessionId);
+            
             // handleMessageStream 内部在 HTTP 线程上调 RagSourceCollector.begin() 创建新 Holder，立刻取出引用
-            Flowable<Event> events = chatService.handleMessageStream(requestDTO.getAgentId(), userId, requestDTO.getSessionId(), requestDTO.getMessage());
+            Flowable<Event> events = chatService.handleMessageStream(agentId, userId, sessionId, message);
             requestHolder = RagSourceCollector.currentHolder();
             final RagSourceCollector.Holder holderRef = requestHolder;
+            
             // HTTP 线程拿到引用后立即清理 ThreadLocal，避免 Tomcat 线程复用导致跨请求残留
             RagSourceCollector.detach();
+            
+            // 用于收集流式响应内容
+            StringBuilder responseCollector = new StringBuilder();
+            
             events.subscribeOn(Schedulers.io())
                     // 订阅链运行在 RxJava IO worker 上：进入时把 Holder 注入子线程 ThreadLocal，
                     // 让链路里的工具调用 append() / setTraceId() 能拿到正确 Holder；结束时清理
@@ -194,6 +213,8 @@ public class AgentServiceController implements IAgentService {
                                         )
                                     );
                                     if (sb.length() > 0) {
+                                        // 收集响应内容用于记忆存储
+                                        responseCollector.append(sb).append("\n");
                                         emitter.send(SseEmitter.event().data(sb.toString()));
                                     }
                                 } catch (Exception e) {
@@ -212,6 +233,25 @@ public class AgentServiceController implements IAgentService {
                                     payload.put("traceId", traceId);
                                     payload.put("sources", toSourceDTOList(sources));
                                     emitter.send(SseEmitter.event().name("sources").data(payload));
+                                    
+                                    // 异步存储对话记忆
+                                    String fullResponse = responseCollector.toString().trim();
+                                    if (!fullResponse.isEmpty()) {
+                                        final String finalAgentId = agentId;
+                                        final String finalUserId = userId;
+                                        final String finalSessionId = sessionId;
+                                        final String finalMessage = message;
+                                        // 使用独立线程存储记忆，避免阻塞 SSE 完成
+                                        new Thread(() -> {
+                                            try {
+                                                ((ChatService) chatService).storeStreamConversationMemory(
+                                                    finalUserId, finalAgentId, finalSessionId, 
+                                                    finalMessage, fullResponse);
+                                            } catch (Exception e) {
+                                                log.warn("流式对话记忆存储失败", e);
+                                            }
+                                        }, "memory-store-stream").start();
+                                    }
                                 } catch (Exception sendErr) {
                                     log.warn("追发 sources 事件失败", sendErr);
                                 }

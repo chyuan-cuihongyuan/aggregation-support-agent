@@ -103,4 +103,27 @@ public class AsyncExecutorConfig {
                     executor.getPoolSize());
         }
     }
+
+    /**
+     * Agent Memory 记忆管理专用线程池
+     * <p>
+     * 拒绝策略：{@link ThreadPoolExecutor.CallerRunsPolicy} — 记忆存储不能丢失，
+     * 由调用线程兜底执行，确保记忆完整性。
+     */
+    @Bean("memoryTaskExecutor")
+    public AsyncTaskExecutor memoryTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(8);
+        executor.setQueueCapacity(1000);
+        executor.setKeepAliveSeconds(60);
+        executor.setThreadNamePrefix("memory-async-");
+        // 记忆存储不允许丢失，兜底由调用方线程执行
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        executor.initialize();
+        log.info("初始化 Agent Memory 异步线程池 memoryTaskExecutor: core={}, max={}, queue={}", 2, 8, 1000);
+        return executor;
+    }
 }

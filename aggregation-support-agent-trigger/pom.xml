@@ -45,6 +45,10 @@
             <groupId>cn.chyuan.ai</groupId>
             <artifactId>aggregation-support-agent-domain</artifactId>
         </dependency>
+        <dependency>
+            <groupId>cn.chyuan.ai</groupId>
+            <artifactId>aggregation-support-agent-infrastructure</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
