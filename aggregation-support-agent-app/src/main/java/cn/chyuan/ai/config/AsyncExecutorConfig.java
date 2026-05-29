@@ -78,6 +78,25 @@ public class AsyncExecutorConfig {
         return executor;
     }
 
+    @Bean("ragRetrievalExecutor")
+    public AsyncTaskExecutor ragRetrievalExecutor(
+            @org.springframework.beans.factory.annotation.Value("${rag.retrieval.executor.core-size:8}") int coreSize,
+            @org.springframework.beans.factory.annotation.Value("${rag.retrieval.executor.max-size:32}") int maxSize,
+            @org.springframework.beans.factory.annotation.Value("${rag.retrieval.executor.queue-capacity:200}") int queueCapacity) {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(coreSize);
+        executor.setMaxPoolSize(maxSize);
+        executor.setQueueCapacity(queueCapacity);
+        executor.setKeepAliveSeconds(60);
+        executor.setThreadNamePrefix("rag-retrieval-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(10);
+        executor.initialize();
+        log.info("初始化 RAG 检索线程池 ragRetrievalExecutor: core={}, max={}, queue={}", coreSize, maxSize, queueCapacity);
+        return executor;
+    }
+
     /**
      * 带日志的丢弃策略 — 等价于 {@link ThreadPoolExecutor.DiscardPolicy}，但每次丢弃写入 warn 日志。
      * <p>

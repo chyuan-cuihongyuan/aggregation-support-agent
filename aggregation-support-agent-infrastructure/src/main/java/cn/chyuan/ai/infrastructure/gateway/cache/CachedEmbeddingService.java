@@ -31,6 +31,8 @@ public class CachedEmbeddingService implements IEmbeddingService {
 
     private final IEmbeddingService delegate;
 
+    private final String modelName;
+
     /** 缓存实例 */
     private final Cache<String, float[]> cache;
 
@@ -43,15 +45,17 @@ public class CachedEmbeddingService implements IEmbeddingService {
     public CachedEmbeddingService(
             IEmbeddingService delegate,
             @Value("${rag.cache.embedding.max-size:10000}") int maxSize,
-            @Value("${rag.cache.embedding.expire-hours:24}") int expireHours) {
+            @Value("${rag.cache.embedding.expire-hours:24}") int expireHours,
+            @Value("${rag.cache.embedding.model-name:default}") String modelName) {
         this.delegate = delegate;
+        this.modelName = modelName == null || modelName.isBlank() ? "default" : modelName;
         this.cache = CacheBuilder.newBuilder()
                 .maximumSize(maxSize)
                 .expireAfterAccess(expireHours, TimeUnit.HOURS)
                 .recordStats()
                 .build();
 
-        log.info("嵌入向量缓存初始化: maxSize={}, expireHours={}", maxSize, expireHours);
+        log.info("嵌入向量缓存初始化: maxSize={}, expireHours={}, modelName={}", maxSize, expireHours, this.modelName);
     }
 
     @Override
@@ -150,10 +154,10 @@ public class CachedEmbeddingService implements IEmbeddingService {
             for (byte b : hash) {
                 sb.append(String.format("%02x", b));
             }
-            return sb.toString();
+            return "embedding:" + modelName + ":" + sb;
         } catch (NoSuchAlgorithmException e) {
             // 降级：使用文本hashcode
-            return String.valueOf(text.hashCode());
+            return "embedding:" + modelName + ":" + text.hashCode();
         }
     }
 

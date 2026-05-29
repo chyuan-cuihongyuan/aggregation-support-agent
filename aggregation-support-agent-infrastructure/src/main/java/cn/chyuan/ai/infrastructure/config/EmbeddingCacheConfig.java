@@ -25,6 +25,9 @@ public class EmbeddingCacheConfig {
     @Value("${rag.cache.embedding.expire-hours:24}")
     private int expireHours;
 
+    @Value("${rag.cache.embedding.model-name:default}")
+    private String modelName;
+
     /**
      * 创建缓存装饰的嵌入服务
      * <p>
@@ -34,8 +37,8 @@ public class EmbeddingCacheConfig {
     @Primary
     @ConditionalOnProperty(name = "rag.cache.embedding.enabled", havingValue = "true")
     public IEmbeddingService cachedEmbeddingService(IEmbeddingService delegate) {
-        log.info("启用嵌入向量缓存: maxSize={}, expireHours={}", maxSize, expireHours);
-        return new CachedEmbeddingService(delegate, maxSize, expireHours);
+        log.info("启用嵌入向量缓存: maxSize={}, expireHours={}, modelName={}", maxSize, expireHours, modelName);
+        return new CachedEmbeddingService(delegate, maxSize, expireHours, modelName);
     }
 
 }

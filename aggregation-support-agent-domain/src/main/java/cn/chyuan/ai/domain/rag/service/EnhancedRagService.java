@@ -31,7 +31,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
+import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.Resource;
@@ -118,6 +120,9 @@ public class EnhancedRagService implements IRagService {
     @Value("${knowledge-graph.search.default-depth:2}")
     private int graphDefaultDepth;
 
+    @Value("${rag.retrieval.timeout-ms:30000}")
+    private long retrievalTimeoutMs;
+
     @Resource
     private IEmbeddingService embeddingService;
 
@@ -159,6 +164,10 @@ public class EnhancedRagService implements IRagService {
 
     @Resource
     private IRagTraceRepository ragTraceRepository;
+
+    @Autowired(required = false)
+    @Qualifier("ragRetrievalExecutor")
+    private AsyncTaskExecutor ragRetrievalExecutor;
 
     @Override
     public void uploadDocument(DocumentUploadCommand command) {
@@ -522,22 +531,22 @@ public class EnhancedRagService implements IRagService {
     private List<VectorSearchResultVO> multiPathRetrieval(String query, int topK, TenantScopeVO scope) {
         // 并行执行向量检索和BM25检索
         CompletableFuture<List<VectorSearchResultVO>> vectorFuture =
-                CompletableFuture.supplyAsync(() -> vectorRetrieval(query, vectorTopK, scope));
+                supplyRetrievalAsync(() -> vectorRetrieval(query, vectorTopK, scope));
 
         CompletableFuture<List<VectorSearchResultVO>> bm25Future = bm25Enabled
-                ? CompletableFuture.supplyAsync(() -> bm25Retrieval(query, bm25TopK, scope))
+                ? supplyRetrievalAsync(() -> bm25Retrieval(query, bm25TopK, scope))
                 : CompletableFuture.completedFuture(Collections.emptyList());
 
         // 知识图谱检索（第三路）
         CompletableFuture<List<VectorSearchResultVO>> graphFuture =
                 (knowledgeGraphEnabled && knowledgeGraphService != null)
-                ? CompletableFuture.supplyAsync(() -> graphRetrieval(query, graphEntityTopK))
+                ? supplyRetrievalAsync(() -> graphRetrieval(query, graphEntityTopK))
                 : CompletableFuture.completedFuture(Collections.emptyList());
 
         // 设置超时时间，防止无限阻塞（默认30秒）
         try {
             CompletableFuture.allOf(vectorFuture, bm25Future, graphFuture)
-                    .get(30, java.util.concurrent.TimeUnit.SECONDS);
+                    .get(retrievalTimeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
         } catch (java.util.concurrent.TimeoutException e) {
             log.warn("多路检索超时，使用已完成的结果继续处理");
             // 取消未完成的任务
@@ -690,13 +699,23 @@ public class EnhancedRagService implements IRagService {
 
             // 并行执行所有扩展查询的向量检索
             List<CompletableFuture<List<VectorSearchResultVO>>> futures = expandedQueries.stream()
-                    .map(q -> CompletableFuture.supplyAsync(() -> vectorRetrieval(q, topK / expandedQueries.size() + 1, scope)))
+                    .map(q -> supplyRetrievalAsync(() -> vectorRetrieval(q, topK / expandedQueries.size() + 1, scope)))
                     .collect(Collectors.toList());
 
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            try {
+                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                        .get(retrievalTimeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+            } catch (java.util.concurrent.TimeoutException e) {
+                log.warn("Multi-Query检索超时，使用已完成结果");
+                futures.forEach(future -> {
+                    if (!future.isDone()) {
+                        future.cancel(true);
+                    }
+                });
+            }
 
             List<List<VectorSearchResultVO>> multiResults = futures.stream()
-                    .map(CompletableFuture::join)
+                    .map(future -> safeGetFutureResult(future, "Multi-Query检索"))
                     .collect(Collectors.toList());
 
             // 融合多Query结果
@@ -705,6 +724,13 @@ public class EnhancedRagService implements IRagService {
             log.error("Multi-Query检索失败: {}", e.getMessage());
             return new ArrayList<>();
         }
+    }
+
+    private CompletableFuture<List<VectorSearchResultVO>> supplyRetrievalAsync(java.util.function.Supplier<List<VectorSearchResultVO>> supplier) {
+        if (ragRetrievalExecutor != null) {
+            return CompletableFuture.supplyAsync(supplier, ragRetrievalExecutor);
+        }
+        return CompletableFuture.supplyAsync(supplier);
     }
 
     /**
