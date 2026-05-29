@@ -171,7 +171,9 @@ public class EnhancedRagService implements IRagService {
 
     @Override
     public void uploadDocument(DocumentUploadCommand command) {
-        String documentId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        String documentId = command.getDocumentId() != null && !command.getDocumentId().isBlank()
+                ? command.getDocumentId()
+                : UUID.randomUUID().toString().replace("-", "").substring(0, 16);
         long fileSize = command.getRawContent() != null ? command.getRawContent().length
                 : (command.getContent() != null ? command.getContent().length() : 0L);
         String extension = resolveExtension(command.getFileName());

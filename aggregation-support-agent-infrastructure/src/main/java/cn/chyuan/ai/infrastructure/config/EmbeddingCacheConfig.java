@@ -2,7 +2,9 @@ package cn.chyuan.ai.infrastructure.config;
 
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import cn.chyuan.ai.infrastructure.gateway.cache.CachedEmbeddingService;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -28,6 +30,9 @@ public class EmbeddingCacheConfig {
     @Value("${rag.cache.embedding.model-name:default}")
     private String modelName;
 
+    @Autowired(required = false)
+    private MeterRegistry meterRegistry;
+
     /**
      * 创建缓存装饰的嵌入服务
      * <p>
@@ -38,7 +43,7 @@ public class EmbeddingCacheConfig {
     @ConditionalOnProperty(name = "rag.cache.embedding.enabled", havingValue = "true")
     public IEmbeddingService cachedEmbeddingService(IEmbeddingService delegate) {
         log.info("启用嵌入向量缓存: maxSize={}, expireHours={}, modelName={}", maxSize, expireHours, modelName);
-        return new CachedEmbeddingService(delegate, maxSize, expireHours, modelName);
+        return new CachedEmbeddingService(delegate, maxSize, expireHours, modelName, meterRegistry);
     }
 
 }

@@ -27,4 +27,6 @@ public interface IChatService {
 
     List<String> handleMessage(ChatCommandEntity chatCommandEntity);
 
+    void storeStreamConversationMemory(String userId, String agentId, String sessionId, String message, String response);
+
 }

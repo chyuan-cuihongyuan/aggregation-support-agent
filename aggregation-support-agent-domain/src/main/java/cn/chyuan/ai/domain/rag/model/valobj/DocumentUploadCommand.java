@@ -14,6 +14,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class DocumentUploadCommand {
 
+    /** 文档ID；为空时由服务内部生成 */
+    private String documentId;
+
     /** 文件名 */
     private String fileName;
 

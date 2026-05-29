@@ -97,6 +97,25 @@ public class AsyncExecutorConfig {
         return executor;
     }
 
+    @Bean("ragDocumentExecutor")
+    public AsyncTaskExecutor ragDocumentExecutor(
+            @org.springframework.beans.factory.annotation.Value("${rag.document.executor.core-size:2}") int coreSize,
+            @org.springframework.beans.factory.annotation.Value("${rag.document.executor.max-size:8}") int maxSize,
+            @org.springframework.beans.factory.annotation.Value("${rag.document.executor.queue-capacity:200}") int queueCapacity) {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(coreSize);
+        executor.setMaxPoolSize(maxSize);
+        executor.setQueueCapacity(queueCapacity);
+        executor.setKeepAliveSeconds(60);
+        executor.setThreadNamePrefix("rag-document-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        executor.initialize();
+        log.info("初始化 RAG 文档处理线程池 ragDocumentExecutor: core={}, max={}, queue={}", coreSize, maxSize, queueCapacity);
+        return executor;
+    }
+
     /**
      * 带日志的丢弃策略 — 等价于 {@link ThreadPoolExecutor.DiscardPolicy}，但每次丢弃写入 warn 日志。
      * <p>

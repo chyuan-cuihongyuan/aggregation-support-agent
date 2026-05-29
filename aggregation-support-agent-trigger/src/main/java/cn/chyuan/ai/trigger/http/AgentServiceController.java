@@ -244,7 +244,7 @@ public class AgentServiceController implements IAgentService {
                                         // 使用独立线程存储记忆，避免阻塞 SSE 完成
                                         new Thread(() -> {
                                             try {
-                                                ((ChatService) chatService).storeStreamConversationMemory(
+                                                chatService.storeStreamConversationMemory(
                                                     finalUserId, finalAgentId, finalSessionId, 
                                                     finalMessage, fullResponse);
                                             } catch (Exception e) {

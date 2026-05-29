@@ -4,6 +4,8 @@ import cn.chyuan.ai.api.dto.UploadResponseDTO;
 import cn.chyuan.ai.api.response.Response;
 import cn.chyuan.ai.domain.audit.service.IAuditLogService;
 import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
+import cn.chyuan.ai.domain.rag.adapter.repository.IDocumentMetadataRepository;
+import cn.chyuan.ai.domain.rag.model.entity.DocumentMetadataEntity;
 import cn.chyuan.ai.domain.rag.model.valobj.DocumentUploadCommand;
 import cn.chyuan.ai.domain.rag.service.IRagService;
 import cn.chyuan.ai.trigger.filter.JwtAuthFilter;
@@ -15,11 +17,17 @@ import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.Locale;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * 文件上传控制器 — 处理文档上传并自动向量化存储到 Milvus
@@ -32,11 +40,37 @@ import jakarta.servlet.http.HttpServletRequest;
 @RequestMapping("/api/v1")
 public class FileUploadController {
 
+    private static final Set<String> SUPPORTED_EXTENSIONS = Set.of(
+            "txt", "md", "markdown", "mdown", "mkd", "pdf", "doc", "docx", "html", "htm"
+    );
+
+    private static final Set<String> SUPPORTED_MIME_TYPES = Set.of(
+            "text/plain",
+            "text/markdown",
+            "text/x-markdown",
+            "text/html",
+            "application/xhtml+xml",
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/octet-stream"
+    );
+
     @Autowired(required = false)
     private IRagService ragService;
 
     @Resource
     private IAuditLogService auditLogService;
+
+    @Autowired(required = false)
+    private IDocumentMetadataRepository documentMetadataRepository;
+
+    @Autowired(required = false)
+    @Qualifier("ragDocumentExecutor")
+    private AsyncTaskExecutor ragDocumentExecutor;
+
+    @Value("${rag.upload.max-size-mb:50}")
+    private long maxUploadSizeMb;
 
     /**
      * 上传文档到知识库 — 文件内容被自动分块、向量化和存储
@@ -50,28 +84,20 @@ public class FileUploadController {
             @RequestParam("file") MultipartFile file) {
         String ip = AuditContextSupport.extractIp(request);
         String ua = AuditContextSupport.extractUserAgent(request);
-        String fileName = file.getOriginalFilename();
+        String fileName = file == null ? "" : file.getOriginalFilename();
         // 提取登录用户 — 此接口经过 JwtAuthFilter，attr 必存在
         Object uidAttr = request.getAttribute(JwtAuthFilter.ATTR_USER_ID);
         Object unameAttr = request.getAttribute(JwtAuthFilter.ATTR_USERNAME);
         Long auditUserId = (uidAttr instanceof Long) ? (Long) uidAttr : 0L;
         String auditUsername = (unameAttr instanceof String) ? (String) unameAttr : "";
         try {
-            if (file.isEmpty()) {
+            String validationError = validateUploadFile(file);
+            if (validationError != null) {
                 safeAudit(auditUserId, auditUsername, AuditResult.FAILURE,
-                        fileName, "上传文件不能为空", ip, ua);
+                        fileName, validationError, ip, ua);
                 return Response.<UploadResponseDTO>builder()
                         .code(ResponseCode.ILLEGAL_PARAMETER.getCode())
-                        .info("上传文件不能为空")
-                        .build();
-            }
-
-            if (file.getSize() > 50 * 1024 * 1024) {
-                safeAudit(auditUserId, auditUsername, AuditResult.FAILURE,
-                        fileName, "文件大小超过50MB限制", ip, ua);
-                return Response.<UploadResponseDTO>builder()
-                        .code(ResponseCode.ILLEGAL_PARAMETER.getCode())
-                        .info("文件大小超过50MB限制")
+                        .info(validationError)
                         .build();
             }
 
@@ -117,12 +143,126 @@ public class FileUploadController {
                     .info(e.getInfo())
                     .build();
         } catch (Exception e) {
-            log.error("文档上传失败: {}", file.getOriginalFilename(), e);
+            log.error("文档上传失败: {}", fileName, e);
             safeAudit(auditUserId, auditUsername, AuditResult.FAILURE,
                     fileName, "文档上传失败: " + e.getMessage(), ip, ua);
             return Response.<UploadResponseDTO>builder()
                     .code(ResponseCode.UN_ERROR.getCode())
                     .info("文档上传失败: " + e.getMessage())
+                    .build();
+        }
+    }
+
+    @RequestMapping(value = "rag/documents/async", method = RequestMethod.POST)
+    public Response<UploadResponseDTO> uploadDocumentAsync(
+            HttpServletRequest request,
+            @RequestParam("file") MultipartFile file) {
+        String ip = AuditContextSupport.extractIp(request);
+        String ua = AuditContextSupport.extractUserAgent(request);
+        String fileName = file == null ? "" : file.getOriginalFilename();
+        Object uidAttr = request.getAttribute(JwtAuthFilter.ATTR_USER_ID);
+        Object unameAttr = request.getAttribute(JwtAuthFilter.ATTR_USERNAME);
+        Long auditUserId = (uidAttr instanceof Long) ? (Long) uidAttr : 0L;
+        String auditUsername = (unameAttr instanceof String) ? (String) unameAttr : "";
+        try {
+            String validationError = validateUploadFile(file);
+            if (validationError != null) {
+                safeAudit(auditUserId, auditUsername, AuditResult.FAILURE,
+                        fileName, validationError, ip, ua);
+                return Response.<UploadResponseDTO>builder()
+                        .code(ResponseCode.ILLEGAL_PARAMETER.getCode())
+                        .info(validationError)
+                        .build();
+            }
+            if (ragService == null || documentMetadataRepository == null) {
+                safeAudit(auditUserId, auditUsername, AuditResult.FAILURE,
+                        fileName, "RAG服务未启用", ip, ua);
+                return Response.<UploadResponseDTO>builder()
+                        .code(ResponseCode.UN_ERROR.getCode())
+                        .info("RAG服务未启用，请配置milvus.enabled=true")
+                        .build();
+            }
+
+            String documentId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+            TenantScopeVO scope = TenantScopeVO.singleUser(CurrentUserSupport.requireUserIdString(request));
+            byte[] rawContent = file.getBytes();
+            String originalFilename = file.getOriginalFilename();
+            String contentType = file.getContentType();
+            DocumentUploadCommand command = DocumentUploadCommand.builder()
+                    .documentId(documentId)
+                    .fileName(originalFilename)
+                    .rawContent(rawContent)
+                    .mimeType(contentType)
+                    .userId(scope.getOwnerUserId())
+                    .tenantId(scope.getTenantId())
+                    .build();
+
+            executeDocumentProcessing(command, auditUserId, auditUsername, originalFilename, ip, ua);
+
+            UploadResponseDTO dto = new UploadResponseDTO();
+            dto.setDocumentId(documentId);
+            dto.setStatus("processing");
+            dto.setMessage("文档已进入异步处理队列");
+            return Response.<UploadResponseDTO>builder()
+                    .code(ResponseCode.SUCCESS.getCode())
+                    .info(ResponseCode.SUCCESS.getInfo())
+                    .data(dto)
+                    .build();
+        } catch (AppException e) {
+            log.error("异步文档上传处理异常", e);
+            safeAudit(auditUserId, auditUsername, AuditResult.FAILURE,
+                    fileName, e.getInfo(), ip, ua);
+            return Response.<UploadResponseDTO>builder()
+                    .code(e.getCode())
+                    .info(e.getInfo())
+                    .build();
+        } catch (Exception e) {
+            log.error("异步文档上传失败: {}", fileName, e);
+            safeAudit(auditUserId, auditUsername, AuditResult.FAILURE,
+                    fileName, "文档上传失败: " + e.getMessage(), ip, ua);
+            return Response.<UploadResponseDTO>builder()
+                    .code(ResponseCode.UN_ERROR.getCode())
+                    .info("文档上传失败: " + e.getMessage())
+                    .build();
+        }
+    }
+
+    @RequestMapping(value = "rag/documents/{documentId}/status", method = RequestMethod.GET)
+    public Response<UploadResponseDTO> getDocumentProcessStatus(
+            HttpServletRequest request,
+            @PathVariable("documentId") String documentId) {
+        try {
+            if (documentMetadataRepository == null) {
+                return Response.<UploadResponseDTO>builder()
+                        .code(ResponseCode.UN_ERROR.getCode())
+                        .info("RAG服务未启用")
+                        .build();
+            }
+            DocumentMetadataEntity entity = documentMetadataRepository.queryByDocumentId(
+                    documentId,
+                    TenantScopeVO.singleUser(CurrentUserSupport.requireUserIdString(request))
+            );
+            if (entity == null) {
+                return Response.<UploadResponseDTO>builder()
+                        .code(ResponseCode.ILLEGAL_PARAMETER.getCode())
+                        .info("文档不存在")
+                        .build();
+            }
+            UploadResponseDTO dto = new UploadResponseDTO();
+            dto.setDocumentId(entity.getDocumentId());
+            dto.setChunkCount(entity.getTotalChunks());
+            dto.setStatus(entity.getProcessingStatus());
+            dto.setMessage(entity.getErrorMessage());
+            return Response.<UploadResponseDTO>builder()
+                    .code(ResponseCode.SUCCESS.getCode())
+                    .info(ResponseCode.SUCCESS.getInfo())
+                    .data(dto)
+                    .build();
+        } catch (Exception e) {
+            log.error("查询文档处理状态失败: {}", documentId, e);
+            return Response.<UploadResponseDTO>builder()
+                    .code(ResponseCode.UN_ERROR.getCode())
+                    .info("查询失败: " + e.getMessage())
                     .build();
         }
     }
@@ -141,6 +281,73 @@ public class FileUploadController {
         } catch (Exception ex) {
             log.warn("审计调用失败：action=UPLOAD_DOC, err={}", ex.getMessage());
         }
+    }
+
+    private void executeDocumentProcessing(DocumentUploadCommand command,
+                                           Long auditUserId,
+                                           String auditUsername,
+                                           String fileName,
+                                           String ip,
+                                           String ua) {
+        Runnable task = () -> {
+            try {
+                ragService.uploadDocument(command);
+                safeAudit(auditUserId, auditUsername, AuditResult.SUCCESS, fileName, "", ip, ua);
+            } catch (Exception ex) {
+                String message = ex.getMessage() == null ? "未知错误" : ex.getMessage();
+                String errorMessage = message.length() > 500 ? message.substring(0, 500) : message;
+                log.error("异步文档处理失败: documentId={}, fileName={}", command.getDocumentId(), fileName, ex);
+                try {
+                    documentMetadataRepository.updateStatus(command.getDocumentId(), "failed", 0, 0, 0, errorMessage);
+                } catch (Exception updateEx) {
+                    log.warn("异步文档处理失败状态更新异常: documentId={}, err={}", command.getDocumentId(), updateEx.getMessage());
+                }
+                safeAudit(auditUserId, auditUsername, AuditResult.FAILURE, fileName, errorMessage, ip, ua);
+            }
+        };
+        if (ragDocumentExecutor != null) {
+            ragDocumentExecutor.execute(task);
+        } else {
+            new Thread(task, "rag-document-fallback").start();
+        }
+    }
+
+    private String validateUploadFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            return "上传文件不能为空";
+        }
+        long maxBytes = maxUploadSizeMb * 1024 * 1024;
+        if (maxBytes > 0 && file.getSize() > maxBytes) {
+            return "文件大小超过" + maxUploadSizeMb + "MB限制";
+        }
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null || originalFilename.isBlank()) {
+            return "文件名不能为空";
+        }
+        String extension = getExtension(originalFilename);
+        if (extension.isBlank() || !SUPPORTED_EXTENSIONS.contains(extension)) {
+            return "不支持的文件类型，仅支持 txt、md、pdf、doc、docx、html";
+        }
+        String contentType = file.getContentType();
+        if (contentType != null && !contentType.isBlank()) {
+            String normalizedContentType = contentType.toLowerCase(Locale.ROOT);
+            int semicolonIndex = normalizedContentType.indexOf(';');
+            if (semicolonIndex >= 0) {
+                normalizedContentType = normalizedContentType.substring(0, semicolonIndex).trim();
+            }
+            if (!SUPPORTED_MIME_TYPES.contains(normalizedContentType)) {
+                return "不支持的文件MIME类型: " + contentType;
+            }
+        }
+        return null;
+    }
+
+    private String getExtension(String fileName) {
+        int dotIndex = fileName.lastIndexOf('.');
+        if (dotIndex < 0 || dotIndex == fileName.length() - 1) {
+            return "";
+        }
+        return fileName.substring(dotIndex + 1).toLowerCase(Locale.ROOT);
     }
 
 }

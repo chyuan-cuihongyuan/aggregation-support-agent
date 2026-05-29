@@ -356,10 +356,10 @@ public class AgentMemoryMilvusRepository implements IAgentMemoryRepository {
                 filter.append(" && ").append(FIELD_SCOPE).append(" like \"").append(scope).append("%\"");
             }
             
-            // 构建搜索参数
-            SearchParam searchParam = SearchParam.newBuilder()
-                .withCollectionName(COLLECTION_NAME)
-                .withVectors(List.of(Arrays.stream(queryEmbedding).boxed().collect(Collectors.toList())))
+                // 构建搜索参数
+                SearchParam searchParam = SearchParam.newBuilder()
+                    .withCollectionName(COLLECTION_NAME)
+                .withVectors(List.of(toFloatList(queryEmbedding)))
                 .withVectorFieldName(FIELD_VECTOR)
                 .withTopK(limit)
                 .withParams(SEARCH_PARAMS)
@@ -382,8 +382,8 @@ public class AgentMemoryMilvusRepository implements IAgentMemoryRepository {
             SearchResultsWrapper wrapper = new SearchResultsWrapper(searchResult.getData().getResults());
             List<AgentMemoryEntity> results = new ArrayList<>();
             
-            for (int i = 0; i < wrapper.getRowCount(0); i++) {
-                SearchResultsWrapper.IDScore score = wrapper.getIDScore(0, i);
+            for (int i = 0; i < wrapper.getRowRecords(0).size(); i++) {
+                SearchResultsWrapper.IDScore score = wrapper.getIDScore(0).get(i);
                 Map<String, Object> fieldValues = score.getFieldValues();
                 
                 AgentMemoryEntity entity = AgentMemoryEntity.builder()
@@ -434,7 +434,7 @@ public class AgentMemoryMilvusRepository implements IAgentMemoryRepository {
             List<InsertParam.Field> fields = new ArrayList<>();
             fields.add(new InsertParam.Field(FIELD_ID, List.of(entity.getMemoryId())));
             fields.add(new InsertParam.Field(FIELD_VECTOR, 
-                List.of(Arrays.stream(embedding).boxed().collect(Collectors.toList()))));
+                List.of(toFloatList(embedding))));
             fields.add(new InsertParam.Field(FIELD_CONTENT, List.of(entity.getContent())));
             fields.add(new InsertParam.Field(FIELD_TENANT_ID, List.of(entity.getTenantId())));
             fields.add(new InsertParam.Field(FIELD_USER_ID, List.of(entity.getUserId())));
@@ -467,6 +467,14 @@ public class AgentMemoryMilvusRepository implements IAgentMemoryRepository {
             log.error("Agent Memory 向量插入异常", e);
             throw new RuntimeException("Agent Memory 向量插入失败", e);
         }
+    }
+
+    private List<Float> toFloatList(float[] vector) {
+        List<Float> values = new ArrayList<>(vector.length);
+        for (float value : vector) {
+            values.add(value);
+        }
+        return values;
     }
     
     @Override

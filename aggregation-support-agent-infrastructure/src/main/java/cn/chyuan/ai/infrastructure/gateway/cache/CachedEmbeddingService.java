@@ -3,8 +3,10 @@ package cn.chyuan.ai.infrastructure.gateway.cache;
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -42,11 +44,16 @@ public class CachedEmbeddingService implements IEmbeddingService {
     /** 缓存未命中次数 */
     private final AtomicLong missCount = new AtomicLong(0);
 
+    /** Micrometer 指标计数器（可选） */
+    private final io.micrometer.core.instrument.Counter micrometerHitCounter;
+    private final io.micrometer.core.instrument.Counter micrometerMissCounter;
+
     public CachedEmbeddingService(
             IEmbeddingService delegate,
-            @Value("${rag.cache.embedding.max-size:10000}") int maxSize,
-            @Value("${rag.cache.embedding.expire-hours:24}") int expireHours,
-            @Value("${rag.cache.embedding.model-name:default}") String modelName) {
+            int maxSize,
+            int expireHours,
+            String modelName,
+            MeterRegistry meterRegistry) {
         this.delegate = delegate;
         this.modelName = modelName == null || modelName.isBlank() ? "default" : modelName;
         this.cache = CacheBuilder.newBuilder()
@@ -54,6 +61,27 @@ public class CachedEmbeddingService implements IEmbeddingService {
                 .expireAfterAccess(expireHours, TimeUnit.HOURS)
                 .recordStats()
                 .build();
+
+        if (meterRegistry != null) {
+            Gauge.builder("rag_embedding_cache_size", cache, c -> c.size())
+                    .tag("model", this.modelName)
+                    .description("当前缓存大小")
+                    .register(meterRegistry);
+            Counter hitCounter = Counter.builder("rag_embedding_cache_hit_total")
+                    .tag("model", this.modelName)
+                    .description("缓存命中次数")
+                    .register(meterRegistry);
+            Counter missCounter = Counter.builder("rag_embedding_cache_miss_total")
+                    .tag("model", this.modelName)
+                    .description("缓存未命中次数")
+                    .register(meterRegistry);
+            // 用包装的 AtomicLong 追踪，在 getStats 中同步到 Micrometer
+            this.micrometerHitCounter = hitCounter;
+            this.micrometerMissCounter = missCounter;
+        } else {
+            this.micrometerHitCounter = null;
+            this.micrometerMissCounter = null;
+        }
 
         log.info("嵌入向量缓存初始化: maxSize={}, expireHours={}, modelName={}", maxSize, expireHours, this.modelName);
     }
@@ -70,12 +98,14 @@ public class CachedEmbeddingService implements IEmbeddingService {
         float[] cached = cache.getIfPresent(cacheKey);
         if (cached != null) {
             hitCount.incrementAndGet();
+            incrementMicrometer(micrometerHitCounter);
             log.debug("嵌入缓存命中: key={}", cacheKey.substring(0, Math.min(8, cacheKey.length())));
             return cached;
         }
 
         // 缓存未命中，调用实际服务
         missCount.incrementAndGet();
+        incrementMicrometer(micrometerMissCounter);
         float[] result = delegate.embed(text);
 
         // 存入缓存
@@ -110,9 +140,11 @@ public class CachedEmbeddingService implements IEmbeddingService {
 
             if (cached != null) {
                 hitCount.incrementAndGet();
+                incrementMicrometer(micrometerHitCounter);
                 results.add(cached);
             } else {
                 missCount.incrementAndGet();
+                incrementMicrometer(micrometerMissCounter);
                 results.add(null); // 占位
                 uncachedIndices.add(i);
                 uncachedTexts.add(text);
@@ -141,6 +173,12 @@ public class CachedEmbeddingService implements IEmbeddingService {
         }
 
         return results;
+    }
+
+    private void incrementMicrometer(io.micrometer.core.instrument.Counter counter) {
+        if (counter != null) {
+            counter.increment();
+        }
     }
 
     /**

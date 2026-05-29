@@ -85,7 +85,9 @@ public class RagService implements IRagService {
 
     @Override
     public void uploadDocument(DocumentUploadCommand command) {
-        String documentId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        String documentId = command.getDocumentId() != null && !command.getDocumentId().isBlank()
+                ? command.getDocumentId()
+                : UUID.randomUUID().toString().replace("-", "").substring(0, 16);
         String fileName = command.getFileName();
         log.info("开始处理文档上传: fileName={}", fileName);
 
