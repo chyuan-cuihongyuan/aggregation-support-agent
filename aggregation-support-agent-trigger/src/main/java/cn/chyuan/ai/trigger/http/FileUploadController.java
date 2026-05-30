@@ -84,7 +84,19 @@ public class FileUploadController {
                         .build();
             }
 
-            String originalFilename = file.getOriginalFilename();
+            // 路径遍历清理：只保留文件名部分
+            String originalFilename = sanitizeFileName(file.getOriginalFilename());
+
+            // 文件扩展名白名单校验
+            if (!isAllowedExtension(originalFilename)) {
+                safeAudit(auditUserId, auditUsername, AuditResult.FAILURE,
+                        originalFilename, "不支持的文件类型，仅允许 txt, md, pdf, docx", ip, ua);
+                return Response.<UploadResponseDTO>builder()
+                        .code(ResponseCode.ILLEGAL_PARAMETER.getCode())
+                        .info("不支持的文件类型，仅允许 txt, md, pdf, docx")
+                        .build();
+            }
+
             String contentType = file.getContentType();
             log.info("接收文档上传: fileName={}, contentType={}, size={}", originalFilename, contentType, file.getSize());
             TenantScopeVO scope = TenantScopeVO.singleUser(CurrentUserSupport.requireUserIdString(request));
@@ -141,6 +153,43 @@ public class FileUploadController {
         } catch (Exception ex) {
             log.warn("审计调用失败：action=UPLOAD_DOC, err={}", ex.getMessage());
         }
+    }
+
+    /**
+     * 路径遍历清理：剥离目录部分，只保留纯文件名
+     */
+    private String sanitizeFileName(String fileName) {
+        if (fileName == null || fileName.isEmpty()) {
+            return "unknown";
+        }
+        // 去除前后空白
+        fileName = fileName.trim();
+        // 取最后一个路径分隔符之后的部分
+        int lastSlash = Math.max(fileName.lastIndexOf('/'), fileName.lastIndexOf('\\'));
+        if (lastSlash >= 0) {
+            fileName = fileName.substring(lastSlash + 1);
+        }
+        // 防止路径遍历
+        if (fileName.contains("..")) {
+            fileName = fileName.replaceAll("\\.\\.", "");
+        }
+        return fileName;
+    }
+
+    /**
+     * 文件扩展名白名单校验：仅允许 txt, md, pdf, docx
+     */
+    private boolean isAllowedExtension(String fileName) {
+        if (fileName == null) {
+            return false;
+        }
+        int lastDot = fileName.lastIndexOf('.');
+        if (lastDot <= 0) {
+            return false;
+        }
+        String extension = fileName.substring(lastDot + 1).toLowerCase();
+        return "txt".equals(extension) || "md".equals(extension)
+                || "pdf".equals(extension) || "docx".equals(extension);
     }
 
 }

@@ -106,13 +106,6 @@ public class AgentServiceController implements IAgentService {
         }
     }
 
-    @RequestMapping(value = "create_session", method = RequestMethod.GET)
-    public Response<CreateSessionResponseDTO> createSession(HttpServletRequest request, @RequestParam("agentId") String agentId) {
-        CreateSessionRequestDTO requestDTO = new CreateSessionRequestDTO();
-        requestDTO.setAgentId(agentId);
-        return createSession(request, requestDTO);
-    }
-
     @RequestMapping(value = "chat", method = RequestMethod.POST)
     public Response<ChatResponseDTO> chat(HttpServletRequest request, @RequestBody ChatRequestDTO requestDTO) {
         try {

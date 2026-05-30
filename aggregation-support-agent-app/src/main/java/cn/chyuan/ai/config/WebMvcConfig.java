@@ -32,8 +32,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
         // 允许的前端地址
         config.setAllowedOrigins(Arrays.asList(allowedOrigins.split(",")));
 
-        // 允许所有请求头（重要：允许自定义头）
-        config.setAllowedHeaders(Arrays.asList("*"));
+        // 允许的请求头（明确列出，避免通配符安全风险）
+        config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Requested-With", "Cookie"));
 
         // 允许所有请求方法
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"));
