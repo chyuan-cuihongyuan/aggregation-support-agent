@@ -14,7 +14,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Async;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -226,17 +225,6 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
             forget(memory.getMemoryId());
         }
         log.info("遗忘作用域下的 {} 条记忆: {}", memories.size(), scope);
-    }
-    
-    /**
-     * 定时执行记忆整合（无参数，供 @Scheduled 调用）
-     */
-    @Scheduled(cron = "0 0 3 * * ?")  // 每天凌晨3点执行
-    public void scheduledConsolidate() {
-        log.info("开始定时记忆整合任务");
-        // TODO: 遍历所有租户和用户执行整合
-        // 当前实现需要外部传入 tenantId 和 userId
-        // 生产环境应遍历所有活跃用户
     }
     
     @Override
