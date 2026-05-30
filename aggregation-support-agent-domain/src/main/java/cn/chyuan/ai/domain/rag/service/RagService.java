@@ -89,6 +89,11 @@ public class RagService implements IRagService {
         String fileName = command.getFileName();
         log.info("开始处理文档上传: fileName={}", fileName);
 
+        TenantScopeVO scope = TenantScopeVO.builder()
+                .tenantId(command.getTenantId() != null ? command.getTenantId() : command.getUserId())
+                .ownerUserId(command.getUserId() != null ? command.getUserId() : "")
+                .build();
+
         String extension = "";
         if (fileName != null && fileName.contains(".")) {
             extension = fileName.substring(fileName.lastIndexOf(".") + 1).toLowerCase();
@@ -128,7 +133,7 @@ public class RagService implements IRagService {
 
             if (chunks.isEmpty()) {
                 log.warn("文档分块结果为空，跳过处理: {}", fileName);
-                documentMetadataRepository.updateStatus(documentId, "success", 0, 0, 0, "文档分块结果为空");
+                documentMetadataRepository.updateStatus(documentId, "success", 0, 0, 0, "文档分块结果为空", scope);
                 return;
             }
 
@@ -147,14 +152,14 @@ public class RagService implements IRagService {
 
             int totalChars = parsedDocument.getTextContent() != null ? parsedDocument.getTextContent().length() : 0;
             int sectionCount = parsedDocument.getSections() != null ? parsedDocument.getSections().size() : 0;
-            documentMetadataRepository.updateStatus(documentId, "success", chunks.size(), totalChars, sectionCount, "");
+            documentMetadataRepository.updateStatus(documentId, "success", chunks.size(), totalChars, sectionCount, "", scope);
 
             log.info("文档上传处理完成: fileName={}, documentId={}, chunkCount={}", fileName, documentId, chunks.size());
         } catch (Exception e) {
             log.error("文档上传处理失败: fileName={}, documentId={}", fileName, documentId, e);
             String errMsg = e.getMessage() != null
                     ? e.getMessage().substring(0, Math.min(e.getMessage().length(), 500)) : "未知错误";
-            documentMetadataRepository.updateStatus(documentId, "failed", 0, 0, 0, errMsg);
+            documentMetadataRepository.updateStatus(documentId, "failed", 0, 0, 0, errMsg, scope);
             throw e;
         }
     }

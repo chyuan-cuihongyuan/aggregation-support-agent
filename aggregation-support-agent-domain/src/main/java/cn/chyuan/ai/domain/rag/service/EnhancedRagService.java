@@ -150,6 +150,11 @@ public class EnhancedRagService implements IRagService {
                 : (command.getContent() != null ? command.getContent().length() : 0L);
         String extension = resolveExtension(command.getFileName());
 
+        TenantScopeVO scope = TenantScopeVO.builder()
+                .tenantId(command.getTenantId() != null ? command.getTenantId() : command.getUserId())
+                .ownerUserId(command.getUserId() != null ? command.getUserId() : "")
+                .build();
+
         DocumentMetadataEntity metadata = DocumentMetadataEntity.builder()
                 .documentId(documentId)
                 .tenantId(command.getTenantId() != null ? command.getTenantId() : command.getUserId())
@@ -202,7 +207,7 @@ public class EnhancedRagService implements IRagService {
 
         if (chunks.isEmpty()) {
             log.warn("文档分块结果为空，跳过处理: {}", command.getFileName());
-            documentMetadataRepository.updateStatus(documentId, "success", 0, 0, 0, "文档分块结果为空");
+            documentMetadataRepository.updateStatus(documentId, "success", 0, 0, 0, "文档分块结果为空", scope);
             return;
         }
 
@@ -231,7 +236,7 @@ public class EnhancedRagService implements IRagService {
 
         int totalChars = parsedDocument.getTextContent() != null ? parsedDocument.getTextContent().length() : 0;
         int sectionCount = parsedDocument.getSections() != null ? parsedDocument.getSections().size() : 0;
-        documentMetadataRepository.updateStatus(documentId, "success", chunks.size(), totalChars, sectionCount, "");
+        documentMetadataRepository.updateStatus(documentId, "success", chunks.size(), totalChars, sectionCount, "", scope);
         log.info("文档上传处理完成: fileName={}, chunkCount={}", command.getFileName(), chunks.size());
     }
 
