@@ -6,9 +6,15 @@ import cn.chyuan.ai.api.dto.GraphSubgraphDTO;
 import cn.chyuan.ai.domain.knowledgegraph.model.entity.GraphEntity;
 import cn.chyuan.ai.domain.knowledgegraph.model.valobj.SubgraphVO;
 import cn.chyuan.ai.domain.knowledgegraph.service.IKnowledgeGraphService;
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
+import cn.chyuan.ai.domain.rag.adapter.repository.IDocumentMetadataRepository;
+import cn.chyuan.ai.domain.rag.model.entity.DocumentMetadataEntity;
 import cn.chyuan.ai.api.response.Response;
+import cn.chyuan.ai.trigger.annotation.RequireRole;
+import cn.chyuan.ai.trigger.support.CurrentUserSupport;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.*;
@@ -28,7 +34,11 @@ public class KnowledgeGraphController {
     @Resource
     private IKnowledgeGraphService knowledgeGraphService;
 
+    @Resource
+    private IDocumentMetadataRepository documentMetadataRepository;
+
     /** 图谱统计信息 */
+    @RequireRole("admin")
     @GetMapping("/statistics")
     public Response<GraphStatisticsDTO> statistics() {
         try {
@@ -51,6 +61,7 @@ public class KnowledgeGraphController {
     }
 
     /** 搜索实体 */
+    @RequireRole("admin")
     @GetMapping("/entities")
     public Response<List<GraphEntityDTO>> searchEntities(
             @RequestParam String query,
@@ -79,6 +90,7 @@ public class KnowledgeGraphController {
     }
 
     /** 获取实体详情 */
+    @RequireRole("admin")
     @GetMapping("/entities/{entityId}")
     public Response<GraphEntityDTO> getEntity(@PathVariable String entityId) {
         try {
@@ -104,6 +116,7 @@ public class KnowledgeGraphController {
     }
 
     /** 获取实体子图 */
+    @RequireRole("admin")
     @GetMapping("/subgraph/{entityId}")
     public Response<GraphSubgraphDTO> getSubgraph(
             @PathVariable String entityId,
@@ -125,9 +138,20 @@ public class KnowledgeGraphController {
     }
 
     /** 触发文档图谱构建 */
+    @RequireRole("admin")
     @PostMapping("/build/{documentId}")
-    public Response<String> buildGraph(@PathVariable String documentId) {
+    public Response<String> buildGraph(HttpServletRequest request, @PathVariable String documentId) {
         try {
+            // 校验文档所有权
+            String userId = CurrentUserSupport.requireUserIdString(request);
+            TenantScopeVO scope = TenantScopeVO.singleUser(userId);
+            DocumentMetadataEntity doc = documentMetadataRepository.queryByDocumentId(documentId, scope);
+            if (doc == null) {
+                return Response.<String>builder()
+                        .code(ResponseCode.ILLEGAL_PARAMETER.getCode())
+                        .info("文档不存在或无权访问")
+                        .build();
+            }
             // 异步构建，立即返回
             return Response.<String>builder()
                     .code(ResponseCode.SUCCESS.getCode())
@@ -144,6 +168,7 @@ public class KnowledgeGraphController {
     }
 
     /** 健康检查 */
+    @RequireRole("admin")
     @GetMapping("/health")
     public Response<Boolean> healthCheck() {
         boolean healthy = knowledgeGraphService.healthCheck();
@@ -155,6 +180,7 @@ public class KnowledgeGraphController {
     }
 
     /** 可视化数据 */
+    @RequireRole("admin")
     @GetMapping("/visualization")
     public Response<GraphSubgraphDTO> visualization(
             @RequestParam String query,

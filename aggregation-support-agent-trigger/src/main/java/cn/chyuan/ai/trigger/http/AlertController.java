@@ -5,6 +5,7 @@ import cn.chyuan.ai.api.dto.AlertListResponseDTO;
 import cn.chyuan.ai.api.response.Response;
 import cn.chyuan.ai.domain.aiops.model.entity.AlertEntity;
 import cn.chyuan.ai.domain.aiops.service.IAlertService;
+import cn.chyuan.ai.trigger.annotation.RequireRole;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -31,6 +32,7 @@ public class AlertController {
      * @param severity 严重程度过滤（可选）
      * @param status   状态过滤（可选）
      */
+    @RequireRole("admin")
     @RequestMapping(value = "list", method = RequestMethod.GET)
     public Response<AlertListResponseDTO> getAlerts(
             @RequestParam(value = "severity", required = false) String severity,
@@ -81,6 +83,7 @@ public class AlertController {
     /**
      * 获取告警详情
      */
+    @RequireRole("admin")
     @RequestMapping(value = "{alertId}", method = RequestMethod.GET)
     public Response<AlertDTO> getAlertDetail(@PathVariable("alertId") String alertId) {
         try {
@@ -109,6 +112,7 @@ public class AlertController {
     /**
      * 确认告警
      */
+    @RequireRole("admin")
     @RequestMapping(value = "{alertId}/acknowledge", method = RequestMethod.POST)
     public Response<Boolean> acknowledgeAlert(@PathVariable("alertId") String alertId) {
         try {
@@ -131,6 +135,7 @@ public class AlertController {
     /**
      * 解决告警
      */
+    @RequireRole("admin")
     @RequestMapping(value = "{alertId}/resolve", method = RequestMethod.POST)
     public Response<Boolean> resolveAlert(@PathVariable("alertId") String alertId) {
         try {
@@ -153,6 +158,7 @@ public class AlertController {
     /**
      * 创建告警（供监控系统调用）
      */
+    @RequireRole("admin")
     @RequestMapping(value = "create", method = RequestMethod.POST)
     public Response<AlertDTO> createAlert(@RequestBody AlertDTO alertDTO) {
         try {
@@ -176,6 +182,7 @@ public class AlertController {
     /**
      * 批量创建告警（供监控系统批量推送）
      */
+    @RequireRole("admin")
     @RequestMapping(value = "batch-create", method = RequestMethod.POST)
     public Response<Boolean> batchCreateAlerts(@RequestBody List<AlertDTO> alertDTOs) {
         try {
@@ -201,6 +208,7 @@ public class AlertController {
     /**
      * 获取告警统计信息
      */
+    @RequireRole("admin")
     @RequestMapping(value = "statistics", method = RequestMethod.GET)
     public Response<AlertListResponseDTO.AlertCountDTO> getStatistics() {
         try {

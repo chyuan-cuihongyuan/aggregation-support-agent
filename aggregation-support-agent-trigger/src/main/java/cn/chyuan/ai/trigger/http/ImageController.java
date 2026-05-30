@@ -3,7 +3,9 @@ package cn.chyuan.ai.trigger.http;
 import cn.chyuan.ai.api.dto.ImageDTO;
 import cn.chyuan.ai.api.response.Response;
 import cn.chyuan.ai.domain.storage.service.IImageStorageService;
+import cn.chyuan.ai.trigger.support.CurrentUserSupport;
 import cn.chyuan.ai.types.enums.ResponseCode;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -34,7 +36,8 @@ public class ImageController {
      * 查询用户图片列表
      */
     @GetMapping
-    public Response<List<ImageDTO>> listImages(@RequestParam String userId) {
+    public Response<List<ImageDTO>> listImages(HttpServletRequest request) {
+        String userId = CurrentUserSupport.requireUserIdString(request);
         try {
             List<ImageDTO> images = new ArrayList<>();
             List<String> fileNames = imageStorageService.listImages(userId);
@@ -67,8 +70,9 @@ public class ImageController {
      */
     @PostMapping("/upload")
     public Response<ImageDTO> uploadImage(
-            @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "userId", required = false, defaultValue = "admin") String userId) {
+            HttpServletRequest request,
+            @RequestParam("file") MultipartFile file) {
+        String userId = CurrentUserSupport.requireUserIdString(request);
         try {
             if (file.isEmpty()) {
                 return Response.<ImageDTO>builder()
@@ -122,7 +126,13 @@ public class ImageController {
      * 获取图片文件
      */
     @GetMapping("/{userId}/{fileName}")
-    public byte[] getImage(@PathVariable String userId, @PathVariable String fileName) {
+    public byte[] getImage(HttpServletRequest request, @PathVariable String userId, @PathVariable String fileName) {
+        validateFileName(fileName);
+        String currentUserId = CurrentUserSupport.requireUserIdString(request);
+        if (!currentUserId.equals(userId)) {
+            log.warn("IDOR attempt: currentUserId={}, requestedUserId={}", currentUserId, userId);
+            return null;
+        }
         try (InputStream inputStream = imageStorageService.getInputStream(userId, fileName)) {
             if (inputStream == null) {
                 return null;
@@ -138,7 +148,16 @@ public class ImageController {
      * 删除图片
      */
     @DeleteMapping("/{userId}/{fileName}")
-    public Response<String> deleteImage(@PathVariable String userId, @PathVariable String fileName) {
+    public Response<String> deleteImage(HttpServletRequest request, @PathVariable String userId, @PathVariable String fileName) {
+        validateFileName(fileName);
+        String currentUserId = CurrentUserSupport.requireUserIdString(request);
+        if (!currentUserId.equals(userId)) {
+            log.warn("IDOR attempt: currentUserId={}, requestedUserId={}", currentUserId, userId);
+            return Response.<String>builder()
+                    .code(ResponseCode.ILLEGAL_PARAMETER.getCode())
+                    .info("无权操作其他用户的资源")
+                    .build();
+        }
         try {
             imageStorageService.delete(userId, fileName);
             log.info("图片删除成功: userId={}, fileName={}", userId, fileName);
@@ -152,6 +171,12 @@ public class ImageController {
                     .code(ResponseCode.UN_ERROR.getCode())
                     .info("删除图片失败: " + e.getMessage())
                     .build();
+        }
+    }
+
+    private void validateFileName(String fileName) {
+        if (fileName == null || fileName.contains("..") || fileName.contains("/") || fileName.contains("\\")) {
+            throw new IllegalArgumentException("非法文件名: " + fileName);
         }
     }
 
