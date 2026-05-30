@@ -52,3 +52,8 @@ docs/dev-ops/neo4j/logs/*
 docs/dev-ops/mysql/data/*
 docs/dev-ops/redis/data/*
 docs/dev-ops/milvus/data/*
+
+### 环境变量密钥（严禁提交） ###
+.env
+.env.local
+.env.*.local
