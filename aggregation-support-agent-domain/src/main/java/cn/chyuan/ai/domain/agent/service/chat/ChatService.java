@@ -224,7 +224,7 @@ public class ChatService implements IChatService {
 
     private void ensureSessionOwner(String sessionId, String agentId, String userId) {
         if (sessionId == null || sessionId.isBlank()) {
-            return;
+            throw new AppException(ResponseCode.E0001.getCode(), "sessionId 不能为空");
         }
         ChatSessionEntity sessionEntity = chatHistoryRepository.querySession(sessionId, TenantScopeVO.singleUser(userId));
         if (sessionEntity == null) {

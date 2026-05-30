@@ -35,7 +35,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private static final Set<String> WHITE_LIST = new HashSet<>(Arrays.asList(
             "/api/v1/auth/register",
-            "/api/v1/auth/login"
+            "/api/v1/auth/login",
+            "/actuator/health"
     ));
 
     @Override
@@ -43,14 +44,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
         String path = request.getRequestURI();
 
-        // 跳过 OPTIONS 预检请求（CORS）
-        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+        // 跳过 OPTIONS 预检请求（CORS）— 仅对白名单路径放行
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod()) && WHITE_LIST.contains(path)) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        // 白名单和非API路径放行
-        if (WHITE_LIST.contains(path) || !path.startsWith("/api/")) {
+        // 白名单路径放行，默认拒绝
+        if (WHITE_LIST.contains(path)) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -73,6 +74,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             request.setAttribute(ATTR_ROLE, claims.get("role", String.class));
             request.setAttribute(ATTR_AUTH_TOKEN, token);
             RequestScopeContext.set(TenantScopeVO.singleUser(String.valueOf(userId)));
+        } else {
+            response.setStatus(401);
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write("{\"code\":\"A0004\",\"info\":\"Token无效或已过期\",\"data\":null}");
+            return;
         }
 
         try {

@@ -18,7 +18,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.text.SimpleDateFormat;
@@ -148,11 +147,7 @@ public class AuthController {
             tokenService.removeToken(token);
         }
 
-        Cookie cookie = new Cookie(COOKIE_NAME, "");
-        cookie.setPath("/");
-        cookie.setMaxAge(0);
-        cookie.setHttpOnly(true);
-        response.addCookie(cookie);
+        response.setHeader("Set-Cookie", String.format("%s=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict", COOKIE_NAME));
 
         // 登出审计 — userId/username 从 request attr 读取，失败兜底
         Object uidAttr = request.getAttribute(JwtAuthFilter.ATTR_USER_ID);
@@ -188,13 +183,6 @@ public class AuthController {
     }
 
     private void setAuthCookie(HttpServletResponse response, String token) {
-        Cookie cookie = new Cookie(COOKIE_NAME, token);
-        cookie.setPath("/");
-        cookie.setMaxAge(COOKIE_MAX_AGE);
-        cookie.setHttpOnly(true);
-        cookie.setSecure(true);
-        // 使用 Response Header 设置 SameSite 属性（Servlet API 不直接支持）
-        response.addCookie(cookie);
         response.setHeader("Set-Cookie", String.format("%s=%s; Path=/; Max-Age=%d; HttpOnly; Secure; SameSite=Strict",
                 COOKIE_NAME, token, COOKIE_MAX_AGE));
     }

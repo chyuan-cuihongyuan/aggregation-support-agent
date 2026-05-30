@@ -56,7 +56,7 @@ public class TokenService implements ITokenService {
         String redisKey = buildRedisKey(userId, jti);
         tokenRepository.saveToken(redisKey, token, expiration / 1000);
 
-        log.info("生成Token: userId={}, jti={}", userId, jti);
+        log.debug("生成Token: userId={}, jti={}", userId, jti);
         return TokenVO.builder().token(token).expireAt(expireDate.getTime()).build();
     }
 
@@ -79,7 +79,7 @@ public class TokenService implements ITokenService {
 
             return tokenRepository.queryToken(redisKey) != null;
         } catch (Exception e) {
-            log.warn("Token校验失败: {}", e.getMessage());
+            log.warn("Token校验失败", e);
             return false;
         }
     }
@@ -102,7 +102,7 @@ public class TokenService implements ITokenService {
             String userId = claims.getSubject();
             String jti = claims.getId();
             tokenRepository.removeToken(buildRedisKey(Long.valueOf(userId), jti));
-            log.info("移除Token: userId={}, jti={}", userId, jti);
+            log.debug("移除Token: userId={}, jti={}", userId, jti);
         }
     }
 

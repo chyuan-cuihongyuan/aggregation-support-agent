@@ -4,7 +4,7 @@ import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 
 public final class RequestScopeContext {
 
-    private static final ThreadLocal<TenantScopeVO> CURRENT_SCOPE = new InheritableThreadLocal<>();
+    private static final ThreadLocal<TenantScopeVO> CURRENT_SCOPE = new ThreadLocal<>();
 
     private RequestScopeContext() {
     }
