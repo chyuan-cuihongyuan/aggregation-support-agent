@@ -52,3 +52,6 @@ docs/dev-ops/neo4j/logs/*
 docs/dev-ops/mysql/data/*
 docs/dev-ops/redis/data/*
 docs/dev-ops/milvus/data/*
+docs/dev-ops/elasticsearch/data/*
+docs/dev-ops/elasticsearch/data-7.17.10/*
+docs/dev-ops/elasticsearch/plugins/*

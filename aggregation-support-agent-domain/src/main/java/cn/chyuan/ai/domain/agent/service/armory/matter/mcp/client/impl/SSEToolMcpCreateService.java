@@ -19,6 +19,10 @@ import java.time.Duration;
 @Service
 public class SSEToolMcpCreateService implements TooMcpCreateService {
 
+    private static final int INITIALIZE_MAX_ATTEMPTS = 5;
+    private static final long INITIALIZE_RETRY_INTERVAL_MS = 3000L;
+    private static final long DEFAULT_CONNECT_TIMEOUT_MS = 3000L;
+
     @Override
     public ToolCallback[] buildToolCallback(AiAgentConfigTableVO.Module.ChatModel.ToolMcp toolMcp) throws Exception {
         AiAgentConfigTableVO.Module.ChatModel.ToolMcp.SSEServerParameters sseConfig = toolMcp.getSse();
@@ -47,32 +51,62 @@ public class SSEToolMcpCreateService implements TooMcpCreateService {
         }
 
         sseEndpoint = StringUtils.isBlank(sseEndpoint) ? "/sse" : sseEndpoint;
+        long requestTimeoutMs = sseConfig.getRequestTimeout() == null ? 3000L : sseConfig.getRequestTimeout();
+        long connectTimeoutMs = Math.min(requestTimeoutMs, DEFAULT_CONNECT_TIMEOUT_MS);
 
-        HttpClientSseClientTransport sseClientTransport = HttpClientSseClientTransport
-                .builder(baseUri)
-                .sseEndpoint(sseEndpoint)
-                .build();
-
-        McpSyncClient mcpSyncClient = McpClient
-                .sync(sseClientTransport)
-                .requestTimeout(Duration.ofMillis(sseConfig.getRequestTimeout())).build();
-
-        try {
-            McpSchema.InitializeResult initialize = mcpSyncClient.initialize();
-            log.info("tool sse mcp initialize {}", initialize);
-
-            return SyncMcpToolCallbackProvider.builder()
-                    .mcpClients(mcpSyncClient).build()
-                    .getToolCallbacks();
-        } catch (Exception e) {
-            log.error("tool sse mcp 初始化失败，跳过该 MCP 服务。name: {}, baseUri: {}, sseEndpoint: {}, 错误: {}",
-                    sseConfig.getName(), baseUri, sseEndpoint, e.getMessage());
+        Exception lastException = null;
+        for (int attempt = 1; attempt <= INITIALIZE_MAX_ATTEMPTS; attempt++) {
+            McpSyncClient mcpSyncClient = null;
             try {
-                mcpSyncClient.close();
-            } catch (Exception ignored) {
-                // 关闭失败不影响主流程
+                HttpClientSseClientTransport sseClientTransport = HttpClientSseClientTransport
+                        .builder(baseUri)
+                        .sseEndpoint(sseEndpoint)
+                        .connectTimeout(Duration.ofMillis(connectTimeoutMs))
+                        .build();
+
+                mcpSyncClient = McpClient
+                        .sync(sseClientTransport)
+                        .requestTimeout(Duration.ofMillis(requestTimeoutMs)).build();
+
+                McpSchema.InitializeResult initialize = mcpSyncClient.initialize();
+                log.info("tool sse mcp initialize {}", initialize);
+
+                return SyncMcpToolCallbackProvider.builder()
+                        .mcpClients(mcpSyncClient).build()
+                        .getToolCallbacks();
+            } catch (Exception e) {
+                lastException = e;
+                closeQuietly(mcpSyncClient);
+                if (attempt < INITIALIZE_MAX_ATTEMPTS) {
+                    log.warn("tool sse mcp 初始化失败，将重试。name: {}, baseUri: {}, sseEndpoint: {}, attempt: {}/{}, retryIntervalMs: {}, 错误: {}",
+                            sseConfig.getName(), baseUri, sseEndpoint, attempt, INITIALIZE_MAX_ATTEMPTS, INITIALIZE_RETRY_INTERVAL_MS, e.getMessage());
+                    sleepBeforeRetry();
+                }
             }
-            return new ToolCallback[0];
+        }
+
+        log.error("tool sse mcp 初始化失败，跳过该 MCP 服务。name: {}, baseUri: {}, sseEndpoint: {}, attempts: {}, 错误: {}",
+                sseConfig.getName(), baseUri, sseEndpoint, INITIALIZE_MAX_ATTEMPTS,
+                lastException == null ? "" : lastException.getMessage());
+        return new ToolCallback[0];
+    }
+
+    private void closeQuietly(McpSyncClient mcpSyncClient) {
+        if (mcpSyncClient == null) {
+            return;
+        }
+        try {
+            mcpSyncClient.close();
+        } catch (Exception ignored) {
+            // 关闭失败不影响主流程
+        }
+    }
+
+    private void sleepBeforeRetry() {
+        try {
+            Thread.sleep(INITIALIZE_RETRY_INTERVAL_MS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 

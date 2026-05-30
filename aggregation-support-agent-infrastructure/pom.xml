@@ -93,7 +93,7 @@
         <dependency>
             <groupId>co.elastic.clients</groupId>
             <artifactId>elasticsearch-java</artifactId>
-            <version>8.12.0</version>
+            <version>7.17.10</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
