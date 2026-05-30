@@ -4,6 +4,7 @@ import cn.chyuan.ai.domain.memory.adapter.repository.IAgentMemoryRepository;
 import cn.chyuan.ai.domain.memory.model.entity.AgentMemoryEntity;
 import cn.chyuan.ai.domain.memory.model.enums.MemoryType;
 import cn.chyuan.ai.domain.memory.model.valobj.MemoryEntry;
+import cn.chyuan.ai.domain.memory.model.valobj.TenantUserPair;
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import cn.chyuan.ai.infrastructure.persistent.mapper.memory.AgentMemoryMapper;
 import cn.chyuan.ai.infrastructure.dao.po.memory.AgentMemoryPO;
@@ -156,6 +157,16 @@ public class AgentMemoryMySQLRepository implements IAgentMemoryRepository {
     public void deleteEmbedding(String memoryId) {
         // MySQL-only 模式下，不做任何操作
         log.debug("MySQL-only 模式下跳过向量删除: {}", memoryId);
+    }
+
+    @Override
+    public List<TenantUserPair> findAllTenantUserPairs() {
+        return agentMemoryMapper.selectDistinctTenantUserPairs().stream()
+            .map(row -> TenantUserPair.builder()
+                .tenantId((String) row.get("tenant_id"))
+                .userId((String) row.get("user_id"))
+                .build())
+            .collect(Collectors.toList());
     }
     
     /**

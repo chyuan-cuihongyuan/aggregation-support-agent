@@ -9,6 +9,9 @@ import org.apache.ibatis.annotations.Update;
 
 import cn.chyuan.ai.infrastructure.dao.po.memory.AgentMemoryPO;
 
+import java.util.List;
+import java.util.Map;
+
 /**
  * Agent 记忆 Mapper
  */
@@ -54,4 +57,10 @@ public interface AgentMemoryMapper extends BaseMapper<AgentMemoryPO> {
             "AND expires_at < NOW()")
     int deleteExpired(@Param("tenantId") String tenantId,
                       @Param("userId") String userId);
+
+    /**
+     * 查询所有有效的租户-用户对（去重）
+     */
+    @Select("SELECT DISTINCT tenant_id, user_id FROM agent_memory WHERE status = 1")
+    List<Map<String, Object>> selectDistinctTenantUserPairs();
 }

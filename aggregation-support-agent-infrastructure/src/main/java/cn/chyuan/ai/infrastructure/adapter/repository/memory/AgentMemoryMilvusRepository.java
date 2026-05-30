@@ -4,6 +4,7 @@ import cn.chyuan.ai.domain.memory.adapter.repository.IAgentMemoryRepository;
 import cn.chyuan.ai.domain.memory.model.entity.AgentMemoryEntity;
 import cn.chyuan.ai.domain.memory.model.enums.MemoryType;
 import cn.chyuan.ai.domain.memory.model.valobj.MemoryEntry;
+import cn.chyuan.ai.domain.memory.model.valobj.TenantUserPair;
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import cn.chyuan.ai.infrastructure.config.MilvusConfigProperties;
 import cn.chyuan.ai.infrastructure.persistent.mapper.memory.AgentMemoryMapper;
@@ -494,7 +495,7 @@ public class AgentMemoryMilvusRepository implements IAgentMemoryRepository {
                 .withCollectionName(COLLECTION_NAME)
                 .withExpr(FIELD_ID + " == \"" + memoryId + "\"")
                 .build();
-            
+
             R<MutationResult> deleteResult = milvusServiceClient.delete(deleteParam);
             if (deleteResult.getStatus() == R.Status.Success.getCode()) {
                 log.debug("Agent Memory 向量删除成功: {}", memoryId);
@@ -502,6 +503,16 @@ public class AgentMemoryMilvusRepository implements IAgentMemoryRepository {
         } catch (Exception e) {
             log.warn("Agent Memory 向量删除异常: {}", memoryId, e);
         }
+    }
+
+    @Override
+    public List<TenantUserPair> findAllTenantUserPairs() {
+        return agentMemoryMapper.selectDistinctTenantUserPairs().stream()
+            .map(row -> TenantUserPair.builder()
+                .tenantId((String) row.get("tenant_id"))
+                .userId((String) row.get("user_id"))
+                .build())
+            .collect(Collectors.toList());
     }
     
     /**

@@ -2,6 +2,7 @@ package cn.chyuan.ai.domain.memory.adapter.repository;
 
 import cn.chyuan.ai.domain.memory.model.entity.AgentMemoryEntity;
 import cn.chyuan.ai.domain.memory.model.valobj.MemoryEntry;
+import cn.chyuan.ai.domain.memory.model.valobj.TenantUserPair;
 
 import java.util.List;
 
@@ -85,4 +86,11 @@ public interface IAgentMemoryRepository {
      * 删除记忆向量
      */
     void deleteEmbedding(String memoryId);
+
+    /**
+     * 查询所有有效的租户-用户对（去重）。
+     * <p>
+     * 用于定时任务遍历所有需要整合记忆的租户和用户。
+     */
+    List<TenantUserPair> findAllTenantUserPairs();
 }
