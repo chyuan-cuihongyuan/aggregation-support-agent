@@ -74,7 +74,8 @@
         <if test="q.pageSize != null and q.pageSize > 0">
             LIMIT #{q.pageSize}
             <if test="q.page != null and q.page > 0">
-                OFFSET ${(q.page - 1) * q.pageSize}
+                <bind name="offset" value="(q.page - 1) * q.pageSize"/>
+                OFFSET #{offset}
             </if>
         </if>
     </select>
