@@ -36,7 +36,8 @@
         ORDER BY create_time ASC
     </select>
 
-    <select id="queryById" parameterType="java.lang.Long" resultMap="ChatHistoryMap">
+    <!-- 仅管理员可用：不带租户隔离，普通业务请使用 queryByIdAndScope -->
+    <select id="adminQueryById" parameterType="java.lang.Long" resultMap="ChatHistoryMap">
         SELECT id, tenant_id, owner_user_id, user_id, agent_id, agent_name, session_id, question, answer,
                trace_id, prompt_tokens, completion_tokens, create_time, update_time
         FROM chat_history
@@ -58,7 +59,8 @@
           AND owner_user_id = #{scope.ownerUserId}
     </delete>
 
-    <delete id="deleteById" parameterType="java.lang.Long">
+    <!-- 仅管理员可用：不带租户隔离，普通业务请使用 deleteByIdAndScope -->
+    <delete id="adminDeleteById" parameterType="java.lang.Long">
         DELETE FROM chat_history WHERE id = #{id}
     </delete>
 
@@ -75,7 +77,8 @@
         VALUES (#{sessionId}, #{agentId}, #{tenantId}, #{ownerUserId}, #{traceId}, #{createTime}, #{updateTime})
     </insert>
 
-    <select id="querySession" resultType="cn.chyuan.ai.infrastructure.dao.po.ChatSessionPO">
+    <!-- 仅管理员可用：不带租户隔离，普通业务请使用 querySessionByScope -->
+    <select id="adminQuerySession" resultType="cn.chyuan.ai.infrastructure.dao.po.ChatSessionPO">
         SELECT id, session_id, agent_id, tenant_id, owner_user_id, trace_id, create_time, update_time
         FROM chat_session
         WHERE session_id = #{sessionId}

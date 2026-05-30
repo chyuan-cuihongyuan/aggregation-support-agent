@@ -50,8 +50,8 @@ public class DocumentMetadataRepository implements IDocumentMetadataRepository {
     }
 
     @Override
-    public DocumentMetadataEntity queryByDocumentId(String documentId) {
-        DocumentMetadataPO po = documentMetadataMapper.queryByDocumentId(documentId);
+    public DocumentMetadataEntity adminQueryByDocumentId(String documentId) {
+        DocumentMetadataPO po = documentMetadataMapper.adminQueryByDocumentId(documentId);
         return po != null ? toEntity(po) : null;
     }
 
@@ -63,8 +63,9 @@ public class DocumentMetadataRepository implements IDocumentMetadataRepository {
 
     @Override
     public void updateStatus(String documentId, String status, Integer totalChunks,
-                             Integer totalChars, Integer sectionCount, String errorMessage) {
-        documentMetadataMapper.updateStatus(documentId, status, totalChunks, totalChars, sectionCount, errorMessage);
+                             Integer totalChars, Integer sectionCount, String errorMessage,
+                             TenantScopeVO scope) {
+        documentMetadataMapper.updateStatus(documentId, status, totalChunks, totalChars, sectionCount, errorMessage, scope);
     }
 
     @Override

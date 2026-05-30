@@ -41,7 +41,8 @@
         ORDER BY create_time DESC
     </select>
 
-    <select id="queryByDocumentId" resultMap="DocumentMetadataMap">
+    <!-- 仅管理员可用：不带租户隔离，普通业务请使用 queryByDocumentIdAndScope -->
+    <select id="adminQueryByDocumentId" resultMap="DocumentMetadataMap">
         SELECT * FROM document_metadata
         WHERE document_id = #{documentId}
           AND deleted_flag = 0
@@ -64,6 +65,7 @@
             error_message     = #{errorMessage},
             update_time       = NOW()
         WHERE document_id = #{documentId}
+          AND tenant_id = #{scope.tenantId}
     </update>
 
     <update id="markDeletedByDocumentId">

@@ -19,7 +19,8 @@
         VALUES (#{sessionId}, #{agentId}, #{tenantId}, #{ownerUserId}, #{traceId}, #{createTime}, #{updateTime})
     </insert>
 
-    <select id="queryBySessionId" resultMap="ChatSessionMap">
+    <!-- 仅管理员可用：不带租户隔离，普通业务请使用 queryBySessionIdAndScope -->
+    <select id="adminQueryBySessionId" resultMap="ChatSessionMap">
         SELECT id, session_id, agent_id, tenant_id, owner_user_id, trace_id, create_time, update_time
         FROM chat_session
         WHERE session_id = #{sessionId}

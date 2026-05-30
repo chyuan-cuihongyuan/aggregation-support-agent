@@ -48,8 +48,8 @@ public class ChatHistoryRepository implements IChatHistoryRepository {
     }
 
     @Override
-    public ChatHistoryEntity queryById(Long id) {
-        ChatHistoryPO po = chatHistoryMapper.queryById(id);
+    public ChatHistoryEntity adminQueryById(Long id) {
+        ChatHistoryPO po = chatHistoryMapper.adminQueryById(id);
         return po == null ? null : toEntity(po);
     }
 
@@ -65,8 +65,8 @@ public class ChatHistoryRepository implements IChatHistoryRepository {
     }
 
     @Override
-    public void deleteById(Long id) {
-        chatHistoryMapper.deleteById(id);
+    public void adminDeleteById(Long id) {
+        chatHistoryMapper.adminDeleteById(id);
     }
 
     @Override
@@ -90,8 +90,8 @@ public class ChatHistoryRepository implements IChatHistoryRepository {
     }
 
     @Override
-    public ChatSessionEntity querySession(String sessionId) {
-        ChatSessionPO po = chatHistoryMapper.querySession(sessionId);
+    public ChatSessionEntity adminQuerySession(String sessionId) {
+        ChatSessionPO po = chatHistoryMapper.adminQuerySession(sessionId);
         return toSessionEntity(po);
     }
 

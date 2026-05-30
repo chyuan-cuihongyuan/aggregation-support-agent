@@ -12,19 +12,22 @@ public interface IChatHistoryRepository {
 
     List<ChatHistoryEntity> queryByScope(TenantScopeVO scope);
 
-    ChatHistoryEntity queryById(Long id);
+    /** 仅管理员可用：不带租户隔离，普通业务请使用 queryById(Long, TenantScopeVO) */
+    ChatHistoryEntity adminQueryById(Long id);
 
     ChatHistoryEntity queryById(Long id, TenantScopeVO scope);
 
     void deleteByScope(TenantScopeVO scope);
 
-    void deleteById(Long id);
+    /** 仅管理员可用：不带租户隔离，普通业务请使用 deleteById(Long, TenantScopeVO) */
+    void adminDeleteById(Long id);
 
     void deleteById(Long id, TenantScopeVO scope);
 
     void saveSession(ChatSessionEntity entity);
 
-    ChatSessionEntity querySession(String sessionId);
+    /** 仅管理员可用：不带租户隔离，普通业务请使用 querySession(String, TenantScopeVO) */
+    ChatSessionEntity adminQuerySession(String sessionId);
 
     ChatSessionEntity querySession(String sessionId, TenantScopeVO scope);
 }

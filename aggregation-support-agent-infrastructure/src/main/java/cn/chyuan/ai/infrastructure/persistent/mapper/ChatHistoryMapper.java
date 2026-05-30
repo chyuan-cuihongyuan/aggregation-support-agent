@@ -15,19 +15,22 @@ public interface ChatHistoryMapper {
 
     List<ChatHistoryPO> queryByScope(@Param("scope") TenantScopeVO scope);
 
-    ChatHistoryPO queryById(@Param("id") Long id);
+    /** 仅管理员可用：不带租户隔离，普通业务请使用 queryByIdAndScope */
+    ChatHistoryPO adminQueryById(@Param("id") Long id);
 
     ChatHistoryPO queryByIdAndScope(@Param("id") Long id, @Param("scope") TenantScopeVO scope);
 
     void deleteByScope(@Param("scope") TenantScopeVO scope);
 
-    void deleteById(@Param("id") Long id);
+    /** 仅管理员可用：不带租户隔离，普通业务请使用 deleteByIdAndScope */
+    void adminDeleteById(@Param("id") Long id);
 
     void deleteByIdAndScope(@Param("id") Long id, @Param("scope") TenantScopeVO scope);
 
     void insertSession(ChatSessionPO record);
 
-    ChatSessionPO querySession(@Param("sessionId") String sessionId);
+    /** 仅管理员可用：不带租户隔离，普通业务请使用 querySessionByScope */
+    ChatSessionPO adminQuerySession(@Param("sessionId") String sessionId);
 
     ChatSessionPO querySessionByScope(@Param("sessionId") String sessionId,
                                       @Param("scope") TenantScopeVO scope);

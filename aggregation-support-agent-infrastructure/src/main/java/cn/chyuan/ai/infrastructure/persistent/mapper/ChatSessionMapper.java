@@ -10,7 +10,8 @@ public interface ChatSessionMapper {
 
     void insert(ChatSessionPO record);
 
-    ChatSessionPO queryBySessionId(@Param("sessionId") String sessionId);
+    /** 仅管理员可用：不带租户隔离，普通业务请使用 queryBySessionIdAndScope */
+    ChatSessionPO adminQueryBySessionId(@Param("sessionId") String sessionId);
 
     ChatSessionPO queryBySessionIdAndScope(@Param("sessionId") String sessionId,
                                            @Param("scope") TenantScopeVO scope);

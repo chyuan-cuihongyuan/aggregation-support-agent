@@ -13,7 +13,8 @@ public interface DocumentMetadataMapper {
 
     List<DocumentMetadataPO> queryByScope(@Param("scope") TenantScopeVO scope);
 
-    DocumentMetadataPO queryByDocumentId(@Param("documentId") String documentId);
+    /** 仅管理员可用：不带租户隔离，普通业务请使用 queryByDocumentIdAndScope */
+    DocumentMetadataPO adminQueryByDocumentId(@Param("documentId") String documentId);
 
     DocumentMetadataPO queryByDocumentIdAndScope(@Param("documentId") String documentId,
                                                  @Param("scope") TenantScopeVO scope);
@@ -23,7 +24,8 @@ public interface DocumentMetadataMapper {
                       @Param("totalChunks") Integer totalChunks,
                       @Param("totalChars") Integer totalChars,
                       @Param("sectionCount") Integer sectionCount,
-                      @Param("errorMessage") String errorMessage);
+                      @Param("errorMessage") String errorMessage,
+                      @Param("scope") TenantScopeVO scope);
 
     void markDeletedByDocumentId(@Param("documentId") String documentId,
                                  @Param("scope") TenantScopeVO scope);
