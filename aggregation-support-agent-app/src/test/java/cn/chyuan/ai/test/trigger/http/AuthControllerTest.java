@@ -19,9 +19,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.mock.web.MockCookie;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Date;
 
@@ -64,6 +64,9 @@ public class AuthControllerTest {
     void setUp() {
         request = new MockHttpServletRequest();
         response = new MockHttpServletResponse();
+        ReflectionTestUtils.setField(authController, "cookieMaxAge", 86400);
+        ReflectionTestUtils.setField(authController, "cookieSecure", true);
+        ReflectionTestUtils.setField(authController, "cookieSameSite", "Strict");
     }
 
     // ==================== 登录测试 ====================
@@ -153,6 +156,32 @@ public class AuthControllerTest {
         assertTrue(setCookieHeader.contains("HttpOnly"), "Cookie 应设置 HttpOnly");
         assertTrue(setCookieHeader.contains("Secure"), "Cookie 应设置 Secure");
         assertTrue(setCookieHeader.contains("SameSite=Strict"), "Cookie 应设置 SameSite=Strict");
+    }
+
+    @Test
+    @DisplayName("登录成功 — 本地 HTTP 配置下 Cookie 不设置 Secure")
+    public void testLogin_Success_SetsLocalHttpCookie() {
+        // 准备
+        ReflectionTestUtils.setField(authController, "cookieSecure", false);
+        ReflectionTestUtils.setField(authController, "cookieSameSite", "Lax");
+
+        LoginRequestDTO loginDTO = new LoginRequestDTO();
+        loginDTO.setUsername("testuser");
+        loginDTO.setPassword("password123");
+
+        UserEntity userEntity = buildMockUserEntity(1L, "testuser", "user");
+        when(authService.login("testuser", "password123")).thenReturn(userEntity);
+        when(tokenService.generateToken(1L, "testuser", "user")).thenReturn("mock-jwt-token");
+
+        // 执行
+        authController.login(loginDTO, request, response);
+
+        // 验证
+        String setCookieHeader = response.getHeader("Set-Cookie");
+        assertNotNull(setCookieHeader, "Set-Cookie Header 不应为 null");
+        assertTrue(setCookieHeader.contains("auth_token=mock-jwt-token"), "Cookie 应包含 auth_token");
+        assertTrue(setCookieHeader.contains("SameSite=Lax"), "Cookie 应设置 SameSite=Lax");
+        assertFalse(setCookieHeader.contains("Secure"), "本地 HTTP Cookie 不应设置 Secure");
     }
 
     // ==================== 注册测试 ====================

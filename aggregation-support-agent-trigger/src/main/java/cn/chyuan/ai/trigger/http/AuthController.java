@@ -15,10 +15,10 @@ import cn.chyuan.ai.types.enums.AuditResult;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.text.SimpleDateFormat;
@@ -41,7 +41,15 @@ public class AuthController {
     private IAuditLogService auditLogService;
 
     private static final String COOKIE_NAME = "auth_token";
-    private static final int COOKIE_MAX_AGE = 24 * 60 * 60;
+
+    @Value("${auth.cookie.max-age:86400}")
+    private int cookieMaxAge;
+
+    @Value("${auth.cookie.secure:true}")
+    private boolean cookieSecure;
+
+    @Value("${auth.cookie.same-site:Strict}")
+    private String cookieSameSite;
 
     /**
      * 用户登录
@@ -148,11 +156,7 @@ public class AuthController {
             tokenService.removeToken(token);
         }
 
-        Cookie cookie = new Cookie(COOKIE_NAME, "");
-        cookie.setPath("/");
-        cookie.setMaxAge(0);
-        cookie.setHttpOnly(true);
-        response.addCookie(cookie);
+        response.setHeader("Set-Cookie", buildCookieHeader("", 0));
 
         // 登出审计 — userId/username 从 request attr 读取，失败兜底
         Object uidAttr = request.getAttribute(JwtAuthFilter.ATTR_USER_ID);
@@ -188,15 +192,22 @@ public class AuthController {
     }
 
     private void setAuthCookie(HttpServletResponse response, String token) {
-        Cookie cookie = new Cookie(COOKIE_NAME, token);
-        cookie.setPath("/");
-        cookie.setMaxAge(COOKIE_MAX_AGE);
-        cookie.setHttpOnly(true);
-        cookie.setSecure(true);
-        // 使用 Response Header 设置 SameSite 属性（Servlet API 不直接支持）
-        response.addCookie(cookie);
-        response.setHeader("Set-Cookie", String.format("%s=%s; Path=/; Max-Age=%d; HttpOnly; Secure; SameSite=Strict",
-                COOKIE_NAME, token, COOKIE_MAX_AGE));
+        response.setHeader("Set-Cookie", buildCookieHeader(token, cookieMaxAge));
+    }
+
+    private String buildCookieHeader(String value, int maxAge) {
+        StringBuilder header = new StringBuilder()
+                .append(COOKIE_NAME).append("=").append(value)
+                .append("; Path=/")
+                .append("; Max-Age=").append(maxAge)
+                .append("; HttpOnly");
+        if (cookieSecure) {
+            header.append("; Secure");
+        }
+        if (cookieSameSite != null && !cookieSameSite.isBlank()) {
+            header.append("; SameSite=").append(cookieSameSite);
+        }
+        return header.toString();
     }
 
     private UserInfoDTO toUserInfoDTO(UserEntity entity) {

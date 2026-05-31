@@ -13,6 +13,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -65,6 +66,22 @@ public class GlobalExceptionHandler {
         return Response.builder()
                 .code(ResponseCode.E1001.getCode())
                 .info("参数约束校验失败: " + message)
+                .build();
+    }
+
+    /**
+     * 处理静态资源未找到异常
+     * 浏览器访问根路径 / 或请求 favicon.ico 时会触发，不应作为系统错误记录
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Response<?> handleNoResourceFound(NoResourceFoundException e, HttpServletRequest request) {
+        log.debug("资源未找到 [{} {}]: {}",
+            request.getMethod(), request.getRequestURI(), e.getMessage());
+
+        return Response.builder()
+                .code(ResponseCode.UN_ERROR.getCode())
+                .info("资源不存在")
                 .build();
     }
 

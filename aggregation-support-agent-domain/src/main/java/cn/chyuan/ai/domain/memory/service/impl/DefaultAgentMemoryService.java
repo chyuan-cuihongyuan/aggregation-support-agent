@@ -356,9 +356,19 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
     
     private void fallbackStore(String content, MemoryOptions options) {
         try {
+            // 防止并发重复写入：先检查内容哈希是否已存在
+            String contentHash = Hashing.sha256()
+                .hashString(content, StandardCharsets.UTF_8)
+                .toString();
+
+            if (memoryRepository.existsByContentHash(contentHash, options.getTenantId(), options.getUserId())) {
+                log.debug("降级存储：记忆已存在（contentHash={}），跳过重复写入", contentHash.substring(0, 8));
+                return;
+            }
+
             String memoryId = UUID.randomUUID().toString();
             float[] embedding = embeddingService.embed(content);
-            
+
             AgentMemoryEntity entity = AgentMemoryEntity.builder()
                 .memoryId(memoryId)
                 .tenantId(options.getTenantId())
@@ -366,9 +376,7 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
                 .agentId(options.getAgentId())
                 .sessionId(options.getSessionId())
                 .content(content)
-                .contentHash(Hashing.sha256()
-                    .hashString(content, StandardCharsets.UTF_8)
-                    .toString())
+                .contentHash(contentHash)
                 .memoryType(MemoryType.FACT)
                 .scope(options.getScope() != null ? options.getScope() : "/")
                 .importance(0.5f)
@@ -377,9 +385,9 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
                 .createdAt(Instant.now())
                 .updatedAt(Instant.now())
                 .build();
-            
-            memoryRepository.insertWithEmbedding(entity, embedding);
+
             memoryRepository.save(entity);
+            memoryRepository.insertWithEmbedding(entity, embedding);
         } catch (Exception e) {
             log.error("降级存储也失败", e);
         }

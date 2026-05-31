@@ -125,10 +125,7 @@ public class AgentServiceController implements IAgentService {
         try {
             String userId = CurrentUserSupport.requireUserIdString(request);
             log.info("智能体对话 agentId:{} userId:{}", requestDTO.getAgentId(), userId);
-            String sessionId = requestDTO.getSessionId();
-            if (sessionId == null || sessionId.isEmpty()) {
-                sessionId = chatService.createSession(requestDTO.getAgentId(), userId);
-            }
+            String sessionId = resolveSessionId(requestDTO.getSessionId(), requestDTO.getAgentId(), userId);
 
             List<String> messages;
             List<RagSourceVO> sources;
@@ -175,10 +172,11 @@ public class AgentServiceController implements IAgentService {
         try {
             String userId = CurrentUserSupport.requireUserIdString(request);
             String agentId = requestDTO.getAgentId();
-            String sessionId = requestDTO.getSessionId();
+            String sessionId = resolveSessionId(requestDTO.getSessionId(), agentId, userId);
             String message = requestDTO.getMessage();
             
             log.info("流式对话 agentId:{} userId:{} sessionId:{}", agentId, userId, sessionId);
+            emitter.send(SseEmitter.event().name("session").data(Collections.singletonMap("sessionId", sessionId)));
             
             // handleMessageStream 内部在 HTTP 线程上调 RagSourceCollector.begin() 创建新 Holder，立刻取出引用
             Flowable<Event> events = chatService.handleMessageStream(agentId, userId, sessionId, message);
@@ -265,6 +263,13 @@ public class AgentServiceController implements IAgentService {
             emitter.completeWithError(e);
         }
         return emitter;
+    }
+
+    private String resolveSessionId(String sessionId, String agentId, String userId) {
+        if (sessionId == null || sessionId.isBlank() || sessionId.startsWith("temp_")) {
+            return chatService.createSession(agentId, userId);
+        }
+        return sessionId;
     }
 
     /**

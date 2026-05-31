@@ -269,11 +269,7 @@ public class AgentMemoryMilvusRepository implements IAgentMemoryRepository {
     
     @Override
     public AgentMemoryEntity findByMemoryId(String memoryId) {
-        AgentMemoryPO po = agentMemoryMapper.selectOne(
-            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<AgentMemoryPO>()
-                .eq(AgentMemoryPO::getMemoryId, memoryId)
-                .eq(AgentMemoryPO::getStatus, 1)
-        );
+        AgentMemoryPO po = agentMemoryMapper.selectActiveByMemoryId(memoryId);
         return po != null ? convertToEntity(po) : null;
     }
     
@@ -284,24 +280,13 @@ public class AgentMemoryMilvusRepository implements IAgentMemoryRepository {
     
     @Override
     public List<AgentMemoryEntity> findByTenantAndUser(String tenantId, String userId) {
-        List<AgentMemoryPO> poList = agentMemoryMapper.selectList(
-            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<AgentMemoryPO>()
-                .eq(AgentMemoryPO::getTenantId, tenantId)
-                .eq(AgentMemoryPO::getUserId, userId)
-                .eq(AgentMemoryPO::getStatus, 1)
-                .orderByDesc(AgentMemoryPO::getCreatedAt)
-        );
+        List<AgentMemoryPO> poList = agentMemoryMapper.selectActiveByTenantAndUser(tenantId, userId);
         return poList.stream().map(this::convertToEntity).collect(Collectors.toList());
     }
     
     @Override
     public List<AgentMemoryEntity> findByScope(String scope) {
-        List<AgentMemoryPO> poList = agentMemoryMapper.selectList(
-            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<AgentMemoryPO>()
-                .likeRight(AgentMemoryPO::getScope, scope)
-                .eq(AgentMemoryPO::getStatus, 1)
-                .orderByDesc(AgentMemoryPO::getCreatedAt)
-        );
+        List<AgentMemoryPO> poList = agentMemoryMapper.selectActiveByScope(scope);
         return poList.stream().map(this::convertToEntity).collect(Collectors.toList());
     }
     
