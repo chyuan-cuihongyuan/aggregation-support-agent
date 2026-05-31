@@ -3,10 +3,11 @@ package cn.chyuan.ai.api.dto;
 import lombok.Data;
 
 import java.io.Serializable;
-import java.util.List;
 
 /**
  * 对话响应 DTO — 同步对话接口返回体
+ *
+ * 注意：traceId 和 sources 仅在内部收集用于可观测性上报，不再返回给前端展示
  */
 @Data
 public class ChatResponseDTO implements Serializable {
@@ -15,11 +16,5 @@ public class ChatResponseDTO implements Serializable {
 
     /** 模型回答的正文内容 */
     private String content;
-
-    /** 本次检索的追踪 ID（关联 rag_trace 表），无 RAG 调用时为空字符串 */
-    private String traceId;
-
-    /** RAG 检索命中的证据片段列表（可能为空，例如非 RAG 智能体） */
-    private List<RagSourceDTO> sources;
 
 }

@@ -5,7 +5,6 @@ import cn.chyuan.ai.api.dto.*;
 import cn.chyuan.ai.api.response.Response;
 import cn.chyuan.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.chyuan.ai.domain.agent.service.IChatService;
-import cn.chyuan.ai.domain.rag.model.valobj.RagSourceVO;
 import cn.chyuan.ai.domain.rag.support.RagSourceCollector;
 import cn.chyuan.ai.infrastructure.utils.ObservabilityHelper;
 import cn.chyuan.ai.trigger.support.CurrentUserSupport;
@@ -23,11 +22,7 @@ import org.springframework.http.MediaType;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
@@ -128,20 +123,18 @@ public class AgentServiceController implements IAgentService {
             String sessionId = resolveSessionId(requestDTO.getSessionId(), requestDTO.getAgentId(), userId);
 
             List<String> messages;
-            List<RagSourceVO> sources;
             String traceId;
             try {
                 messages = chatService.handleMessage(requestDTO.getAgentId(), userId, sessionId, requestDTO.getMessage());
             } finally {
                 // 出口统一 drain，确保异常路径也清理 ThreadLocal
                 traceId = RagSourceCollector.getTraceId();
-                sources = RagSourceCollector.drain();
+                RagSourceCollector.drain();
             }
 
             ChatResponseDTO responseDTO = new ChatResponseDTO();
             responseDTO.setContent(String.join("\n", messages));
-            responseDTO.setTraceId(traceId);
-            responseDTO.setSources(toSourceDTOList(sources));
+            // traceId 和 sources 仅用于内部可观测性上报，不再返回给前端
 
             observabilityHelper.reportChatResult(traceId, sessionId, userId, requestDTO.getMessage(), responseDTO.getContent(), "SUCCESS", (int)(System.currentTimeMillis() - start));
 
@@ -225,13 +218,10 @@ public class AgentServiceController implements IAgentService {
                             },
                             () -> {
                                 try {
+                                    // 内部收集 traceId 和 sources 仅用于可观测性上报，不再发送给前端
                                     String traceId = holderRef == null ? "" : holderRef.getTraceId();
-                                    List<RagSourceVO> sources = RagSourceCollector.drainHolder(holderRef);
-                                    Map<String, Object> payload = new HashMap<>();
-                                    payload.put("traceId", traceId);
-                                    payload.put("sources", toSourceDTOList(sources));
-                                    emitter.send(SseEmitter.event().name("sources").data(payload));
-                                    
+                                    RagSourceCollector.drainHolder(holderRef);
+
                                     // 异步存储对话记忆
                                     String fullResponse = responseCollector.toString().trim();
                                     if (!fullResponse.isEmpty()) {
@@ -251,7 +241,7 @@ public class AgentServiceController implements IAgentService {
                                         }, "memory-store-stream").start();
                                     }
                                 } catch (Exception sendErr) {
-                                    log.warn("追发 sources 事件失败", sendErr);
+                                    log.warn("流式对话完成处理失败", sendErr);
                                 }
                                 emitter.complete();
                             }
@@ -272,22 +262,5 @@ public class AgentServiceController implements IAgentService {
         return sessionId;
     }
 
-    /**
-     * 将领域层 RAG 证据 VO 列表转为 API 层 DTO 列表，避免 api 模块依赖 domain 模块
-     */
-    private List<RagSourceDTO> toSourceDTOList(List<RagSourceVO> sources) {
-        if (sources == null || sources.isEmpty()) {
-            return Collections.emptyList();
-        }
-        return sources.stream().map(vo -> RagSourceDTO.builder()
-                .documentId(vo.getDocumentId())
-                .documentName(vo.getDocumentName())
-                .chunkId(vo.getChunkId())
-                .chunkIndex(vo.getChunkIndex())
-                .score(vo.getScore())
-                .retrievalType(vo.getRetrievalType())
-                .snippet(vo.getSnippet())
-                .build()).collect(Collectors.toList());
-    }
 
 }
