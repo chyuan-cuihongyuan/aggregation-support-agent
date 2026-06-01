@@ -10,7 +10,7 @@ import cn.chyuan.ai.domain.rag.model.valobj.DocumentUploadCommand;
 import cn.chyuan.ai.domain.rag.service.IRagService;
 import cn.chyuan.ai.trigger.filter.JwtAuthFilter;
 import cn.chyuan.ai.trigger.support.AuditContextSupport;
-import cn.chyuan.ai.trigger.support.CurrentUserSupport;
+import cn.chyuan.ai.trigger.support.TenantScopeSupport;
 import cn.chyuan.ai.types.enums.AuditAction;
 import cn.chyuan.ai.types.enums.AuditResult;
 import cn.chyuan.ai.types.enums.ResponseCode;
@@ -113,7 +113,7 @@ public class FileUploadController {
             String originalFilename = file.getOriginalFilename();
             String contentType = file.getContentType();
             log.info("接收文档上传: fileName={}, contentType={}, size={}", originalFilename, contentType, file.getSize());
-            TenantScopeVO scope = TenantScopeVO.singleUser(CurrentUserSupport.requireUserIdString(request));
+            TenantScopeVO scope = TenantScopeSupport.currentScope(request);
 
             DocumentUploadCommand command = DocumentUploadCommand.builder()
                     .fileName(originalFilename)
@@ -184,7 +184,7 @@ public class FileUploadController {
             }
 
             String documentId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
-            TenantScopeVO scope = TenantScopeVO.singleUser(CurrentUserSupport.requireUserIdString(request));
+            TenantScopeVO scope = TenantScopeSupport.currentScope(request);
             byte[] rawContent = file.getBytes();
             String originalFilename = file.getOriginalFilename();
             String contentType = file.getContentType();
@@ -240,7 +240,7 @@ public class FileUploadController {
             }
             DocumentMetadataEntity entity = documentMetadataRepository.queryByDocumentId(
                     documentId,
-                    TenantScopeVO.singleUser(CurrentUserSupport.requireUserIdString(request))
+                    TenantScopeSupport.currentScope(request)
             );
             if (entity == null) {
                 return Response.<UploadResponseDTO>builder()

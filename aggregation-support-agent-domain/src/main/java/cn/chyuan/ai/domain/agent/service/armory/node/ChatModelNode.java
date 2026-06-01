@@ -5,6 +5,7 @@ import cn.chyuan.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.chyuan.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import cn.chyuan.ai.domain.agent.service.armory.AbstractArmorySupport;
 import cn.chyuan.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
+import cn.chyuan.ai.domain.agent.service.armory.matter.mcp.client.ScopedToolCallback;
 import cn.chyuan.ai.domain.agent.service.armory.matter.mcp.client.TooMcpCreateService;
 import cn.chyuan.ai.domain.agent.service.armory.matter.mcp.client.factory.DefaultMcpClientFactory;
 import cn.chyuan.ai.domain.agent.service.armory.matter.skills.ToolSkillsCreateService;
@@ -55,7 +56,7 @@ public class ChatModelNode extends AbstractArmorySupport {
                 try {
                     TooMcpCreateService tooMcpCreateService = defaultMcpClientFactory.getTooMcpCreateService(toolMcp);
                     ToolCallback[] toolCallbacks = tooMcpCreateService.buildToolCallback(toolMcp);
-                    toolCallbackList.addAll(List.of(toolCallbacks));
+                    toolCallbackList.addAll(ScopedToolCallback.wrapAll(toolCallbacks));
                 } catch (Exception e) {
                     log.error("MCP 工具初始化失败，跳过该工具。agent: {}, 错误: {}",
                             aiAgentConfigTableVO.getAppName(), e.getMessage());
@@ -67,7 +68,7 @@ public class ChatModelNode extends AbstractArmorySupport {
         if (null != toolSkillsList && !toolSkillsList.isEmpty()) {
             for (AiAgentConfigTableVO.Module.ChatModel.ToolSkills toolSkills : toolSkillsList) {
                 ToolCallback[] toolCallbacks = toolSkillsCreateService.buildToolCallback(toolSkills);
-                toolCallbackList.addAll(List.of(toolCallbacks));
+                toolCallbackList.addAll(ScopedToolCallback.wrapAll(toolCallbacks));
             }
         }
 

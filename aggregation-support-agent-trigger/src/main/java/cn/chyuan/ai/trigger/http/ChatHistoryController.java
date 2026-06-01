@@ -7,7 +7,7 @@ import cn.chyuan.ai.domain.agent.adapter.repository.IChatHistoryRepository;
 import cn.chyuan.ai.domain.agent.model.entity.ChatHistoryEntity;
 import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.types.enums.ResponseCode;
-import cn.chyuan.ai.trigger.support.CurrentUserSupport;
+import cn.chyuan.ai.trigger.support.TenantScopeSupport;
 import cn.chyuan.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -128,6 +128,6 @@ public class ChatHistoryController {
     }
 
     private TenantScopeVO currentScope(HttpServletRequest request) {
-        return TenantScopeVO.singleUser(CurrentUserSupport.requireUserIdString(request));
+        return TenantScopeSupport.currentScope(request);
     }
 }

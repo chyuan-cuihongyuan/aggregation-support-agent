@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit;
 @ConditionalOnProperty(name = "knowledge-graph.extraction.enabled", havingValue = "true")
 public class LLMEntityExtractionService implements IEntityExtractionService {
 
-    @Value("${ai-api.base-url:https://open.bigmodel.cn/api/coding/paas/v4}")
+    @Value("${ai-api.base-url:https://open.bigmodel.cn/api/paas/v4}")
     private String baseUrl;
 
     @Value("${ai-api.api-key:}")

@@ -5,9 +5,12 @@ import cn.chyuan.ai.api.dto.*;
 import cn.chyuan.ai.api.response.Response;
 import cn.chyuan.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.chyuan.ai.domain.agent.service.IChatService;
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
+import cn.chyuan.ai.domain.auth.support.RequestScopeContext;
 import cn.chyuan.ai.domain.rag.support.RagSourceCollector;
 import cn.chyuan.ai.infrastructure.utils.ObservabilityHelper;
 import cn.chyuan.ai.trigger.support.CurrentUserSupport;
+import cn.chyuan.ai.trigger.support.TenantScopeSupport;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
 import lombok.extern.slf4j.Slf4j;
@@ -167,6 +170,7 @@ public class AgentServiceController implements IAgentService {
             String agentId = requestDTO.getAgentId();
             String sessionId = resolveSessionId(requestDTO.getSessionId(), agentId, userId);
             String message = requestDTO.getMessage();
+            TenantScopeVO requestScope = TenantScopeSupport.currentScope(request);
             
             log.info("流式对话 agentId:{} userId:{} sessionId:{}", agentId, userId, sessionId);
             emitter.send(SseEmitter.event().name("session").data(Collections.singletonMap("sessionId", sessionId)));
@@ -175,6 +179,7 @@ public class AgentServiceController implements IAgentService {
             Flowable<Event> events = chatService.handleMessageStream(agentId, userId, sessionId, message);
             requestHolder = RagSourceCollector.currentHolder();
             final RagSourceCollector.Holder holderRef = requestHolder;
+            final TenantScopeVO scopeRef = requestScope;
             
             // HTTP 线程拿到引用后立即清理 ThreadLocal，避免 Tomcat 线程复用导致跨请求残留
             RagSourceCollector.detach();
@@ -182,11 +187,18 @@ public class AgentServiceController implements IAgentService {
             // 用于收集流式响应内容
             StringBuilder responseCollector = new StringBuilder();
             
-            events.subscribeOn(Schedulers.io())
-                    // 订阅链运行在 RxJava IO worker 上：进入时把 Holder 注入子线程 ThreadLocal，
-                    // 让链路里的工具调用 append() / setTraceId() 能拿到正确 Holder；结束时清理
-                    .doOnSubscribe(s -> RagSourceCollector.attach(holderRef))
-                    .doFinally(RagSourceCollector::detach)
+            events
+                    // 订阅链运行在 RxJava IO worker 上：进入时把 Holder 和租户作用域注入子线程 ThreadLocal，
+                    // 让链路里的工具调用 append() / setTraceId() / RequestScopeContext.get() 都能拿到正确上下文
+                    .doOnSubscribe(s -> {
+                        RagSourceCollector.attach(holderRef);
+                        RequestScopeContext.attach(scopeRef);
+                    })
+                    .doFinally(() -> {
+                        RagSourceCollector.detach();
+                        RequestScopeContext.clear();
+                    })
+                    .subscribeOn(Schedulers.io())
                     .subscribe(
                             event -> {
                                 try {
@@ -229,14 +241,18 @@ public class AgentServiceController implements IAgentService {
                                         final String finalUserId = userId;
                                         final String finalSessionId = sessionId;
                                         final String finalMessage = message;
+                                        final TenantScopeVO finalScope = scopeRef;
                                         // 使用独立线程存储记忆，避免阻塞 SSE 完成
                                         new Thread(() -> {
+                                            RequestScopeContext.attach(finalScope);
                                             try {
                                                 chatService.storeStreamConversationMemory(
                                                     finalUserId, finalAgentId, finalSessionId, 
                                                     finalMessage, fullResponse);
                                             } catch (Exception e) {
                                                 log.warn("流式对话记忆存储失败", e);
+                                            } finally {
+                                                RequestScopeContext.clear();
                                             }
                                         }, "memory-store-stream").start();
                                     }

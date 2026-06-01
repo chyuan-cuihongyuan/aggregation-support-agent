@@ -2,7 +2,11 @@ package cn.chyuan.ai.trigger.http;
 
 import cn.chyuan.ai.api.dto.AiOpsRequestDTO;
 import cn.chyuan.ai.domain.agent.service.IChatService;
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
+import cn.chyuan.ai.domain.auth.support.RequestScopeContext;
+import cn.chyuan.ai.domain.rag.support.RagSourceCollector;
 import cn.chyuan.ai.trigger.support.CurrentUserSupport;
+import cn.chyuan.ai.trigger.support.TenantScopeSupport;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
 import com.google.adk.events.Event;
@@ -49,12 +53,14 @@ public class AiOpsController {
     public SseEmitter aiOpsAnalysis(HttpServletRequest request, @RequestBody AiOpsRequestDTO requestDTO) {
         // 设置 10 分钟超时的 SSE Emitter
         SseEmitter emitter = new SseEmitter(AIOPS_TIMEOUT_MS);
+        RagSourceCollector.Holder requestHolder = null;
 
         try {
             String agentId = requestDTO.getAgentId() != null ? requestDTO.getAgentId() : DEFAULT_AIOPS_AGENT_ID;
             String userId = CurrentUserSupport.requireUserIdString(request);
             String sessionId = requestDTO.getSessionId();
             String message = requestDTO.getAlertDescription() != null ? requestDTO.getAlertDescription() : "请分析当前所有活动告警";
+            TenantScopeVO requestScope = TenantScopeSupport.currentScope(request);
 
             log.info("AIOps 分析请求: agentId={}, userId={}, sessionId={}", agentId, userId, sessionId);
 
@@ -66,9 +72,22 @@ public class AiOpsController {
             // 调用对话服务的流式接口，获取 AIOps 分析结果
             final String finalSessionId = sessionId;
             Flowable<Event> events = chatService.handleMessageStream(agentId, userId, finalSessionId, message);
+            requestHolder = RagSourceCollector.currentHolder();
+            final RagSourceCollector.Holder holderRef = requestHolder;
+            final TenantScopeVO scopeRef = requestScope;
+            RagSourceCollector.detach();
 
             // 订阅事件流，将每个事件内容通过 SSE 推送到前端
-            events.subscribeOn(Schedulers.io())
+            events
+                    .doOnSubscribe(s -> {
+                        RagSourceCollector.attach(holderRef);
+                        RequestScopeContext.attach(scopeRef);
+                    })
+                    .doFinally(() -> {
+                        RagSourceCollector.detach();
+                        RequestScopeContext.clear();
+                    })
+                    .subscribeOn(Schedulers.io())
                     .subscribe(
                             event -> {
                                 try {
@@ -82,12 +101,20 @@ public class AiOpsController {
                                     // 因为异常会传播到 onError 回调，避免重复完成导致 IllegalStateException
                                 }
                             },
-                            emitter::completeWithError,
-                            emitter::complete
+                            err -> {
+                                RagSourceCollector.drainHolder(holderRef);
+                                emitter.completeWithError(err);
+                            },
+                            () -> {
+                                RagSourceCollector.drainHolder(holderRef);
+                                emitter.complete();
+                            }
                     );
 
         } catch (AppException e) {
             log.error("AIOps 分析异常", e);
+            RagSourceCollector.drainHolder(requestHolder);
+            RagSourceCollector.detach();
             try {
                 emitter.send(SseEmitter.event().data("分析失败: " + e.getInfo()));
             } catch (Exception ignored) {
@@ -95,6 +122,8 @@ public class AiOpsController {
             emitter.complete();
         } catch (Exception e) {
             log.error("AIOps 分析失败", e);
+            RagSourceCollector.drainHolder(requestHolder);
+            RagSourceCollector.detach();
             emitter.completeWithError(e);
         }
 

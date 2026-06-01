@@ -1,5 +1,8 @@
 package cn.chyuan.ai.domain.agent.service.armory.matter.patch;
 
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
+import cn.chyuan.ai.domain.auth.support.RequestScopeContext;
+import cn.chyuan.ai.domain.rag.support.RagSourceCollector;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.adk.models.BaseLlm;
 import com.google.adk.models.BaseLlmConnection;
@@ -14,9 +17,13 @@ import io.reactivex.rxjava3.core.Flowable;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.StreamingChatModel;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import reactor.core.publisher.Flux;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -156,7 +163,9 @@ public class MySpringAI extends BaseLlm {
                 observabilityHandler.startRequest(model(), "chat");
 
         try {
-            Prompt prompt = messageConverter.toLlmPrompt(llmRequest);
+            TenantScopeVO tenantScope = currentTenantScope();
+            RagSourceCollector.Holder holder = RagSourceCollector.currentHolder();
+            Prompt prompt = withScopedToolContext(messageConverter.toLlmPrompt(llmRequest), tenantScope, holder);
             observabilityHandler.logRequest(prompt.toString(), model());
 
             ChatResponse chatResponse = chatModel.call(prompt);
@@ -186,10 +195,12 @@ public class MySpringAI extends BaseLlm {
         return Flowable.create(
                 emitter -> {
                     try {
-                        Prompt prompt = messageConverter.toLlmPrompt(llmRequest);
+                        TenantScopeVO tenantScope = currentTenantScope();
+                        RagSourceCollector.Holder holder = RagSourceCollector.currentHolder();
+                        Prompt prompt = withScopedToolContext(messageConverter.toLlmPrompt(llmRequest), tenantScope, holder);
                         observabilityHandler.logRequest(prompt.toString(), model());
 
-                        Flux<ChatResponse> responseFlux = streamingChatModel.stream(prompt);
+                        Flux<ChatResponse> responseFlux = withThreadLocalScope(prompt, tenantScope, holder);
 
                         responseFlux
                                 .doOnError(
@@ -234,6 +245,76 @@ public class MySpringAI extends BaseLlm {
                     }
                 },
                 BackpressureStrategy.BUFFER);
+    }
+
+    private Prompt withScopedToolContext(Prompt prompt, TenantScopeVO tenantScope, RagSourceCollector.Holder holder) {
+        Map<String, Object> scopedContext = new LinkedHashMap<>();
+        if (tenantScope != null) {
+            scopedContext.put(RequestScopeContext.TOOL_CONTEXT_TENANT_SCOPE_KEY, tenantScope);
+        }
+        if (holder != null) {
+            scopedContext.put(RagSourceCollector.TOOL_CONTEXT_HOLDER_KEY, holder);
+        }
+        if (scopedContext.isEmpty()) {
+            return prompt;
+        }
+
+        ChatOptions options = prompt.getOptions();
+        ChatOptions scopedOptions = mergeToolContext(options, scopedContext);
+        return Prompt.builder()
+                .messages(prompt.getInstructions())
+                .chatOptions(scopedOptions)
+                .build();
+    }
+
+    private TenantScopeVO currentTenantScope() {
+        TenantScopeVO tenantScope = RequestScopeContext.snapshot();
+        if (tenantScope == null) {
+            tenantScope = RagSourceCollector.currentTenantScope();
+        }
+        return tenantScope;
+    }
+
+    private ChatOptions mergeToolContext(ChatOptions options, Map<String, Object> scopedContext) {
+        if (options instanceof ToolCallingChatOptions toolOptions) {
+            ChatOptions copiedOptions = toolOptions.copy();
+            if (copiedOptions instanceof ToolCallingChatOptions copiedToolOptions) {
+                Map<String, Object> merged = new LinkedHashMap<>();
+                if (copiedToolOptions.getToolContext() != null) {
+                    merged.putAll(copiedToolOptions.getToolContext());
+                }
+                merged.putAll(scopedContext);
+                copiedToolOptions.setToolContext(merged);
+                return copiedToolOptions;
+            }
+        }
+        return ToolCallingChatOptions.builder()
+                .toolContext(scopedContext)
+                .build();
+    }
+
+    private Flux<ChatResponse> withThreadLocalScope(
+            Prompt prompt,
+            TenantScopeVO tenantScope,
+            RagSourceCollector.Holder holder) {
+        if (tenantScope == null && holder == null) {
+            return streamingChatModel.stream(prompt);
+        }
+        return Flux.defer(() -> {
+            TenantScopeVO previousScope = RequestScopeContext.snapshot();
+            RagSourceCollector.Holder previousHolder = RagSourceCollector.currentHolder();
+            if (tenantScope != null) {
+                RequestScopeContext.attach(tenantScope);
+            }
+            if (holder != null) {
+                RagSourceCollector.attach(holder);
+            }
+            return streamingChatModel.stream(prompt)
+                    .doFinally(signalType -> {
+                        RequestScopeContext.attach(previousScope);
+                        RagSourceCollector.attach(previousHolder);
+                    });
+        });
     }
 
     @Override

@@ -72,7 +72,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             request.setAttribute(ATTR_USERNAME, claims.get("username", String.class));
             request.setAttribute(ATTR_ROLE, claims.get("role", String.class));
             request.setAttribute(ATTR_AUTH_TOKEN, token);
-            RequestScopeContext.set(TenantScopeVO.singleUser(String.valueOf(userId)));
+            RequestScopeContext.set(resolveTenantScope(claims, String.valueOf(userId)));
         }
 
         try {
@@ -91,5 +91,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             }
         }
         return null;
+    }
+
+    private TenantScopeVO resolveTenantScope(Claims claims, String fallbackUserId) {
+        String tenantId = claims.get("tenantId", String.class);
+        String ownerUserId = claims.get("ownerUserId", String.class);
+        return TenantScopeVO.builder()
+                .tenantId(isBlank(tenantId) ? fallbackUserId : tenantId)
+                .ownerUserId(isBlank(ownerUserId) ? fallbackUserId : ownerUserId)
+                .build();
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }

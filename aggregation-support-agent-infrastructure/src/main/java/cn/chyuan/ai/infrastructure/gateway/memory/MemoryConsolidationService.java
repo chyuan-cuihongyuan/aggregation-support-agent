@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit;
 @ConditionalOnProperty(name = "agent.memory.enabled", havingValue = "true", matchIfMissing = false)
 public class MemoryConsolidationService implements IMemoryConsolidationGateway {
     
-    @Value("${ai-api.base-url:https://open.bigmodel.cn/api/coding/paas/v4}")
+    @Value("${ai-api.base-url:https://open.bigmodel.cn/api/paas/v4}")
     private String baseUrl;
     
     @Value("${ai-api.api-key:}")

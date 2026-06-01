@@ -82,10 +82,14 @@ public class InternalDocsTools {
             // 强校验作用域：禁止无作用域检索导致跨租户数据泄露
             TenantScopeVO scope = RequestScopeContext.get();
             if (scope == null) {
-                log.warn("RAG检索缺失租户作用域，拒绝执行: query={}", query);
+                // 记录详细诊断信息，帮助排查作用域传递链路中的断裂点
+                log.warn("RAG检索缺失租户作用域，拒绝执行。诊断信息: query={}, thread={}, threadId={}",
+                        query,
+                        Thread.currentThread().getName(),
+                        Thread.currentThread().getId());
                 Map<String, Object> errorResponse = new HashMap<>();
                 errorResponse.put("error", true);
-                errorResponse.put("message", "缺失租户作用域，检索被拒绝");
+                errorResponse.put("message", "知识库检索暂时不可用，请稍后重试或联系管理员");
                 errorResponse.put("query", query);
                 return objectMapper.writeValueAsString(errorResponse);
             }

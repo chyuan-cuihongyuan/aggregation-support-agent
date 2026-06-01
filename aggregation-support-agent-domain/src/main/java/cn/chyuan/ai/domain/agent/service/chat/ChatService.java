@@ -4,6 +4,7 @@ import cn.chyuan.ai.domain.agent.adapter.repository.IChatHistoryRepository;
 import cn.chyuan.ai.domain.agent.model.entity.ChatCommandEntity;
 import cn.chyuan.ai.domain.agent.model.entity.ChatSessionEntity;
 import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
+import cn.chyuan.ai.domain.auth.support.RequestScopeContext;
 import cn.chyuan.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.chyuan.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import cn.chyuan.ai.domain.agent.model.valobj.properties.AiAgentAutoConfigProperties;
@@ -86,17 +87,18 @@ public class ChatService implements IChatService {
 
         String appName = aiAgentRegisterVO.getAppName();
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
+        TenantScopeVO scope = currentScope(userId);
 
-        String sessionKey = userId + ":" + agentId;
+        String sessionKey = scope.getTenantId() + ":" + scope.getOwnerUserId() + ":" + agentId;
         try {
             return userSessions.get(sessionKey, () -> {
-                Session session = runner.sessionService().createSession(appName, userId)
+                Session session = runner.sessionService().createSession(appName, scope.getOwnerUserId())
                         .blockingGet();
                 chatHistoryRepository.saveSession(ChatSessionEntity.builder()
                         .sessionId(session.id())
                         .agentId(agentId)
-                        .tenantId(userId)
-                        .ownerUserId(userId)
+                        .tenantId(scope.getTenantId())
+                        .ownerUserId(scope.getOwnerUserId())
                         .traceId("")
                         .build());
                 return session.id();
@@ -138,9 +140,12 @@ public class ChatService implements IChatService {
 
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
 
+        // 在当前线程捕获租户作用域快照，防止异步执行链中 ThreadLocal 丢失
+        final TenantScopeVO scopeSnapshot = currentScope(userId);
+
         // Step 1: 检索相关记忆
         String memoryContext = buildMemoryContext(userId, agentId, message);
-        
+
         // Step 2: 增强消息（注入记忆上下文）
         String enhancedMessage = enhanceMessageWithMemory(message, memoryContext);
 
@@ -152,8 +157,15 @@ public class ChatService implements IChatService {
             Flowable<Event> events = runner.runAsync(userId, sessionId, userMsg);
 
             List<String> outputs = new ArrayList<>();
-            events.blockingForEach(event -> outputs.add(event.stringifyContent()));
-            
+            // 确保 blockingForEach 执行期间租户作用域可用
+            TenantScopeVO previousScope = RequestScopeContext.snapshot();
+            try {
+                RequestScopeContext.attach(scopeSnapshot);
+                events.blockingForEach(event -> outputs.add(event.stringifyContent()));
+            } finally {
+                RequestScopeContext.attach(previousScope);
+            }
+
             // Step 3: 异步存储对话记忆
             String response = String.join("\n", outputs);
             storeConversationMemory(userId, agentId, sessionId, message, response);
@@ -181,9 +193,12 @@ public class ChatService implements IChatService {
 
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
 
+        // 在当前线程（HTTP 线程）捕获租户作用域快照，防止异步流中 ThreadLocal 丢失
+        final TenantScopeVO scopeSnapshot = currentScope(userId);
+
         // Step 1: 检索相关记忆
         String memoryContext = buildMemoryContext(userId, agentId, message);
-        
+
         // Step 2: 增强消息（注入记忆上下文）
         String enhancedMessage = enhanceMessageWithMemory(message, memoryContext);
 
@@ -194,8 +209,22 @@ public class ChatService implements IChatService {
         RunConfig runConfig = RunConfig.builder()
                 .setStreamingMode(RunConfig.StreamingMode.SSE)
                 .build();
-        
-        return runner.runAsync(userId, sessionId, userMsg, runConfig);
+
+        Flowable<Event> events = runner.runAsync(userId, sessionId, userMsg, runConfig);
+
+        // 包装 Flowable：确保在整个流的生命周期内租户作用域可用
+        // Google ADK 的 InMemoryRunner 可能使用自己的线程调度器，
+        // 导致 MySpringAI 中的 RequestScopeContext.snapshot() 读取到 null
+        return events.compose(upstream -> upstream
+                .doOnSubscribe(s -> {
+                    RequestScopeContext.attach(scopeSnapshot);
+                    log.debug("流式对话恢复租户作用域: tenantId={}, userId={}",
+                            scopeSnapshot.getTenantId(), scopeSnapshot.getOwnerUserId());
+                })
+                .doFinally(() -> {
+                    RequestScopeContext.clear();
+                })
+        );
     }
     
     /**
@@ -274,11 +303,21 @@ public class ChatService implements IChatService {
         // 获取运行体
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
 
+        // 捕获租户作用域快照，防止异步执行链中 ThreadLocal 丢失
+        final TenantScopeVO scopeSnapshot = currentScope(userId);
+
         Flowable<Event> events = runner.runAsync(userId, sessionId, content);
 
         List<String> outputs = new ArrayList<>();
-        events.blockingForEach(event -> outputs.add(event.stringifyContent()));
-        
+        // 确保 blockingForEach 执行期间租户作用域可用
+        TenantScopeVO previousScope = RequestScopeContext.snapshot();
+        try {
+            RequestScopeContext.attach(scopeSnapshot);
+            events.blockingForEach(event -> outputs.add(event.stringifyContent()));
+        } finally {
+            RequestScopeContext.attach(previousScope);
+        }
+
         // Step 3: 异步存储对话记忆
         String response = String.join("\n", outputs);
         storeConversationMemory(userId, agentId, sessionId, message, response);
@@ -290,7 +329,7 @@ public class ChatService implements IChatService {
         if (sessionId == null || sessionId.isBlank()) {
             return;
         }
-        ChatSessionEntity sessionEntity = chatHistoryRepository.querySession(sessionId, TenantScopeVO.singleUser(userId));
+        ChatSessionEntity sessionEntity = chatHistoryRepository.querySession(sessionId, currentScope(userId));
         if (sessionEntity == null) {
             throw new AppException(ResponseCode.AUTH_PERMISSION_DENIED.getCode(), "会话不存在或无权访问");
         }
@@ -303,11 +342,12 @@ public class ChatService implements IChatService {
      */
     private String buildMemoryContext(String userId, String agentId, String message) {
         try {
+            TenantScopeVO scope = currentScope(userId);
             List<MemoryMatch> memories = agentMemoryService.recall(
                 message,
                 RecallOptions.builder()
-                    .tenantId(userId)
-                    .userId(userId)
+                    .tenantId(scope.getTenantId())
+                    .userId(scope.getOwnerUserId())
                     .agentId(agentId)
                     .limit(5)
                     .minScore(0.3)
@@ -360,12 +400,13 @@ public class ChatService implements IChatService {
     private void storeConversationMemory(String userId, String agentId, String sessionId, 
                                          String question, String answer) {
         try {
+            TenantScopeVO scope = currentScope(userId);
             String content = String.format("用户: %s\n助手: %s", question, answer);
             agentMemoryService.remember(
                 content,
                 MemoryOptions.builder()
-                    .tenantId(userId)
-                    .userId(userId)
+                    .tenantId(scope.getTenantId())
+                    .userId(scope.getOwnerUserId())
                     .agentId(agentId)
                     .sessionId(sessionId)
                     .memoryType(MemoryType.EPISODE)
@@ -376,6 +417,17 @@ public class ChatService implements IChatService {
         } catch (Exception e) {
             log.warn("存储对话记忆失败", e);
         }
+    }
+
+    private TenantScopeVO currentScope(String fallbackUserId) {
+        TenantScopeVO scope = RequestScopeContext.snapshot();
+        if (scope == null || scope.getTenantId() == null || scope.getTenantId().isBlank()) {
+            return TenantScopeVO.singleUser(fallbackUserId);
+        }
+        if (scope.getOwnerUserId() == null || scope.getOwnerUserId().isBlank()) {
+            scope.setOwnerUserId(fallbackUserId);
+        }
+        return scope;
     }
 
 }

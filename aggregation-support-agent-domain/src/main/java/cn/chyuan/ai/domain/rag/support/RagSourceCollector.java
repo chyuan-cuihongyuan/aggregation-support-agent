@@ -1,5 +1,7 @@
 package cn.chyuan.ai.domain.rag.support;
 
+import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
+import cn.chyuan.ai.domain.auth.support.RequestScopeContext;
 import cn.chyuan.ai.domain.rag.model.valobj.RagSourceVO;
 
 import java.util.ArrayList;
@@ -38,6 +40,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 public final class RagSourceCollector {
 
+    public static final String TOOL_CONTEXT_HOLDER_KEY =
+            RagSourceCollector.class.getName() + ".holder";
+
     /**
      * 跨线程共享的证据 Holder，sources 用 CopyOnWriteArrayList 保证多线程 append 安全，traceId 用 volatile 保证可见性
      */
@@ -46,10 +51,20 @@ public final class RagSourceCollector {
         private final CopyOnWriteArrayList<RagSourceVO> sources = new CopyOnWriteArrayList<>();
         /** 当前请求最近一次 RAG 检索的 traceId */
         private volatile String traceId = "";
+        /** 当前请求的租户作用域，供工具跨线程执行时兜底恢复 */
+        private final TenantScopeVO tenantScope;
+
+        private Holder(TenantScopeVO tenantScope) {
+            this.tenantScope = RequestScopeContext.copyOf(tenantScope);
+        }
 
         /** 读取最近一次写入的 traceId，未设置时返回空字符串 */
         public String getTraceId() {
             return traceId == null ? "" : traceId;
+        }
+
+        public TenantScopeVO getTenantScope() {
+            return RequestScopeContext.copyOf(tenantScope);
         }
 
         /** 内部追加方法 — null/空集合被忽略 */
@@ -81,7 +96,12 @@ public final class RagSourceCollector {
 
     /** 入口重置：创建新 Holder 并塞入当前线程 */
     public static void begin() {
-        HOLDER.set(new Holder());
+        begin(null);
+    }
+
+    /** 入口重置：创建带租户作用域的新 Holder 并塞入当前线程 */
+    public static void begin(TenantScopeVO tenantScope) {
+        HOLDER.set(new Holder(tenantScope));
     }
 
     /**
@@ -92,6 +112,11 @@ public final class RagSourceCollector {
      */
     public static Holder currentHolder() {
         return HOLDER.get();
+    }
+
+    public static TenantScopeVO currentTenantScope() {
+        Holder h = HOLDER.get();
+        return h == null ? null : h.getTenantScope();
     }
 
     /**

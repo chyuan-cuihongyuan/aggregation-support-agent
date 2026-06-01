@@ -10,10 +10,10 @@ import cn.chyuan.ai.domain.rag.model.valobj.SearchResultDetailVO;
 import cn.chyuan.ai.domain.rag.service.IRagService;
 import cn.chyuan.ai.trigger.filter.JwtAuthFilter;
 import cn.chyuan.ai.trigger.support.AuditContextSupport;
+import cn.chyuan.ai.trigger.support.TenantScopeSupport;
 import cn.chyuan.ai.types.enums.AuditAction;
 import cn.chyuan.ai.types.enums.AuditResult;
 import cn.chyuan.ai.types.enums.ResponseCode;
-import cn.chyuan.ai.trigger.support.CurrentUserSupport;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -197,7 +197,7 @@ public class DocumentController {
     }
 
     private TenantScopeVO currentScope(HttpServletRequest request) {
-        return TenantScopeVO.singleUser(CurrentUserSupport.requireUserIdString(request));
+        return TenantScopeSupport.currentScope(request);
     }
 
     /**
