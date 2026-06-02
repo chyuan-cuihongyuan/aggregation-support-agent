@@ -103,6 +103,8 @@ public class RagService implements IRagService {
                 .documentId(documentId)
                 .tenantId(command.getTenantId() != null ? command.getTenantId() : command.getUserId())
                 .ownerUserId(command.getUserId() != null ? command.getUserId() : "")
+                .knowledgeBaseId(command.getKnowledgeBaseId() != null ? command.getKnowledgeBaseId() : "")
+                .knowledgeBaseName(command.getKnowledgeBaseName() != null ? command.getKnowledgeBaseName() : "")
                 .visibility("private")
                 .deletedFlag(0)
                 .fileName(fileName)
@@ -146,6 +148,22 @@ public class RagService implements IRagService {
             }
 
             vectorStoreRepository.insertChunks(chunks);
+
+            // 写入 BM25 索引（Elasticsearch），确保三库（MySQL + Milvus + ES）数据一致
+            if (bm25SearchService != null) {
+                try {
+                    Map<String, String> documents = new HashMap<>();
+                    Map<String, Map<String, Object>> metadataByDocId = new HashMap<>();
+                    for (DocumentChunkEntity chunk : chunks) {
+                        documents.put(chunk.getId(), chunk.getContent());
+                        metadataByDocId.put(chunk.getId(), chunk.getMetadata());
+                    }
+                    bm25SearchService.addDocuments(documents, metadataByDocId);
+                    log.info("添加到BM25索引: documentId={}, count={}", documentId, documents.size());
+                } catch (Exception e) {
+                    log.warn("添加到BM25索引失败(非致命): documentId={}, err={}", documentId, e.getMessage());
+                }
+            }
 
             int totalChars = parsedDocument.getTextContent() != null ? parsedDocument.getTextContent().length() : 0;
             int sectionCount = parsedDocument.getSections() != null ? parsedDocument.getSections().size() : 0;
@@ -346,11 +364,17 @@ public class RagService implements IRagService {
             String source = r.getMetadata() != null ? (String) r.getMetadata().get("_source") : null;
             Integer chunkIndex = r.getMetadata() != null && r.getMetadata().get("chunkIndex") != null
                     ? ((Number) r.getMetadata().get("chunkIndex")).intValue() : null;
+            String knowledgeBaseId = r.getMetadata() != null && r.getMetadata().get("knowledgeBaseId") != null
+                    ? String.valueOf(r.getMetadata().get("knowledgeBaseId")) : null;
+            String knowledgeBaseName = r.getMetadata() != null && r.getMetadata().get("knowledgeBaseName") != null
+                    ? String.valueOf(r.getMetadata().get("knowledgeBaseName")) : null;
             return SearchResultDetailVO.SearchItem.builder()
                     .content(r.getContent())
                     .score(r.getScore())
                     .source(source)
                     .chunkIndex(chunkIndex)
+                    .knowledgeBaseId(knowledgeBaseId)
+                    .knowledgeBaseName(knowledgeBaseName)
                     .build();
         }).collect(Collectors.toList());
     }
@@ -528,6 +552,8 @@ public class RagService implements IRagService {
         metadata.put("documentId", documentId);
         metadata.put("tenantId", metadataEntity.getTenantId());
         metadata.put("ownerUserId", metadataEntity.getOwnerUserId());
+        metadata.put("knowledgeBaseId", metadataEntity.getKnowledgeBaseId());
+        metadata.put("knowledgeBaseName", metadataEntity.getKnowledgeBaseName());
         metadata.put("visibility", metadataEntity.getVisibility());
     }
 

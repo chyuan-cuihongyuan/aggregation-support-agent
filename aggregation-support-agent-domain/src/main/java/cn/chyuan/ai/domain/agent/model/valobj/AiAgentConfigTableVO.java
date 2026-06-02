@@ -144,6 +144,11 @@ public class AiAgentConfigTableVO {
             private String description;
             private String outputKey;
             private Boolean reactMode;
+            /**
+             * ReAct 循环最大步数，防止 LLM 空响应导致无限循环
+             * 默认为 10 步
+             */
+            private Integer maxSteps = 10;
         }
 
         @Data

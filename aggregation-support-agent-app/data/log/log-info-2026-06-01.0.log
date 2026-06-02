@@ -1,0 +1,473 @@
+26-05-11.00:22:24.492 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
+26-05-11.00:22:24.511 [main            ] INFO  Application            - Starting Application using Java 23.0.2 with PID 14455 (/Users/WorkProject/IdeaProjects/aggregation-support-agent/aggregation-support-agent-app/target/classes started by cuihongyuan in /Users/WorkProject/IdeaProjects/aggregation-support-agent/aggregation-support-agent-app)
+26-05-11.00:22:24.511 [main            ] INFO  Application            - The following 1 profile is active: "dev"
+26-05-11.00:22:24.944 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-11.00:22:25.058 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-11.00:22:25.061 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-11.00:22:25.156 [main            ] INFO  TomcatWebServer        - Tomcat initialized with port 8091 (http)
+26-05-11.00:22:25.163 [main            ] INFO  Http11NioProtocol      - Initializing ProtocolHandler ["http-nio-8091"]
+26-05-11.00:22:25.164 [main            ] INFO  StandardService        - Starting service [Tomcat]
+26-05-11.00:22:25.164 [main            ] INFO  StandardEngine         - Starting Servlet engine: [Apache Tomcat/10.1.36]
+26-05-11.00:22:25.197 [main            ] INFO  [/]                    - Initializing Spring embedded WebApplicationContext
+26-05-11.00:22:25.198 [main            ] INFO  ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 663 ms
+26-05-11.00:22:25.402 [main            ] INFO  BigModelEmbeddingGateway - 智谱嵌入网关初始化完成: url=https://open.bigmodel.cn/api/paas/v4/embeddings, model=embedding-3, dimension=1024
+26-05-11.00:22:25.402 [main            ] INFO  EmbeddingCacheConfig   - 启用嵌入向量缓存: maxSize=10000, expireHours=24
+26-05-11.00:22:25.408 [main            ] INFO  CachedEmbeddingService - 嵌入向量缓存初始化: maxSize=10000, expireHours=24
+26-05-11.00:22:25.413 [main            ] INFO  MilvusClientConfig     - 初始化 Milvus 客户端连接: 49.232.169.33:19530
+26-05-11.00:22:25.806 [main            ] INFO  DocumentParserFactory  - 文档解析器工厂初始化，已注册 5 个解析器
+26-05-11.00:22:25.811 [main            ] INFO  QueryLogsTools         - QueryLogsTools 初始化完成, mockEnabled=false, lokiBaseUrl=http://49.232.169.33:3100
+26-05-11.00:22:25.812 [main            ] INFO  QueryMetricsTools      - QueryMetricsTools 初始化完成, mockEnabled=false, prometheusBaseUrl=http://49.232.169.33:9090
+26-05-11.00:22:25.818 [main            ] WARN  AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'enhancedRagService': Injection of resource dependencies failed
+26-05-11.00:22:25.822 [main            ] INFO  StandardService        - Stopping service [Tomcat]
+26-05-11.00:22:25.827 [main            ] INFO  ConditionEvaluationReportLogger - 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+26-05-11.00:22:25.833 [main            ] ERROR LoggingFailureAnalysisReporter - 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+A component required a single bean, but 2 were found:
+	- BM25SearchService: defined in URL [jar:file:/Users/cuihongyuan/.m2/repository/cn/chyuan/ai/aggregation-support-agent-infrastructure/1.0/aggregation-support-agent-infrastructure-1.0.jar!/cn/chyuan/ai/infrastructure/gateway/retrieval/BM25SearchService.class]
+	- elasticsearchBM25SearchService: defined in URL [jar:file:/Users/cuihongyuan/.m2/repository/cn/chyuan/ai/aggregation-support-agent-infrastructure/1.0/aggregation-support-agent-infrastructure-1.0.jar!/cn/chyuan/ai/infrastructure/gateway/retrieval/ElasticsearchBM25SearchService.class]
+
+This may be due to missing parameter name information
+
+Action:
+
+Consider marking one of the beans as @Primary, updating the consumer to accept multiple beans, or using @Qualifier to identify the bean that should be consumed
+
+Ensure that your compiler is configured to use the '-parameters' flag.
+You may need to update both your build tool settings as well as your IDE.
+(See https://github.com/spring-projects/spring-framework/wiki/Upgrading-to-Spring-Framework-6.x#parameter-name-retention)
+
+
+26-05-11.00:23:56.974 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
+26-05-11.00:23:56.991 [main            ] INFO  Application            - Starting Application using Java 23.0.2 with PID 15671 (/Users/WorkProject/IdeaProjects/aggregation-support-agent/aggregation-support-agent-app/target/classes started by cuihongyuan in /Users/WorkProject/IdeaProjects/aggregation-support-agent/aggregation-support-agent-app)
+26-05-11.00:23:56.992 [main            ] INFO  Application            - The following 1 profile is active: "dev"
+26-05-11.00:23:57.459 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-11.00:23:57.562 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-11.00:23:57.566 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-11.00:23:57.656 [main            ] INFO  TomcatWebServer        - Tomcat initialized with port 8091 (http)
+26-05-11.00:23:57.665 [main            ] INFO  Http11NioProtocol      - Initializing ProtocolHandler ["http-nio-8091"]
+26-05-11.00:23:57.665 [main            ] INFO  StandardService        - Starting service [Tomcat]
+26-05-11.00:23:57.665 [main            ] INFO  StandardEngine         - Starting Servlet engine: [Apache Tomcat/10.1.36]
+26-05-11.00:23:57.703 [main            ] INFO  [/]                    - Initializing Spring embedded WebApplicationContext
+26-05-11.00:23:57.704 [main            ] INFO  ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 695 ms
+26-05-11.00:23:57.941 [main            ] INFO  BigModelEmbeddingGateway - 智谱嵌入网关初始化完成: url=https://open.bigmodel.cn/api/paas/v4/embeddings, model=embedding-3, dimension=1024
+26-05-11.00:23:57.941 [main            ] INFO  EmbeddingCacheConfig   - 启用嵌入向量缓存: maxSize=10000, expireHours=24
+26-05-11.00:23:57.947 [main            ] INFO  CachedEmbeddingService - 嵌入向量缓存初始化: maxSize=10000, expireHours=24
+26-05-11.00:23:57.952 [main            ] INFO  MilvusClientConfig     - 初始化 Milvus 客户端连接: 49.232.169.33:19530
+26-05-11.00:23:58.214 [main            ] INFO  DocumentParserFactory  - 文档解析器工厂初始化，已注册 5 个解析器
+26-05-11.00:23:58.223 [main            ] INFO  QueryLogsTools         - QueryLogsTools 初始化完成, mockEnabled=false, lokiBaseUrl=http://49.232.169.33:3100
+26-05-11.00:23:58.225 [main            ] INFO  QueryMetricsTools      - QueryMetricsTools 初始化完成, mockEnabled=false, prometheusBaseUrl=http://49.232.169.33:9090
+26-05-11.00:23:58.234 [main            ] WARN  AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'enhancedRagService': Injection of resource dependencies failed
+26-05-11.00:23:58.237 [main            ] INFO  StandardService        - Stopping service [Tomcat]
+26-05-11.00:23:58.242 [main            ] INFO  ConditionEvaluationReportLogger - 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+26-05-11.00:23:58.247 [main            ] ERROR LoggingFailureAnalysisReporter - 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+A component required a single bean, but 2 were found:
+	- BM25SearchService: defined in URL [jar:file:/Users/cuihongyuan/.m2/repository/cn/chyuan/ai/aggregation-support-agent-infrastructure/1.0/aggregation-support-agent-infrastructure-1.0.jar!/cn/chyuan/ai/infrastructure/gateway/retrieval/BM25SearchService.class]
+	- elasticsearchBM25SearchService: defined in URL [jar:file:/Users/cuihongyuan/.m2/repository/cn/chyuan/ai/aggregation-support-agent-infrastructure/1.0/aggregation-support-agent-infrastructure-1.0.jar!/cn/chyuan/ai/infrastructure/gateway/retrieval/ElasticsearchBM25SearchService.class]
+
+This may be due to missing parameter name information
+
+Action:
+
+Consider marking one of the beans as @Primary, updating the consumer to accept multiple beans, or using @Qualifier to identify the bean that should be consumed
+
+Ensure that your compiler is configured to use the '-parameters' flag.
+You may need to update both your build tool settings as well as your IDE.
+(See https://github.com/spring-projects/spring-framework/wiki/Upgrading-to-Spring-Framework-6.x#parameter-name-retention)
+
+
+26-05-11.00:25:20.510 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
+26-05-11.00:25:20.525 [main            ] INFO  Application            - Starting Application using Java 23.0.2 with PID 16636 (/Users/WorkProject/IdeaProjects/aggregation-support-agent/aggregation-support-agent-app/target/classes started by cuihongyuan in /Users/WorkProject/IdeaProjects/aggregation-support-agent/aggregation-support-agent-app)
+26-05-11.00:25:20.525 [main            ] INFO  Application            - The following 1 profile is active: "dev"
+26-05-11.00:25:20.889 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-11.00:25:20.989 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-11.00:25:20.992 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-11.00:25:21.078 [main            ] INFO  TomcatWebServer        - Tomcat initialized with port 8091 (http)
+26-05-11.00:25:21.084 [main            ] INFO  Http11NioProtocol      - Initializing ProtocolHandler ["http-nio-8091"]
+26-05-11.00:25:21.084 [main            ] INFO  StandardService        - Starting service [Tomcat]
+26-05-11.00:25:21.084 [main            ] INFO  StandardEngine         - Starting Servlet engine: [Apache Tomcat/10.1.36]
+26-05-11.00:25:21.113 [main            ] INFO  [/]                    - Initializing Spring embedded WebApplicationContext
+26-05-11.00:25:21.113 [main            ] INFO  ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 571 ms
+26-05-11.00:25:21.316 [main            ] INFO  BigModelEmbeddingGateway - 智谱嵌入网关初始化完成: url=https://open.bigmodel.cn/api/paas/v4/embeddings, model=embedding-3, dimension=1024
+26-05-11.00:25:21.316 [main            ] INFO  EmbeddingCacheConfig   - 启用嵌入向量缓存: maxSize=10000, expireHours=24
+26-05-11.00:25:21.321 [main            ] INFO  CachedEmbeddingService - 嵌入向量缓存初始化: maxSize=10000, expireHours=24
+26-05-11.00:25:21.325 [main            ] INFO  MilvusClientConfig     - 初始化 Milvus 客户端连接: 49.232.169.33:19530
+26-05-11.00:25:21.582 [main            ] INFO  DocumentParserFactory  - 文档解析器工厂初始化，已注册 5 个解析器
+26-05-11.00:25:21.586 [main            ] WARN  AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'fileUploadController': Unsatisfied dependency expressed through field 'ragService': Error creating bean with name 'enhancedRagService': Injection of resource dependencies failed
+26-05-11.00:25:21.591 [main            ] INFO  StandardService        - Stopping service [Tomcat]
+26-05-11.00:25:21.596 [main            ] INFO  ConditionEvaluationReportLogger - 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+26-05-11.00:25:21.604 [main            ] ERROR LoggingFailureAnalysisReporter - 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Field chatModel in cn.chyuan.ai.infrastructure.gateway.query.QueryOptimizationService required a bean of type 'org.springframework.ai.chat.model.ChatModel' that could not be found.
+
+The injection point has the following annotations:
+	- @org.springframework.beans.factory.annotation.Autowired(required=false)
+
+
+Action:
+
+Consider defining a bean of type 'org.springframework.ai.chat.model.ChatModel' in your configuration.
+
+26-05-11.00:28:05.075 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
+26-05-11.00:28:05.090 [main            ] INFO  Application            - Starting Application using Java 23.0.2 with PID 18713 (/Users/WorkProject/IdeaProjects/aggregation-support-agent/aggregation-support-agent-app/target/classes started by cuihongyuan in /Users/WorkProject/IdeaProjects/aggregation-support-agent/aggregation-support-agent-app)
+26-05-11.00:28:05.090 [main            ] INFO  Application            - The following 1 profile is active: "dev"
+26-05-11.00:28:05.450 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-11.00:28:05.545 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-11.00:28:05.548 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-11.00:28:05.632 [main            ] INFO  TomcatWebServer        - Tomcat initialized with port 8091 (http)
+26-05-11.00:28:05.638 [main            ] INFO  Http11NioProtocol      - Initializing ProtocolHandler ["http-nio-8091"]
+26-05-11.00:28:05.638 [main            ] INFO  StandardService        - Starting service [Tomcat]
+26-05-11.00:28:05.638 [main            ] INFO  StandardEngine         - Starting Servlet engine: [Apache Tomcat/10.1.36]
+26-05-11.00:28:05.670 [main            ] INFO  [/]                    - Initializing Spring embedded WebApplicationContext
+26-05-11.00:28:05.670 [main            ] INFO  ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 564 ms
+26-05-11.00:28:05.876 [main            ] INFO  BigModelEmbeddingGateway - 智谱嵌入网关初始化完成: url=https://open.bigmodel.cn/api/paas/v4/embeddings, model=embedding-3, dimension=1024
+26-05-11.00:28:05.876 [main            ] INFO  EmbeddingCacheConfig   - 启用嵌入向量缓存: maxSize=10000, expireHours=24
+26-05-11.00:28:05.881 [main            ] INFO  CachedEmbeddingService - 嵌入向量缓存初始化: maxSize=10000, expireHours=24
+26-05-11.00:28:05.886 [main            ] INFO  MilvusClientConfig     - 初始化 Milvus 客户端连接: 49.232.169.33:19530
+26-05-11.00:28:06.172 [main            ] INFO  DocumentParserFactory  - 文档解析器工厂初始化，已注册 5 个解析器
+26-05-11.00:28:06.184 [main            ] INFO  ElasticsearchConfig    - 初始化Elasticsearch客户端: 49.232.169.33:9200
+26-05-11.00:28:06.311 [main            ] ERROR ElasticsearchBM25SearchService - Elasticsearch索引初始化失败
+co.elastic.clients.elasticsearch._types.ElasticsearchException: [es/indices.create] failed: [illegal_argument_exception] Custom Analyzer [ik_smart] failed to find tokenizer under name [ik_smart]
+	at co.elastic.clients.transport.ElasticsearchTransportBase.getApiResponse(ElasticsearchTransportBase.java:345)
+	at co.elastic.clients.transport.ElasticsearchTransportBase.performRequest(ElasticsearchTransportBase.java:147)
+	at co.elastic.clients.elasticsearch.indices.ElasticsearchIndicesClient.create(ElasticsearchIndicesClient.java:277)
+	at co.elastic.clients.elasticsearch.indices.ElasticsearchIndicesClient.create(ElasticsearchIndicesClient.java:293)
+	at cn.chyuan.ai.infrastructure.gateway.retrieval.ElasticsearchBM25SearchService.createIndexIfNotExists(ElasticsearchBM25SearchService.java:60)
+	at cn.chyuan.ai.infrastructure.gateway.retrieval.ElasticsearchBM25SearchService.init(ElasticsearchBM25SearchService.java:46)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor$LifecycleMethod.invoke(InitDestroyAnnotationBeanPostProcessor.java:457)
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor$LifecycleMetadata.invokeInitMethods(InitDestroyAnnotationBeanPostProcessor.java:401)
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor.postProcessBeforeInitialization(InitDestroyAnnotationBeanPostProcessor.java:219)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.applyBeanPostProcessorsBeforeInitialization(AbstractAutowireCapableBeanFactory.java:423)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.initializeBean(AbstractAutowireCapableBeanFactory.java:1804)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:601)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:523)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339)
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:346)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202)
+	at org.springframework.beans.factory.config.DependencyDescriptor.resolveCandidate(DependencyDescriptor.java:254)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1664)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1552)
+	at org.springframework.context.annotation.CommonAnnotationBeanPostProcessor.autowireResource(CommonAnnotationBeanPostProcessor.java:599)
+	at org.springframework.context.annotation.CommonAnnotationBeanPostProcessor.getResource(CommonAnnotationBeanPostProcessor.java:577)
+	at org.springframework.context.annotation.CommonAnnotationBeanPostProcessor$LegacyResourceElement.getResourceToInject(CommonAnnotationBeanPostProcessor.java:790)
+	at org.springframework.beans.factory.annotation.InjectionMetadata$InjectedElement.inject(InjectionMetadata.java:272)
+	at org.springframework.beans.factory.annotation.InjectionMetadata.inject(InjectionMetadata.java:146)
+	at org.springframework.context.annotation.CommonAnnotationBeanPostProcessor.postProcessProperties(CommonAnnotationBeanPostProcessor.java:369)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.populateBean(AbstractAutowireCapableBeanFactory.java:1445)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:600)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:523)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339)
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:346)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202)
+	at org.springframework.beans.factory.config.DependencyDescriptor.resolveCandidate(DependencyDescriptor.java:254)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1664)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1552)
+	at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor$AutowiredFieldElement.resolveFieldValue(AutowiredAnnotationBeanPostProcessor.java:785)
+	at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor$AutowiredFieldElement.inject(AutowiredAnnotationBeanPostProcessor.java:768)
+	at org.springframework.beans.factory.annotation.InjectionMetadata.inject(InjectionMetadata.java:146)
+	at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor.postProcessProperties(AutowiredAnnotationBeanPostProcessor.java:509)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.populateBean(AbstractAutowireCapableBeanFactory.java:1445)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:600)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:523)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339)
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:346)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1155)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1121)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1056)
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:987)
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:627)
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146)
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752)
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1361)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1350)
+	at cn.chyuan.ai.Application.main(Application.java:18)
+26-05-11.00:28:06.314 [main            ] WARN  AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'fileUploadController': Unsatisfied dependency expressed through field 'ragService': Error creating bean with name 'enhancedRagService': Injection of resource dependencies failed
+26-05-11.00:28:06.316 [main            ] INFO  StandardService        - Stopping service [Tomcat]
+26-05-11.00:28:06.321 [main            ] INFO  ConditionEvaluationReportLogger - 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+26-05-11.00:28:06.327 [main            ] ERROR LoggingFailureAnalysisReporter - 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Field ragService in cn.chyuan.ai.trigger.http.FileUploadController required a bean of type 'cn.chyuan.ai.domain.rag.service.rerank.IRerankService' that could not be found.
+
+The injection point has the following annotations:
+	- @org.springframework.beans.factory.annotation.Autowired(required=false)
+
+
+Action:
+
+Consider defining a bean of type 'cn.chyuan.ai.domain.rag.service.rerank.IRerankService' in your configuration.
+
+26-05-11.00:30:37.368 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
+26-05-11.00:30:37.384 [main            ] INFO  Application            - Starting Application using Java 23.0.2 with PID 20477 (/Users/WorkProject/IdeaProjects/aggregation-support-agent/aggregation-support-agent-app/target/classes started by cuihongyuan in /Users/WorkProject/IdeaProjects/aggregation-support-agent/aggregation-support-agent-app)
+26-05-11.00:30:37.385 [main            ] INFO  Application            - The following 1 profile is active: "dev"
+26-05-11.00:30:37.744 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-11.00:30:37.838 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-11.00:30:37.842 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-11.00:30:37.926 [main            ] INFO  TomcatWebServer        - Tomcat initialized with port 8091 (http)
+26-05-11.00:30:37.933 [main            ] INFO  Http11NioProtocol      - Initializing ProtocolHandler ["http-nio-8091"]
+26-05-11.00:30:37.933 [main            ] INFO  StandardService        - Starting service [Tomcat]
+26-05-11.00:30:37.933 [main            ] INFO  StandardEngine         - Starting Servlet engine: [Apache Tomcat/10.1.36]
+26-05-11.00:30:37.962 [main            ] INFO  [/]                    - Initializing Spring embedded WebApplicationContext
+26-05-11.00:30:37.962 [main            ] INFO  ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 561 ms
+26-05-11.00:30:38.166 [main            ] INFO  BigModelEmbeddingGateway - 智谱嵌入网关初始化完成: url=https://open.bigmodel.cn/api/paas/v4/embeddings, model=embedding-3, dimension=1024
+26-05-11.00:30:38.166 [main            ] INFO  EmbeddingCacheConfig   - 启用嵌入向量缓存: maxSize=10000, expireHours=24
+26-05-11.00:30:38.172 [main            ] INFO  CachedEmbeddingService - 嵌入向量缓存初始化: maxSize=10000, expireHours=24
+26-05-11.00:30:38.176 [main            ] INFO  MilvusClientConfig     - 初始化 Milvus 客户端连接: 49.232.169.33:19530
+26-05-11.00:30:38.447 [main            ] INFO  DocumentParserFactory  - 文档解析器工厂初始化，已注册 5 个解析器
+26-05-11.00:30:38.459 [main            ] INFO  ElasticsearchConfig    - 初始化Elasticsearch客户端: 49.232.169.33:9200
+26-05-11.00:30:38.595 [main            ] ERROR ElasticsearchBM25SearchService - Elasticsearch索引初始化失败
+co.elastic.clients.elasticsearch._types.ElasticsearchException: [es/indices.create] failed: [illegal_argument_exception] Custom Analyzer [ik_smart] failed to find tokenizer under name [ik_smart]
+	at co.elastic.clients.transport.ElasticsearchTransportBase.getApiResponse(ElasticsearchTransportBase.java:345)
+	at co.elastic.clients.transport.ElasticsearchTransportBase.performRequest(ElasticsearchTransportBase.java:147)
+	at co.elastic.clients.elasticsearch.indices.ElasticsearchIndicesClient.create(ElasticsearchIndicesClient.java:277)
+	at co.elastic.clients.elasticsearch.indices.ElasticsearchIndicesClient.create(ElasticsearchIndicesClient.java:293)
+	at cn.chyuan.ai.infrastructure.gateway.retrieval.ElasticsearchBM25SearchService.createIndexIfNotExists(ElasticsearchBM25SearchService.java:60)
+	at cn.chyuan.ai.infrastructure.gateway.retrieval.ElasticsearchBM25SearchService.init(ElasticsearchBM25SearchService.java:46)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor$LifecycleMethod.invoke(InitDestroyAnnotationBeanPostProcessor.java:457)
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor$LifecycleMetadata.invokeInitMethods(InitDestroyAnnotationBeanPostProcessor.java:401)
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor.postProcessBeforeInitialization(InitDestroyAnnotationBeanPostProcessor.java:219)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.applyBeanPostProcessorsBeforeInitialization(AbstractAutowireCapableBeanFactory.java:423)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.initializeBean(AbstractAutowireCapableBeanFactory.java:1804)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:601)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:523)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339)
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:346)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202)
+	at org.springframework.beans.factory.config.DependencyDescriptor.resolveCandidate(DependencyDescriptor.java:254)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1664)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1552)
+	at org.springframework.context.annotation.CommonAnnotationBeanPostProcessor.autowireResource(CommonAnnotationBeanPostProcessor.java:599)
+	at org.springframework.context.annotation.CommonAnnotationBeanPostProcessor.getResource(CommonAnnotationBeanPostProcessor.java:577)
+	at org.springframework.context.annotation.CommonAnnotationBeanPostProcessor$LegacyResourceElement.getResourceToInject(CommonAnnotationBeanPostProcessor.java:790)
+	at org.springframework.beans.factory.annotation.InjectionMetadata$InjectedElement.inject(InjectionMetadata.java:272)
+	at org.springframework.beans.factory.annotation.InjectionMetadata.inject(InjectionMetadata.java:146)
+	at org.springframework.context.annotation.CommonAnnotationBeanPostProcessor.postProcessProperties(CommonAnnotationBeanPostProcessor.java:369)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.populateBean(AbstractAutowireCapableBeanFactory.java:1445)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:600)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:523)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339)
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:346)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202)
+	at org.springframework.beans.factory.config.DependencyDescriptor.resolveCandidate(DependencyDescriptor.java:254)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1664)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1552)
+	at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor$AutowiredFieldElement.resolveFieldValue(AutowiredAnnotationBeanPostProcessor.java:785)
+	at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor$AutowiredFieldElement.inject(AutowiredAnnotationBeanPostProcessor.java:768)
+	at org.springframework.beans.factory.annotation.InjectionMetadata.inject(InjectionMetadata.java:146)
+	at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor.postProcessProperties(AutowiredAnnotationBeanPostProcessor.java:509)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.populateBean(AbstractAutowireCapableBeanFactory.java:1445)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:600)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:523)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339)
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:346)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1155)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1121)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1056)
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:987)
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:627)
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146)
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752)
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1361)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1350)
+	at cn.chyuan.ai.Application.main(Application.java:18)
+26-05-11.00:30:38.602 [main            ] INFO  QueryLogsTools         - QueryLogsTools 初始化完成, mockEnabled=false, lokiBaseUrl=http://49.232.169.33:3100
+26-05-11.00:30:38.603 [main            ] INFO  QueryMetricsTools      - QueryMetricsTools 初始化完成, mockEnabled=false, prometheusBaseUrl=http://49.232.169.33:9090
+26-05-11.00:30:38.606 [main            ] WARN  AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'contextualRetrievalChunker': Unsatisfied dependency expressed through field 'chatModel': No qualifying bean of type 'org.springframework.ai.chat.model.ChatModel' available: expected at least 1 bean which qualifies as autowire candidate. Dependency annotations: {@org.springframework.beans.factory.annotation.Autowired(required=true)}
+26-05-11.00:30:38.610 [main            ] INFO  StandardService        - Stopping service [Tomcat]
+26-05-11.00:30:38.614 [main            ] INFO  ConditionEvaluationReportLogger - 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+26-05-11.00:30:38.619 [main            ] ERROR LoggingFailureAnalysisReporter - 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Field chatModel in cn.chyuan.ai.domain.rag.service.chunker.ContextualRetrievalChunker required a bean of type 'org.springframework.ai.chat.model.ChatModel' that could not be found.
+
+The injection point has the following annotations:
+	- @org.springframework.beans.factory.annotation.Autowired(required=true)
+
+
+Action:
+
+Consider defining a bean of type 'org.springframework.ai.chat.model.ChatModel' in your configuration.
+
+26-05-11.00:32:25.271 [background-preinit] INFO  Version                - HV000001: Hibernate Validator 8.0.2.Final
+26-05-11.00:32:25.286 [main            ] INFO  Application            - Starting Application using Java 23.0.2 with PID 21739 (/Users/WorkProject/IdeaProjects/aggregation-support-agent/aggregation-support-agent-app/target/classes started by cuihongyuan in /Users/WorkProject/IdeaProjects/aggregation-support-agent/aggregation-support-agent-app)
+26-05-11.00:32:25.287 [main            ] INFO  Application            - The following 1 profile is active: "dev"
+26-05-11.00:32:25.656 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-11.00:32:25.759 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'clientAnnotatedBeans' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerAutoConfiguration$ClientMcpAnnotatedBeans] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-11.00:32:25.762 [main            ] WARN  PostProcessorRegistrationDelegate$BeanPostProcessorChecker - Bean 'spring.ai.mcp.client.annotation-scanner-org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties' of type [org.springframework.ai.mcp.client.common.autoconfigure.annotations.McpClientAnnotationScannerProperties] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying). Is this bean getting eagerly injected/applied to a currently created BeanPostProcessor [clientAnnotatedMethodBeanPostProcessor]? Check the corresponding BeanPostProcessor declaration and its dependencies/advisors. If this bean does not have to be post-processed, declare it with ROLE_INFRASTRUCTURE.
+26-05-11.00:32:25.855 [main            ] INFO  TomcatWebServer        - Tomcat initialized with port 8091 (http)
+26-05-11.00:32:25.861 [main            ] INFO  Http11NioProtocol      - Initializing ProtocolHandler ["http-nio-8091"]
+26-05-11.00:32:25.862 [main            ] INFO  StandardService        - Starting service [Tomcat]
+26-05-11.00:32:25.862 [main            ] INFO  StandardEngine         - Starting Servlet engine: [Apache Tomcat/10.1.36]
+26-05-11.00:32:25.890 [main            ] INFO  [/]                    - Initializing Spring embedded WebApplicationContext
+26-05-11.00:32:25.890 [main            ] INFO  ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 587 ms
+26-05-11.00:32:26.082 [main            ] INFO  BigModelEmbeddingGateway - 智谱嵌入网关初始化完成: url=https://open.bigmodel.cn/api/paas/v4/embeddings, model=embedding-3, dimension=1024
+26-05-11.00:32:26.083 [main            ] INFO  EmbeddingCacheConfig   - 启用嵌入向量缓存: maxSize=10000, expireHours=24
+26-05-11.00:32:26.088 [main            ] INFO  CachedEmbeddingService - 嵌入向量缓存初始化: maxSize=10000, expireHours=24
+26-05-11.00:32:26.092 [main            ] INFO  MilvusClientConfig     - 初始化 Milvus 客户端连接: 49.232.169.33:19530
+26-05-11.00:32:26.358 [main            ] INFO  DocumentParserFactory  - 文档解析器工厂初始化，已注册 5 个解析器
+26-05-11.00:32:26.367 [main            ] INFO  ElasticsearchConfig    - 初始化Elasticsearch客户端: 49.232.169.33:9200
+26-05-11.00:32:26.510 [main            ] ERROR ElasticsearchBM25SearchService - Elasticsearch索引初始化失败
+co.elastic.clients.elasticsearch._types.ElasticsearchException: [es/indices.create] failed: [illegal_argument_exception] Custom Analyzer [ik_smart] failed to find tokenizer under name [ik_smart]
+	at co.elastic.clients.transport.ElasticsearchTransportBase.getApiResponse(ElasticsearchTransportBase.java:345)
+	at co.elastic.clients.transport.ElasticsearchTransportBase.performRequest(ElasticsearchTransportBase.java:147)
+	at co.elastic.clients.elasticsearch.indices.ElasticsearchIndicesClient.create(ElasticsearchIndicesClient.java:277)
+	at co.elastic.clients.elasticsearch.indices.ElasticsearchIndicesClient.create(ElasticsearchIndicesClient.java:293)
+	at cn.chyuan.ai.infrastructure.gateway.retrieval.ElasticsearchBM25SearchService.createIndexIfNotExists(ElasticsearchBM25SearchService.java:60)
+	at cn.chyuan.ai.infrastructure.gateway.retrieval.ElasticsearchBM25SearchService.init(ElasticsearchBM25SearchService.java:46)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor$LifecycleMethod.invoke(InitDestroyAnnotationBeanPostProcessor.java:457)
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor$LifecycleMetadata.invokeInitMethods(InitDestroyAnnotationBeanPostProcessor.java:401)
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor.postProcessBeforeInitialization(InitDestroyAnnotationBeanPostProcessor.java:219)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.applyBeanPostProcessorsBeforeInitialization(AbstractAutowireCapableBeanFactory.java:423)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.initializeBean(AbstractAutowireCapableBeanFactory.java:1804)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:601)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:523)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339)
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:346)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202)
+	at org.springframework.beans.factory.config.DependencyDescriptor.resolveCandidate(DependencyDescriptor.java:254)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1664)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1552)
+	at org.springframework.context.annotation.CommonAnnotationBeanPostProcessor.autowireResource(CommonAnnotationBeanPostProcessor.java:599)
+	at org.springframework.context.annotation.CommonAnnotationBeanPostProcessor.getResource(CommonAnnotationBeanPostProcessor.java:577)
+	at org.springframework.context.annotation.CommonAnnotationBeanPostProcessor$LegacyResourceElement.getResourceToInject(CommonAnnotationBeanPostProcessor.java:790)
+	at org.springframework.beans.factory.annotation.InjectionMetadata$InjectedElement.inject(InjectionMetadata.java:272)
+	at org.springframework.beans.factory.annotation.InjectionMetadata.inject(InjectionMetadata.java:146)
+	at org.springframework.context.annotation.CommonAnnotationBeanPostProcessor.postProcessProperties(CommonAnnotationBeanPostProcessor.java:369)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.populateBean(AbstractAutowireCapableBeanFactory.java:1445)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:600)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:523)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339)
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:346)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202)
+	at org.springframework.beans.factory.config.DependencyDescriptor.resolveCandidate(DependencyDescriptor.java:254)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1664)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1552)
+	at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor$AutowiredFieldElement.resolveFieldValue(AutowiredAnnotationBeanPostProcessor.java:785)
+	at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor$AutowiredFieldElement.inject(AutowiredAnnotationBeanPostProcessor.java:768)
+	at org.springframework.beans.factory.annotation.InjectionMetadata.inject(InjectionMetadata.java:146)
+	at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor.postProcessProperties(AutowiredAnnotationBeanPostProcessor.java:509)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.populateBean(AbstractAutowireCapableBeanFactory.java:1445)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:600)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:523)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339)
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:346)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1155)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1121)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1056)
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:987)
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:627)
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146)
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752)
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1361)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1350)
+	at cn.chyuan.ai.Application.main(Application.java:18)
+26-05-11.00:32:26.516 [main            ] INFO  QueryLogsTools         - QueryLogsTools 初始化完成, mockEnabled=false, lokiBaseUrl=http://49.232.169.33:3100
+26-05-11.00:32:26.517 [main            ] INFO  QueryMetricsTools      - QueryMetricsTools 初始化完成, mockEnabled=false, prometheusBaseUrl=http://49.232.169.33:9090
+26-05-11.00:32:26.737 [main            ] WARN  SyncMcpSamplingProvider - No sampling methods found
+26-05-11.00:32:26.738 [main            ] WARN  SyncMcpElicitationProvider - No elicitation methods found
+26-05-11.00:32:26.913 [main            ] INFO  MilvusVectorStoreRepository - Milvus 集合已存在，跳过创建: biz
+26-05-11.00:32:27.172 [main            ] INFO  MilvusVectorStoreRepository - Milvus 集合已加载到内存: biz
+26-05-11.00:32:27.173 [main            ] INFO  MilvusClientConfig     - Milvus 集合初始化完成
+26-05-11.00:32:27.176 [main            ] INFO  Http11NioProtocol      - Starting ProtocolHandler ["http-nio-8091"]
+26-05-11.00:32:27.183 [main            ] INFO  TomcatWebServer        - Tomcat started on port 8091 (http) with context path '/'
+26-05-11.00:32:27.191 [main            ] INFO  Application            - Started Application in 2.099 seconds (process running for 2.247)
+26-05-11.00:32:27.248 [main            ] INFO  AiAgentAutoConfig      - Ai Agent 智能体装配 [{"agent":{"agentDesc":"基于 DeepSeek 模型的智能对话问答助手","agentId":"200004","agentName":"DeepSeek 智能问答"},"appName":"deepseekRagChatAgent","module":{"agents":[{"description":"DeepSeek 智能问答助手，专注于自然、流畅的人机交流","instruction":"你是一个专业、友好的智能对话助手。你的核心使命是与用户进行自然、有意义的交流。\n\n【交流原则】\n1. 始终保持友好、尊重的态度\n2. 使用清晰、简洁的中文表达\n3. 积极倾听用户需求，准确理解问题意图\n4. 回答要具体、有针对性，避免空泛\n5. 遇到不确定的问题时，诚实告知并尝试提供帮助方向\n\n【对话风格】\n- 语气亲切自然，像朋友一样交流\n- 适当使用表情符号增加亲和力（但不要过度）\n- 根据用户的问题调整回答的详细程度\n- 主动询问澄清模糊的问题\n\n【能力范围】\n- 回答各类知识性问题\n- 提供建议和解决方案\n- 协助思考和分析问题\n- 进行创意性讨论\n- 日常闲聊和情感交流\n\n【注意事项】\n- 不提供违法、暴力或不适当的内容\n- 不涉及政治敏感话题\n- 医疗、法律等专业领域建议仅供参考\n- 保护用户隐私，不泄露对话内容\n- 承认自己的局限性，不编造不确定的信息\n\n【交互优化】\n- 对于复杂问题，分步骤解答\n- 必要时提供多个角度的观点\n- 鼓励用户提出后续问题\n- 在对话结束时，询问是否还有其他需要帮助的地方\n\n记住：你的目标是让每次对话都变得有价值、愉快且富有成效。\n","name":"deepseekRagChatAgent","outputKey":"rag_answer","reactMode":true}],"aiApi":{"apiKey":"sk-REDACTED","baseUrl":"https://api.deepseek.com","completionsPath":"/v1/chat/completions","embeddingsPath":"embeddings"},"chatModel":{"model":"deepseek-v4-pro"},"runner":{"agentName":"deepseekRagChatAgent","pluginNameList":["myLogPlugin"]}}},{"agent":{"agentDesc":"多智能体协作的智能运维分析助手，自动分析告警并生成运维报告","agentId":"200002","agentName":"AIOps 智能运维"},"appName":"aiopsAgent","module":{"agentWorkflows":[{"description":"AIOps 分析流水线，先规划分析步骤再执行生成报告","maxIterations":3,"name":"aiops_pipeline","subAgents":["aiops_planner","aiops_executor"],"type":"sequential"}],"agents":[{"description":"AIOps 分析规划器，负责分解问题和制定分析计划","instruction":"你是一个运维分析规划器。根据用户的告警描述，制定详细的分析计划。\n你可以使用以下工具收集信息：\n1. getCurrentDateTime - 获取当前时间\n2. queryPrometheusAlerts - 查询 Prometheus 活动告警\n3. getAvailableLogTopics - 获取可用的日志主题\n4. queryLogs - 查询特定日志\n5. searchInternalDocs - 从知识库检索运维手册\n请按以下步骤分析：\n1. 获取当前时间，确认告警时间窗口\n2. 查询 Prometheus 获取所有活动告警\n3. 根据告警类型查询相关日志\n4. 检索运维手册获取处理方案\n5. 将所有信息整理为结构化的分析计划\n","name":"aiops_planner","outputKey":"plan_result","reactMode":true},{"description":"AIOps 分析执行器，根据规划结果生成运维报告","instruction":"你是一个运维分析报告生成器。根据规划器提供的分析结果 {plan_result}，\n生成一份完整的 Markdown 格式运维报告。\n报告格式要求：\n# 告警分析报告\n## 活跃告警清单\n（表格：告警名称、级别、目标服务、首次触发时间、状态）\n## 告警根因分析\n（每个告警：详情、症状描述、日志证据、根因结论）\n## 处理方案\n（每个告警：已执行排查步骤、处理建议、预期效果）\n## 结论\n（整体评估、关键发现、后续建议、风险评估）\n","name":"aiops_executor","outputKey":"execution_result","reactMode":true}],"aiApi":{"apiKey":"47b14566882e4e5ab68ae079e307667f.gYg6trXMmDAFQBT3","baseUrl":"https://open.bigmodel.cn/api/paas/v4","completionsPath":"/chat/completions","embeddingsPath":"/embeddings"},"chatModel":{"model":"glm-5.1","toolMcpList":[{"local":{"name":"aiopsToolCallbackProvider"}}]},"runner":{"agentName":"aiops_pipeline","pluginNameList":["myLogPlugin"]}}},{"agent":{"agentDesc":"基于文档知识库的智能问答助手，支持多轮对话和语义检索","agentId":"200001","agentName":"RAG 智能问答"},"appName":"ragChatAgent","module":{"agents":[{"description":"RAG 智能问答助手，检索知识库文档回答问题","instruction":"你是一个专业的智能问答助手，可以基于内部知识库文档回答问题。\n当用户提问时，使用 searchInternalDocs 工具检索相关文档，\n然后基于检索到的内容回答用户的问题。\n回答要求：\n1. 基于检索到的文档内容准确回答\n2. 注明信息来源（引用文档名或章节）\n3. 如果检索结果不足以回答问题，诚实告知用户\n4. 回答使用中文\n","name":"ragChatAgent","outputKey":"rag_answer","reactMode":true}],"aiApi":{"apiKey":"47b14566882e4e5ab68ae079e307667f.gYg6trXMmDAFQBT3","baseUrl":"https://open.bigmodel.cn/api/paas/v4","completionsPath":"/chat/completions","embeddingsPath":"/embeddings"},"chatModel":{"model":"glm-5.1","toolMcpList":[{"local":{"name":"ragToolCallbackProvider"}}]},"runner":{"agentName":"ragChatAgent","pluginNameList":["myLogPlugin"]}}},{"agent":{"agentDesc":"专注于自然交流的通用对话助手，提供友好、专业的对话体验","agentId":"100003","agentName":"智能对话助手"},"appName":"chatAgent","module":{"agents":[{"description":"智能对话助手，专注于自然、流畅的人机交流","instruction":"你是一个专业、友好的智能对话助手。你的核心使命是与用户进行自然、有意义的交流。\n\n【交流原则】\n1. 始终保持友好、尊重的态度\n2. 使用清晰、简洁的中文表达\n3. 积极倾听用户需求，准确理解问题意图\n4. 回答要具体、有针对性，避免空泛\n5. 遇到不确定的问题时，诚实告知并尝试提供帮助方向\n\n【对话风格】\n- 语气亲切自然，像朋友一样交流\n- 适当使用表情符号增加亲和力（但不要过度）\n- 根据用户的问题调整回答的详细程度\n- 主动询问澄清模糊的问题\n\n【能力范围】\n- 回答各类知识性问题\n- 提供建议和解决方案\n- 协助思考和分析问题\n- 进行创意性讨论\n- 日常闲聊和情感交流\n\n【注意事项】\n- 不提供违法、暴力或不适当的内容\n- 不涉及政治敏感话题\n- 医疗、法律等专业领域建议仅供参考\n- 保护用户隐私，不泄露对话内容\n- 承认自己的局限性，不编造不确定的信息\n\n【交互优化】\n- 对于复杂问题，分步骤解答\n- 必要时提供多个角度的观点\n- 鼓励用户提出后续问题\n- 在对话结束时，询问是否还有其他需要帮助的地方\n\n记住：你的目标是让每次对话都变得有价值、愉快且富有成效。\n","name":"conversationAgent","outputKey":"chat_response","reactMode":true}],"aiApi":{"apiKey":"47b14566882e4e5ab68ae079e307667f.gYg6trXMmDAFQBT3","baseUrl":"https://open.bigmodel.cn/api/paas/v4","completionsPath":"/chat/completions","embeddingsPath":"/embeddings"},"chatModel":{"model":"glm-5.1","toolMcpList":[]},"runner":{"agentName":"conversationAgent","pluginNameList":["myLogPlugin"]}}}]
+26-05-11.00:32:27.248 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
+26-05-11.00:32:27.297 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
+26-05-11.00:32:27.302 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
+26-05-11.00:32:27.318 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
+26-05-11.00:32:27.318 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
+26-05-11.00:32:27.319 [main            ] INFO  PluginManager          - Plugin 'logging_plugin' registered.
+26-05-11.00:32:27.319 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 200004
+26-05-11.00:32:27.319 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
+26-05-11.00:32:27.320 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
+26-05-11.00:32:27.320 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize aiopsToolCallbackProvider
+26-05-11.00:32:27.327 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
+26-05-11.00:32:27.327 [main            ] INFO  AgentNode              - Agent [aiops_planner] ReAct mode enabled, injecting ReAct prompt prefix. Original instruction length: 326
+26-05-11.00:32:27.327 [main            ] INFO  AgentNode              - Agent [aiops_executor] ReAct mode enabled, injecting ReAct prompt prefix. Original instruction length: 218
+26-05-11.00:32:27.327 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
+26-05-11.00:32:27.328 [main            ] INFO  SequentialAgentNode    - Ai Agent 装配操作 - SequentialAgentNode
+26-05-11.00:32:27.328 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
+26-05-11.00:32:27.328 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
+26-05-11.00:32:27.328 [main            ] INFO  PluginManager          - Plugin 'logging_plugin' registered.
+26-05-11.00:32:27.328 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 200002
+26-05-11.00:32:27.328 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
+26-05-11.00:32:27.329 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
+26-05-11.00:32:27.329 [main            ] INFO  LocalToolMcpCreateService - tool local mcp initialize ragToolCallbackProvider
+26-05-11.00:32:27.329 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
+26-05-11.00:32:27.329 [main            ] INFO  AgentNode              - Agent [ragChatAgent] ReAct mode enabled, injecting ReAct prompt prefix. Original instruction length: 167
+26-05-11.00:32:27.329 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
+26-05-11.00:32:27.329 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
+26-05-11.00:32:27.329 [main            ] INFO  PluginManager          - Plugin 'logging_plugin' registered.
+26-05-11.00:32:27.329 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 200001
+26-05-11.00:32:27.329 [main            ] INFO  AiApiNode              - Ai Agent 装配操作 - AiApiNode
+26-05-11.00:32:27.330 [main            ] INFO  ChatModelNode          - Ai Agent 装配操作 - ChatModelNode
+26-05-11.00:32:27.330 [main            ] INFO  AgentNode              - Ai Agent 装配操作 - AgentNode
+26-05-11.00:32:27.330 [main            ] INFO  AgentWorkflowNode      - Ai Agent 装配操作 - AgentWorkflowNode
+26-05-11.00:32:27.330 [main            ] INFO  RunnerNode             - Ai Agent 装配操作 - RunnerNode
+26-05-11.00:32:27.330 [main            ] INFO  PluginManager          - Plugin 'logging_plugin' registered.
+26-05-11.00:32:27.330 [main            ] INFO  AbstractArmorySupport  - 成功注册Bean: 100003
+26-05-11.00:33:23.245 [SpringApplicationShutdownHook] INFO  GracefulShutdown       - Commencing graceful shutdown. Waiting for active requests to complete
+26-05-11.00:33:23.253 [tomcat-shutdown ] INFO  GracefulShutdown       - Graceful shutdown complete

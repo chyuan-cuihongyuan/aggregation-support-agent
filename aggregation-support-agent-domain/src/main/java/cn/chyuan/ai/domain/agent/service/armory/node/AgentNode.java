@@ -73,13 +73,19 @@ public class AgentNode extends AbstractArmorySupport {
                 instruction = REACT_PROMPT_PREFIX + "\n\n---\n\n" + instruction;
             }
 
-            LlmAgent llmAgent = LlmAgent.builder()
+            LlmAgent.Builder agentBuilder = LlmAgent.builder()
                     .name(agentConfig.getName())
                     .description(agentConfig.getDescription())
-                    .model(new MySpringAI(chatModel))
+                    .model(new MySpringAI(chatModel, hasTools))
                     .instruction(instruction)
-                    .outputKey(agentConfig.getOutputKey())
-                    .build();
+                    .outputKey(agentConfig.getOutputKey());
+
+            // 设置 ReAct 循环最大步数，防止 LLM 空响应导致无限循环
+            if (agentConfig.getMaxSteps() != null && agentConfig.getMaxSteps() > 0) {
+                agentBuilder.maxSteps(agentConfig.getMaxSteps());
+            }
+
+            LlmAgent llmAgent = agentBuilder.build();
 
             dynamicContext.getAgentGroup().put(agentConfig.getName(), llmAgent);
         }

@@ -12,6 +12,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
@@ -30,9 +32,11 @@ import java.util.*;
  * </ul>
  */
 @Slf4j
-@Service
+@Primary
+@Service("bm25SearchService")
 @ConditionalOnClass(ElasticsearchClient.class)
 @ConditionalOnBean(ElasticsearchClient.class)
+@ConditionalOnProperty(name = "elasticsearch.enabled", havingValue = "true")
 public class ElasticsearchBM25SearchService implements IBM25SearchService {
 
     @Autowired
@@ -91,6 +95,12 @@ public class ElasticsearchBM25SearchService implements IBM25SearchService {
                             .properties("ownerUserId", p -> p
                                     .keyword(k -> k)
                             )
+                            .properties("knowledgeBaseId", p -> p
+                                    .keyword(k -> k)
+                            )
+                            .properties("knowledgeBaseName", p -> p
+                                    .keyword(k -> k)
+                            )
                     )
             );
             log.info("创建Elasticsearch索引: {}", indexName);
@@ -134,12 +144,28 @@ public class ElasticsearchBM25SearchService implements IBM25SearchService {
                     String documentId = (String) source.get("documentId");
                     String tenantId = (String) source.get("tenantId");
                     String ownerUserId = (String) source.get("ownerUserId");
+                    String knowledgeBaseId = (String) source.get("knowledgeBaseId");
+                    String knowledgeBaseName = (String) source.get("knowledgeBaseName");
+                    Object sourceName = source.get("_source");
+                    Object fileName = source.get("_file_name");
+                    Object chunkIndex = source.get("chunkIndex");
 
                     Map<String, Object> metadata = new HashMap<>();
                     metadata.put("docId", docId);
                     metadata.put("documentId", documentId);
                     metadata.put("tenantId", tenantId);
                     metadata.put("ownerUserId", ownerUserId);
+                    metadata.put("knowledgeBaseId", knowledgeBaseId);
+                    metadata.put("knowledgeBaseName", knowledgeBaseName);
+                    if (sourceName != null) {
+                        metadata.put("_source", sourceName);
+                    }
+                    if (fileName != null) {
+                        metadata.put("_file_name", fileName);
+                    }
+                    if (chunkIndex != null) {
+                        metadata.put("chunkIndex", chunkIndex);
+                    }
                     metadata.put("retrievalType", "bm25");
                     metadata.put("esScore", hit.score());
 
@@ -210,10 +236,19 @@ public class ElasticsearchBM25SearchService implements IBM25SearchService {
                 );
             }
 
-            esClient.bulk(bulkRequest.build());
-            log.info("Elasticsearch批量添加文档: count={}", documents.size());
+            var response = esClient.bulk(bulkRequest.build());
+            if (response.errors()) {
+                response.items().stream()
+                        .filter(item -> item.error() != null)
+                        .findFirst()
+                        .ifPresent(item -> log.error("Elasticsearch批量添加文档部分失败: id={}, error={}",
+                                item.id(), item.error().reason()));
+                throw new IOException("Elasticsearch批量添加文档存在失败项");
+            }
+            log.info("Elasticsearch批量添加文档: index={}, count={}", indexName, documents.size());
         } catch (IOException e) {
             log.error("Elasticsearch批量添加文档失败", e);
+            throw new RuntimeException("Elasticsearch批量添加文档失败", e);
         }
     }
 

@@ -182,6 +182,8 @@ public class EnhancedRagService implements IRagService {
                 .documentId(documentId)
                 .tenantId(command.getTenantId() != null ? command.getTenantId() : command.getUserId())
                 .ownerUserId(command.getUserId() != null ? command.getUserId() : "")
+                .knowledgeBaseId(command.getKnowledgeBaseId() != null ? command.getKnowledgeBaseId() : "")
+                .knowledgeBaseName(command.getKnowledgeBaseName() != null ? command.getKnowledgeBaseName() : "")
                 .visibility("private")
                 .deletedFlag(0)
                 .fileName(command.getFileName())
@@ -193,74 +195,86 @@ public class EnhancedRagService implements IRagService {
                 .build();
         documentMetadataRepository.save(metadata);
 
-        // 优先使用 rawContent（支持 PDF/Word/HTML 等二进制格式），兼容旧版本使用 content
-        byte[] documentBytes;
-        if (command.getRawContent() != null) {
-            documentBytes = command.getRawContent();
-            log.info("开始处理文档上传(二进制): fileName={}, size={}", command.getFileName(), documentBytes.length);
-        } else if (command.getContent() != null) {
-            documentBytes = command.getContent().getBytes(StandardCharsets.UTF_8);
-            log.info("开始处理文档上传(文本): fileName={}, contentLength={}", command.getFileName(), command.getContent().length());
-        } else {
-            throw new IllegalArgumentException("文档内容不能为空：既没有 rawContent 也没有 content");
+        try {
+            // 优先使用 rawContent（支持 PDF/Word/HTML 等二进制格式），兼容旧版本使用 content
+            byte[] documentBytes;
+            if (command.getRawContent() != null) {
+                documentBytes = command.getRawContent();
+                log.info("开始处理文档上传(二进制): fileName={}, size={}", command.getFileName(), documentBytes.length);
+            } else if (command.getContent() != null) {
+                documentBytes = command.getContent().getBytes(StandardCharsets.UTF_8);
+                log.info("开始处理文档上传(文本): fileName={}, contentLength={}", command.getFileName(), command.getContent().length());
+            } else {
+                throw new IllegalArgumentException("文档内容不能为空：既没有 rawContent 也没有 content");
+            }
+
+            // 1. 解析文档：根据文件类型自动选择解析器（支持 PDF/Word/HTML/TXT/MD）
+            ParsedDocumentVO parsedDocument = documentParserFactory.parse(
+                    documentBytes,
+                    command.getFileName(),
+                    command.getMimeType()
+            );
+
+            // 2. 分块：使用语义分块或Parent-Child分块
+            List<DocumentChunkEntity> chunks;
+            if (isParentChildEnabled()) {
+                // Parent-Child分块：只索引子chunk
+                ParentChildChunker.ParentChildChunks parentChildChunks = parentChildChunker.chunk(parsedDocument, command.getFileName());
+                chunks = parentChildChunks.getChildChunks();
+
+                // 存储父chunk到元数据（用于检索后获取完整上下文）
+                // 实际生产中可能需要单独存储父chunk
+                log.info("使用Parent-Child分块: childCount={}, parentCount={}",
+                        parentChildChunks.getChildChunks().size(), parentChildChunks.getParentChunks().size());
+            } else {
+                // 使用语义分块
+                chunks = semanticChunker.chunk(parsedDocument, command.getFileName());
+            }
+
+            if (chunks.isEmpty()) {
+                log.warn("文档分块结果为空，跳过处理: {}", command.getFileName());
+                documentMetadataRepository.updateStatus(documentId, "success", 0, 0, 0, "文档分块结果为空");
+                return;
+            }
+
+            for (DocumentChunkEntity chunk : chunks) {
+                enrichChunkMetadata(chunk, documentId, metadata);
+            }
+
+            // 3. 批量嵌入：将所有分块文本转换为向量
+            List<String> texts = chunks.stream()
+                    .map(DocumentChunkEntity::getContent)
+                    .collect(Collectors.toList());
+            List<float[]> vectors = embeddingService.embedBatch(texts);
+
+            // 4. 将向量写回分块实体
+            for (int i = 0; i < chunks.size(); i++) {
+                chunks.get(i).setVector(vectors.get(i));
+            }
+
+            // 5. 写入向量数据库
+            vectorStoreRepository.insertChunks(chunks);
+
+            // 6. 如果启用BM25，同时添加到BM25索引
+            if (bm25Enabled) {
+                addToBM25Index(chunks);
+            }
+
+            if (knowledgeGraphEnabled && knowledgeGraphService != null) {
+                triggerKnowledgeGraphBuild(documentId, chunks);
+            }
+
+            int totalChars = parsedDocument.getTextContent() != null ? parsedDocument.getTextContent().length() : 0;
+            int sectionCount = parsedDocument.getSections() != null ? parsedDocument.getSections().size() : 0;
+            documentMetadataRepository.updateStatus(documentId, "success", chunks.size(), totalChars, sectionCount, "");
+            log.info("文档上传处理完成: fileName={}, documentId={}, chunkCount={}", command.getFileName(), documentId, chunks.size());
+        } catch (Exception e) {
+            log.error("文档上传处理失败: fileName={}, documentId={}", command.getFileName(), documentId, e);
+            String errMsg = e.getMessage() != null
+                    ? e.getMessage().substring(0, Math.min(e.getMessage().length(), 500)) : "未知错误";
+            documentMetadataRepository.updateStatus(documentId, "failed", 0, 0, 0, errMsg);
+            throw e;
         }
-
-        // 1. 解析文档：根据文件类型自动选择解析器（支持 PDF/Word/HTML/TXT/MD）
-        ParsedDocumentVO parsedDocument = documentParserFactory.parse(
-                documentBytes,
-                command.getFileName(),
-                command.getMimeType()
-        );
-
-        // 2. 分块：使用语义分块或Parent-Child分块
-        List<DocumentChunkEntity> chunks;
-        if (isParentChildEnabled()) {
-            // Parent-Child分块：只索引子chunk
-            ParentChildChunker.ParentChildChunks parentChildChunks = parentChildChunker.chunk(parsedDocument, command.getFileName());
-            chunks = parentChildChunks.getChildChunks();
-
-            // 存储父chunk到元数据（用于检索后获取完整上下文）
-            // 实际生产中可能需要单独存储父chunk
-            log.info("使用Parent-Child分块: childCount={}, parentCount={}",
-                    parentChildChunks.getChildChunks().size(), parentChildChunks.getParentChunks().size());
-        } else {
-            // 使用语义分块
-            chunks = semanticChunker.chunk(parsedDocument, command.getFileName());
-        }
-
-        if (chunks.isEmpty()) {
-            log.warn("文档分块结果为空，跳过处理: {}", command.getFileName());
-            documentMetadataRepository.updateStatus(documentId, "success", 0, 0, 0, "文档分块结果为空");
-            return;
-        }
-
-        for (DocumentChunkEntity chunk : chunks) {
-            enrichChunkMetadata(chunk, documentId, metadata);
-        }
-
-        // 3. 批量嵌入：将所有分块文本转换为向量
-        List<String> texts = chunks.stream()
-                .map(DocumentChunkEntity::getContent)
-                .collect(Collectors.toList());
-        List<float[]> vectors = embeddingService.embedBatch(texts);
-
-        // 4. 将向量写回分块实体
-        for (int i = 0; i < chunks.size(); i++) {
-            chunks.get(i).setVector(vectors.get(i));
-        }
-
-        // 5. 写入向量数据库
-        vectorStoreRepository.insertChunks(chunks);
-
-        // 6. 如果启用BM25，同时添加到BM25索引
-        if (bm25Enabled) {
-            addToBM25Index(chunks);
-        }
-
-        int totalChars = parsedDocument.getTextContent() != null ? parsedDocument.getTextContent().length() : 0;
-        int sectionCount = parsedDocument.getSections() != null ? parsedDocument.getSections().size() : 0;
-        documentMetadataRepository.updateStatus(documentId, "success", chunks.size(), totalChars, sectionCount, "");
-        log.info("文档上传处理完成: fileName={}, chunkCount={}", command.getFileName(), chunks.size());
     }
 
     @Override
@@ -284,7 +298,18 @@ public class EnhancedRagService implements IRagService {
         metadata.put("documentId", documentId);
         metadata.put("tenantId", metadataEntity.getTenantId());
         metadata.put("ownerUserId", metadataEntity.getOwnerUserId());
+        metadata.put("knowledgeBaseId", metadataEntity.getKnowledgeBaseId());
+        metadata.put("knowledgeBaseName", metadataEntity.getKnowledgeBaseName());
         metadata.put("visibility", metadataEntity.getVisibility());
+    }
+
+    private void triggerKnowledgeGraphBuild(String documentId, List<DocumentChunkEntity> chunks) {
+        try {
+            knowledgeGraphService.buildGraphFromDocument(documentId, chunks);
+            log.info("已提交知识图谱构建任务: documentId={}, chunkCount={}", documentId, chunks.size());
+        } catch (Exception e) {
+            log.warn("提交知识图谱构建任务失败: documentId={}, err={}", documentId, e.getMessage());
+        }
     }
 
     @Override
@@ -499,11 +524,17 @@ public class EnhancedRagService implements IRagService {
             String source = r.getMetadata() != null ? (String) r.getMetadata().get("_source") : null;
             Integer chunkIndex = r.getMetadata() != null && r.getMetadata().get("chunkIndex") != null
                     ? ((Number) r.getMetadata().get("chunkIndex")).intValue() : null;
+            String knowledgeBaseId = r.getMetadata() != null && r.getMetadata().get("knowledgeBaseId") != null
+                    ? String.valueOf(r.getMetadata().get("knowledgeBaseId")) : null;
+            String knowledgeBaseName = r.getMetadata() != null && r.getMetadata().get("knowledgeBaseName") != null
+                    ? String.valueOf(r.getMetadata().get("knowledgeBaseName")) : null;
             return SearchResultDetailVO.SearchItem.builder()
                     .content(r.getContent())
                     .score(r.getScore())
                     .source(source)
                     .chunkIndex(chunkIndex)
+                    .knowledgeBaseId(knowledgeBaseId)
+                    .knowledgeBaseName(knowledgeBaseName)
                     .build();
         }).collect(Collectors.toList());
     }

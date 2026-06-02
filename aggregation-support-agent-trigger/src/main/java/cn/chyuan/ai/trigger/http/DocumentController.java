@@ -39,10 +39,13 @@ public class DocumentController {
     private IAuditLogService auditLogService;
 
     @GetMapping
-    public Response<List<DocumentDTO>> listDocuments(HttpServletRequest request) {
+    public Response<List<DocumentDTO>> listDocuments(HttpServletRequest request,
+                                                     @RequestParam(value = "knowledgeBaseId", required = false) String knowledgeBaseId) {
         try {
             TenantScopeVO scope = currentScope(request);
-            List<DocumentMetadataEntity> entities = documentMetadataRepository.queryByScope(scope);
+            List<DocumentMetadataEntity> entities = knowledgeBaseId != null && !knowledgeBaseId.isBlank()
+                    ? documentMetadataRepository.queryByScopeAndKnowledgeBaseId(scope, knowledgeBaseId)
+                    : documentMetadataRepository.queryByScope(scope);
             List<DocumentDTO> dtos = entities.stream().map(this::toDTO).collect(Collectors.toList());
             return Response.<List<DocumentDTO>>builder()
                     .code(ResponseCode.SUCCESS.getCode())
@@ -147,6 +150,7 @@ public class DocumentController {
             dto.setQuery(detail.getQuery());
             dto.setVectorResults(convertItems(detail.getVectorResults()));
             dto.setBm25Results(convertItems(detail.getBm25Results()));
+            dto.setGraphResults(convertItems(detail.getGraphResults()));
             dto.setHybridResults(convertItems(detail.getHybridResults()));
 
             return Response.<SearchTestResultDTO>builder()
@@ -168,6 +172,8 @@ public class DocumentController {
         dto.setDocumentId(entity.getDocumentId());
         dto.setTenantId(entity.getTenantId());
         dto.setOwnerUserId(entity.getOwnerUserId());
+        dto.setKnowledgeBaseId(entity.getKnowledgeBaseId());
+        dto.setKnowledgeBaseName(entity.getKnowledgeBaseName());
         dto.setVisibility(entity.getVisibility());
         dto.setFileName(entity.getFileName());
         dto.setFileExtension(entity.getFileExtension());
@@ -192,6 +198,8 @@ public class DocumentController {
             dto.setScore(item.getScore());
             dto.setSource(item.getSource());
             dto.setChunkIndex(item.getChunkIndex());
+            dto.setKnowledgeBaseId(item.getKnowledgeBaseId());
+            dto.setKnowledgeBaseName(item.getKnowledgeBaseName());
             return dto;
         }).collect(Collectors.toList());
     }

@@ -7,6 +7,8 @@
         <result column="document_id" property="documentId"/>
         <result column="tenant_id" property="tenantId"/>
         <result column="owner_user_id" property="ownerUserId"/>
+        <result column="knowledge_base_id" property="knowledgeBaseId"/>
+        <result column="knowledge_base_name" property="knowledgeBaseName"/>
         <result column="file_name" property="fileName"/>
         <result column="file_extension" property="fileExtension"/>
         <result column="file_size" property="fileSize"/>
@@ -25,10 +27,12 @@
 
     <insert id="insert" parameterType="cn.chyuan.ai.infrastructure.dao.po.DocumentMetadataPO"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO document_metadata (document_id, tenant_id, owner_user_id, file_name, file_extension, file_size, mime_type,
+        INSERT INTO document_metadata (document_id, tenant_id, owner_user_id, knowledge_base_id, knowledge_base_name,
+                                       file_name, file_extension, file_size, mime_type,
                                        total_chars, total_chunks, section_count, processing_status,
                                        error_message, visibility, deleted_flag, user_id, create_time, update_time)
-        VALUES (#{documentId}, #{tenantId}, #{ownerUserId}, #{fileName}, #{fileExtension}, #{fileSize}, #{mimeType},
+        VALUES (#{documentId}, #{tenantId}, #{ownerUserId}, #{knowledgeBaseId}, #{knowledgeBaseName},
+                #{fileName}, #{fileExtension}, #{fileSize}, #{mimeType},
                 #{totalChars}, #{totalChunks}, #{sectionCount}, #{processingStatus},
                 #{errorMessage}, #{visibility}, #{deletedFlag}, #{userId}, #{createTime}, #{updateTime})
     </insert>
@@ -38,6 +42,15 @@
         WHERE deleted_flag = 0
           AND tenant_id = #{scope.tenantId}
           AND owner_user_id = #{scope.ownerUserId}
+        ORDER BY create_time DESC
+    </select>
+
+    <select id="queryByScopeAndKnowledgeBaseId" resultMap="DocumentMetadataMap">
+        SELECT * FROM document_metadata
+        WHERE deleted_flag = 0
+          AND tenant_id = #{scope.tenantId}
+          AND owner_user_id = #{scope.ownerUserId}
+          AND knowledge_base_id = #{knowledgeBaseId}
         ORDER BY create_time DESC
     </select>
 

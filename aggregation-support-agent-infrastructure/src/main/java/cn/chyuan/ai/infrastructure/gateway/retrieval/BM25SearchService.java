@@ -19,6 +19,7 @@ import org.apache.lucene.search.similarities.BM25Similarity;
 import org.apache.lucene.search.SearcherManager;
 import org.apache.lucene.store.ByteBuffersDirectory;
 import org.apache.lucene.store.Directory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.stereotype.Service;
 
@@ -33,8 +34,9 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * BM25检索服务实现 — 使用Lucene实现基于词频的关键词检索
  */
 @Slf4j
-@ConditionalOnMissingBean(ElasticsearchBM25SearchService.class)
-@Service
+@ConditionalOnProperty(name = "elasticsearch.enabled", havingValue = "false", matchIfMissing = true)
+@ConditionalOnMissingBean(IBM25SearchService.class)
+@Service("bm25SearchService")
 public class BM25SearchService implements IBM25SearchService {
 
     private Directory memoryIndex;
@@ -47,6 +49,10 @@ public class BM25SearchService implements IBM25SearchService {
     private static final String FIELD_DOCUMENT_ID = "documentId";
     private static final String FIELD_TENANT_ID = "tenantId";
     private static final String FIELD_OWNER_USER_ID = "ownerUserId";
+    private static final String FIELD_KNOWLEDGE_BASE_ID = "knowledgeBaseId";
+    private static final String FIELD_KNOWLEDGE_BASE_NAME = "knowledgeBaseName";
+    private static final String FIELD_SOURCE = "_source";
+    private static final String FIELD_CHUNK_INDEX = "chunkIndex";
     private static final String FIELD_CONTENT = "content";
 
     @PostConstruct
@@ -123,12 +129,22 @@ public class BM25SearchService implements IBM25SearchService {
                     String documentId = doc.get(FIELD_DOCUMENT_ID);
                     String tenantId = doc.get(FIELD_TENANT_ID);
                     String ownerUserId = doc.get(FIELD_OWNER_USER_ID);
+                    String knowledgeBaseId = doc.get(FIELD_KNOWLEDGE_BASE_ID);
+                    String knowledgeBaseName = doc.get(FIELD_KNOWLEDGE_BASE_NAME);
+                    String source = doc.get(FIELD_SOURCE);
+                    String chunkIndex = doc.get(FIELD_CHUNK_INDEX);
 
                     Map<String, Object> metadata = new HashMap<>();
                     metadata.put("docId", docId);
                     metadata.put("documentId", documentId);
                     metadata.put("tenantId", tenantId);
                     metadata.put("ownerUserId", ownerUserId);
+                    metadata.put("knowledgeBaseId", knowledgeBaseId);
+                    metadata.put("knowledgeBaseName", knowledgeBaseName);
+                    metadata.put("_source", source);
+                    if (chunkIndex != null) {
+                        metadata.put("chunkIndex", Integer.parseInt(chunkIndex));
+                    }
                     metadata.put("retrievalType", "bm25");
 
                     results.add(VectorSearchResultVO.builder()
@@ -276,6 +292,22 @@ public class BM25SearchService implements IBM25SearchService {
         Object ownerUserId = metadata.get("ownerUserId");
         if (ownerUserId != null) {
             doc.add(new StringField(FIELD_OWNER_USER_ID, String.valueOf(ownerUserId), Field.Store.YES));
+        }
+        Object knowledgeBaseId = metadata.get("knowledgeBaseId");
+        if (knowledgeBaseId != null) {
+            doc.add(new StringField(FIELD_KNOWLEDGE_BASE_ID, String.valueOf(knowledgeBaseId), Field.Store.YES));
+        }
+        Object knowledgeBaseName = metadata.get("knowledgeBaseName");
+        if (knowledgeBaseName != null) {
+            doc.add(new StringField(FIELD_KNOWLEDGE_BASE_NAME, String.valueOf(knowledgeBaseName), Field.Store.YES));
+        }
+        Object source = metadata.get("_source");
+        if (source != null) {
+            doc.add(new StringField(FIELD_SOURCE, String.valueOf(source), Field.Store.YES));
+        }
+        Object chunkIndex = metadata.get("chunkIndex");
+        if (chunkIndex != null) {
+            doc.add(new StringField(FIELD_CHUNK_INDEX, String.valueOf(chunkIndex), Field.Store.YES));
         }
         return doc;
     }

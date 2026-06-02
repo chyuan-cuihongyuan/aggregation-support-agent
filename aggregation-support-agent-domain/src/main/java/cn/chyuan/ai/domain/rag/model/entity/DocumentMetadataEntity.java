@@ -16,6 +16,8 @@ public class DocumentMetadataEntity {
     private String documentId;
     private String tenantId;
     private String ownerUserId;
+    private String knowledgeBaseId;
+    private String knowledgeBaseName;
     private String visibility;
     private Integer deletedFlag;
     private String fileName;

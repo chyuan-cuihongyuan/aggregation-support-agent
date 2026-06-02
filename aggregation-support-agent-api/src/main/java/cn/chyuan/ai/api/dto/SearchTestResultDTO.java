@@ -9,5 +9,6 @@ public class SearchTestResultDTO {
     private String query;
     private List<SearchResultItemDTO> vectorResults;
     private List<SearchResultItemDTO> bm25Results;
+    private List<SearchResultItemDTO> graphResults;
     private List<SearchResultItemDTO> hybridResults;
 }

@@ -38,6 +38,7 @@ public class MySpringAI extends BaseLlm {
     private final ObjectMapper objectMapper;
     private final MessageConverter messageConverter;
     private final SpringAIObservabilityHandler observabilityHandler;
+    private boolean hasConfiguredTools;
 
     public MySpringAI(ChatModel chatModel) {
         super(extractModelName(chatModel));
@@ -48,6 +49,11 @@ public class MySpringAI extends BaseLlm {
         this.messageConverter = new MyMessageConverter(objectMapper);
         this.observabilityHandler =
                 new SpringAIObservabilityHandler(createDefaultObservabilityConfig());
+    }
+
+    public MySpringAI(ChatModel chatModel, boolean hasConfiguredTools) {
+        this(chatModel);
+        this.hasConfiguredTools = hasConfiguredTools;
     }
 
     public MySpringAI(ChatModel chatModel, String modelName) {
@@ -148,6 +154,10 @@ public class MySpringAI extends BaseLlm {
                 return Flowable.error(new IllegalStateException("StreamingChatModel is not configured"));
             }
 
+            if ((hasConfiguredTools || hasTools(llmRequest)) && this.chatModel != null) {
+                return generateContent(llmRequest);
+            }
+
             return generateStreamingContent(llmRequest);
         } else {
             if (this.chatModel == null) {
@@ -200,6 +210,20 @@ public class MySpringAI extends BaseLlm {
                         Prompt prompt = withScopedToolContext(messageConverter.toLlmPrompt(llmRequest), tenantScope, holder);
                         observabilityHandler.logRequest(prompt.toString(), model());
 
+                        if (this.chatModel != null && hasToolCallbacks(prompt)) {
+                            ChatResponse chatResponse = chatModel.call(prompt);
+                            LlmResponse llmResponse = messageConverter.toLlmResponse(chatResponse);
+                            observabilityHandler.logResponse(extractTextFromResponse(llmResponse), model());
+                            observabilityHandler.recordSuccess(
+                                    context,
+                                    extractTokenCount(chatResponse),
+                                    extractInputTokenCount(chatResponse),
+                                    extractOutputTokenCount(chatResponse));
+                            emitter.onNext(llmResponse);
+                            emitter.onComplete();
+                            return;
+                        }
+
                         Flux<ChatResponse> responseFlux = withThreadLocalScope(prompt, tenantScope, holder);
 
                         responseFlux
@@ -217,6 +241,9 @@ public class MySpringAI extends BaseLlm {
                                                 // Use enhanced streaming-aware conversion
                                                 LlmResponse llmResponse =
                                                         messageConverter.toLlmResponse(chatResponse, true);
+                                                if (isEmptyResponse(llmResponse)) {
+                                                    return;
+                                                }
                                                 emitter.onNext(llmResponse);
                                             } catch (Exception e) {
                                                 observabilityHandler.recordError(context, e);
@@ -245,6 +272,29 @@ public class MySpringAI extends BaseLlm {
                     }
                 },
                 BackpressureStrategy.BUFFER);
+    }
+
+    private boolean hasTools(LlmRequest llmRequest) {
+        return llmRequest.tools() != null && !llmRequest.tools().isEmpty();
+    }
+
+    private boolean hasToolCallbacks(Prompt prompt) {
+        ChatOptions options = prompt.getOptions();
+        return options instanceof ToolCallingChatOptions toolOptions
+                && toolOptions.getToolCallbacks() != null
+                && !toolOptions.getToolCallbacks().isEmpty();
+    }
+
+    private boolean isEmptyResponse(LlmResponse llmResponse) {
+        if (llmResponse == null || llmResponse.content().isEmpty()) {
+            return true;
+        }
+        return llmResponse.content()
+                .flatMap(content -> content.parts()
+                        .map(parts -> parts.stream().noneMatch(part ->
+                                part.text().map(text -> !text.isEmpty()).orElse(false)
+                                        || part.functionCall().isPresent())))
+                .orElse(true);
     }
 
     private Prompt withScopedToolContext(Prompt prompt, TenantScopeVO tenantScope, RagSourceCollector.Holder holder) {

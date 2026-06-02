@@ -35,4 +35,10 @@ public class DocumentUploadCommand {
     /** 租户ID */
     private String tenantId;
 
+    /** 所属知识库ID */
+    private String knowledgeBaseId;
+
+    /** 所属知识库名称 */
+    private String knowledgeBaseName;
+
 }

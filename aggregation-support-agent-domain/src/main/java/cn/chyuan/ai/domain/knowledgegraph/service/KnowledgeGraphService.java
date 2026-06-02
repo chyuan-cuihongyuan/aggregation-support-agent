@@ -170,6 +170,9 @@ public class KnowledgeGraphService implements IKnowledgeGraphService {
     @Override
     public GraphSearchResultVO graphSearch(String query, int topK, int subgraphDepth) {
         List<GraphEntity> matchedEntities = searchEntities(query, topK);
+        if (matchedEntities == null || matchedEntities.isEmpty()) {
+            matchedEntities = fallbackTextSearchEntities(query, topK);
+        }
 
         List<GraphRelation> allRelations = new ArrayList<>();
         List<GraphEntity> neighborEntities = new ArrayList<>();
@@ -214,6 +217,33 @@ public class KnowledgeGraphService implements IKnowledgeGraphService {
                 .subgraphDescription(subgraphDesc)
                 .score(matchedEntities.isEmpty() ? 0f : matchedEntities.get(0).getEmbedding() != null ? 1f : 0f)
                 .build();
+    }
+
+    private List<GraphEntity> fallbackTextSearchEntities(String query, int topK) {
+        try {
+            LinkedHashMap<String, GraphEntity> entityMap = new LinkedHashMap<>();
+            List<String> candidates = new ArrayList<>();
+            if (query != null && !query.isBlank()) {
+                candidates.add(query.trim());
+                Arrays.stream(query.trim().split("\\s+"))
+                        .filter(token -> token.length() > 1)
+                        .forEach(candidates::add);
+            }
+
+            for (String candidate : candidates) {
+                List<GraphEntity> entities = graphDatabaseService.findEntitiesByName(candidate);
+                for (GraphEntity entity : entities) {
+                    entityMap.putIfAbsent(entity.getEntityId(), entity);
+                    if (entityMap.size() >= topK) {
+                        return new ArrayList<>(entityMap.values());
+                    }
+                }
+            }
+            return new ArrayList<>(entityMap.values());
+        } catch (Exception e) {
+            log.warn("知识图谱文本检索失败: {}", e.getMessage());
+            return Collections.emptyList();
+        }
     }
 
     @Override

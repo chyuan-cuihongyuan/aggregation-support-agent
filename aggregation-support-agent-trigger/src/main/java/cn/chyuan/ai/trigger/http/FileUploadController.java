@@ -4,6 +4,8 @@ import cn.chyuan.ai.api.dto.UploadResponseDTO;
 import cn.chyuan.ai.api.response.Response;
 import cn.chyuan.ai.domain.audit.service.IAuditLogService;
 import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
+import cn.chyuan.ai.domain.knowledgebase.adapter.repository.IKnowledgeBaseRepository;
+import cn.chyuan.ai.domain.knowledgebase.model.entity.KnowledgeBaseEntity;
 import cn.chyuan.ai.domain.rag.adapter.repository.IDocumentMetadataRepository;
 import cn.chyuan.ai.domain.rag.model.entity.DocumentMetadataEntity;
 import cn.chyuan.ai.domain.rag.model.valobj.DocumentUploadCommand;
@@ -41,11 +43,12 @@ import java.util.UUID;
 public class FileUploadController {
 
     private static final Set<String> SUPPORTED_EXTENSIONS = Set.of(
-            "txt", "md", "markdown", "mdown", "mkd", "pdf", "doc", "docx", "html", "htm"
+            "txt", "md", "markdown", "mdown", "mkd", "pdf", "doc", "docx", "html", "htm", "csv", "xls", "xlsx"
     );
 
     private static final Set<String> SUPPORTED_MIME_TYPES = Set.of(
             "text/plain",
+            "text/csv",
             "text/markdown",
             "text/x-markdown",
             "text/html",
@@ -53,6 +56,8 @@ public class FileUploadController {
             "application/pdf",
             "application/msword",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.ms-excel",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "application/octet-stream"
     );
 
@@ -64,6 +69,9 @@ public class FileUploadController {
 
     @Autowired(required = false)
     private IDocumentMetadataRepository documentMetadataRepository;
+
+    @Autowired(required = false)
+    private IKnowledgeBaseRepository knowledgeBaseRepository;
 
     @Autowired(required = false)
     @Qualifier("ragDocumentExecutor")
@@ -81,6 +89,7 @@ public class FileUploadController {
     @RequestMapping(value = "upload", method = RequestMethod.POST)
     public Response<UploadResponseDTO> uploadDocument(
             HttpServletRequest request,
+            @RequestParam(value = "knowledgeBaseId", required = false) String knowledgeBaseId,
             @RequestParam("file") MultipartFile file) {
         String ip = AuditContextSupport.extractIp(request);
         String ua = AuditContextSupport.extractUserAgent(request);
@@ -114,13 +123,18 @@ public class FileUploadController {
             String contentType = file.getContentType();
             log.info("接收文档上传: fileName={}, contentType={}, size={}", originalFilename, contentType, file.getSize());
             TenantScopeVO scope = TenantScopeSupport.currentScope(request);
+            KnowledgeBaseEntity knowledgeBase = resolveKnowledgeBase(knowledgeBaseId, scope);
+            String documentId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
 
             DocumentUploadCommand command = DocumentUploadCommand.builder()
+                    .documentId(documentId)
                     .fileName(originalFilename)
                     .rawContent(file.getBytes())
                     .mimeType(contentType)
                     .userId(scope.getOwnerUserId())
                     .tenantId(scope.getTenantId())
+                    .knowledgeBaseId(knowledgeBase != null ? knowledgeBase.getKnowledgeBaseId() : "")
+                    .knowledgeBaseName(knowledgeBase != null ? knowledgeBase.getName() : "")
                     .build();
 
             ragService.uploadDocument(command);
@@ -129,9 +143,11 @@ public class FileUploadController {
             safeAudit(auditUserId, auditUsername, AuditResult.SUCCESS,
                     originalFilename, "", ip, ua);
 
+            UploadResponseDTO dto = buildUploadResponse(documentId);
             return Response.<UploadResponseDTO>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
+                    .data(dto)
                     .build();
 
         } catch (AppException e) {
@@ -156,6 +172,7 @@ public class FileUploadController {
     @RequestMapping(value = "rag/documents/async", method = RequestMethod.POST)
     public Response<UploadResponseDTO> uploadDocumentAsync(
             HttpServletRequest request,
+            @RequestParam(value = "knowledgeBaseId", required = false) String knowledgeBaseId,
             @RequestParam("file") MultipartFile file) {
         String ip = AuditContextSupport.extractIp(request);
         String ua = AuditContextSupport.extractUserAgent(request);
@@ -185,6 +202,7 @@ public class FileUploadController {
 
             String documentId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
             TenantScopeVO scope = TenantScopeSupport.currentScope(request);
+            KnowledgeBaseEntity knowledgeBase = resolveKnowledgeBase(knowledgeBaseId, scope);
             byte[] rawContent = file.getBytes();
             String originalFilename = file.getOriginalFilename();
             String contentType = file.getContentType();
@@ -195,6 +213,8 @@ public class FileUploadController {
                     .mimeType(contentType)
                     .userId(scope.getOwnerUserId())
                     .tenantId(scope.getTenantId())
+                    .knowledgeBaseId(knowledgeBase != null ? knowledgeBase.getKnowledgeBaseId() : "")
+                    .knowledgeBaseName(knowledgeBase != null ? knowledgeBase.getName() : "")
                     .build();
 
             executeDocumentProcessing(command, auditUserId, auditUsername, originalFilename, ip, ua);
@@ -202,7 +222,9 @@ public class FileUploadController {
             UploadResponseDTO dto = new UploadResponseDTO();
             dto.setDocumentId(documentId);
             dto.setStatus("processing");
-            dto.setMessage("文档已进入异步处理队列");
+            dto.setMessage(knowledgeBase != null
+                    ? "文档已进入异步处理队列，所属知识库：" + knowledgeBase.getName()
+                    : "文档已进入异步处理队列");
             return Response.<UploadResponseDTO>builder()
                     .code(ResponseCode.SUCCESS.getCode())
                     .info(ResponseCode.SUCCESS.getInfo())
@@ -326,7 +348,7 @@ public class FileUploadController {
         }
         String extension = getExtension(originalFilename);
         if (extension.isBlank() || !SUPPORTED_EXTENSIONS.contains(extension)) {
-            return "不支持的文件类型，仅支持 txt、md、pdf、doc、docx、html";
+            return "不支持的文件类型，仅支持 txt、md、pdf、doc、docx、html、csv、xls、xlsx";
         }
         String contentType = file.getContentType();
         if (contentType != null && !contentType.isBlank()) {
@@ -348,6 +370,38 @@ public class FileUploadController {
             return "";
         }
         return fileName.substring(dotIndex + 1).toLowerCase(Locale.ROOT);
+    }
+
+    private KnowledgeBaseEntity resolveKnowledgeBase(String knowledgeBaseId, TenantScopeVO scope) {
+        if (knowledgeBaseId == null || knowledgeBaseId.isBlank()) {
+            return null;
+        }
+        if (knowledgeBaseRepository == null) {
+            throw new AppException(ResponseCode.UN_ERROR.getCode(), "知识库服务未启用");
+        }
+        KnowledgeBaseEntity entity = knowledgeBaseRepository.queryById(knowledgeBaseId, scope);
+        if (entity == null) {
+            throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(), "知识库不存在或无权限");
+        }
+        return entity;
+    }
+
+    private UploadResponseDTO buildUploadResponse(String documentId) {
+        UploadResponseDTO dto = new UploadResponseDTO();
+        dto.setDocumentId(documentId);
+        dto.setStatus("success");
+        dto.setMessage("文档上传成功");
+        if (documentMetadataRepository != null) {
+            DocumentMetadataEntity entity = documentMetadataRepository.queryByDocumentId(documentId);
+            if (entity != null) {
+                dto.setChunkCount(entity.getTotalChunks());
+                dto.setStatus(entity.getProcessingStatus());
+                dto.setMessage(entity.getErrorMessage() != null && !entity.getErrorMessage().isBlank()
+                        ? entity.getErrorMessage()
+                        : "文档上传成功");
+            }
+        }
+        return dto;
     }
 
 }

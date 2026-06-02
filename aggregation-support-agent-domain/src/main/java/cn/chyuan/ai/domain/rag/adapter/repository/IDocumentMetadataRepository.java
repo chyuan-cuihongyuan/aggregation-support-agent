@@ -10,6 +10,8 @@ public interface IDocumentMetadataRepository {
 
     List<DocumentMetadataEntity> queryByScope(TenantScopeVO scope);
 
+    List<DocumentMetadataEntity> queryByScopeAndKnowledgeBaseId(TenantScopeVO scope, String knowledgeBaseId);
+
     DocumentMetadataEntity queryByDocumentId(String documentId);
 
     DocumentMetadataEntity queryByDocumentId(String documentId, TenantScopeVO scope);

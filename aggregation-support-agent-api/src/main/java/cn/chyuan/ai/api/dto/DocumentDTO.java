@@ -9,6 +9,8 @@ public class DocumentDTO {
     private String documentId;
     private String tenantId;
     private String ownerUserId;
+    private String knowledgeBaseId;
+    private String knowledgeBaseName;
     private String visibility;
     private String fileName;
     private String fileExtension;

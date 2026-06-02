@@ -8,4 +8,6 @@ public class SearchResultItemDTO {
     private Float score;
     private String source;
     private Integer chunkIndex;
+    private String knowledgeBaseId;
+    private String knowledgeBaseName;
 }

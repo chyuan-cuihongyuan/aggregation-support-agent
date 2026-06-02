@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.chyuan.ai.infrastructure.persistent.mapper.KnowledgeBaseMapper">
+
+    <resultMap id="KnowledgeBaseMap" type="cn.chyuan.ai.infrastructure.dao.po.KnowledgeBasePO">
+        <id column="id" property="id"/>
+        <result column="knowledge_base_id" property="knowledgeBaseId"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="owner_user_id" property="ownerUserId"/>
+        <result column="name" property="name"/>
+        <result column="description" property="description"/>
+        <result column="icon" property="icon"/>
+        <result column="color" property="color"/>
+        <result column="deleted_flag" property="deletedFlag"/>
+        <result column="document_count" property="documentCount"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="cn.chyuan.ai.infrastructure.dao.po.KnowledgeBasePO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO knowledge_base (knowledge_base_id, tenant_id, owner_user_id, name, description,
+                                    icon, color, deleted_flag, create_time, update_time)
+        VALUES (#{knowledgeBaseId}, #{tenantId}, #{ownerUserId}, #{name}, #{description},
+                #{icon}, #{color}, #{deletedFlag}, #{createTime}, #{updateTime})
+    </insert>
+
+    <select id="queryByScope" resultMap="KnowledgeBaseMap">
+        SELECT kb.*,
+               COUNT(dm.id) AS document_count
+        FROM knowledge_base kb
+        LEFT JOIN document_metadata dm
+               ON dm.knowledge_base_id = kb.knowledge_base_id
+              AND dm.tenant_id = kb.tenant_id
+              AND dm.owner_user_id = kb.owner_user_id
+              AND dm.deleted_flag = 0
+        WHERE kb.deleted_flag = 0
+          AND kb.tenant_id = #{scope.tenantId}
+          AND kb.owner_user_id = #{scope.ownerUserId}
+        GROUP BY kb.id
+        ORDER BY kb.create_time DESC
+    </select>
+
+    <select id="queryByIdAndScope" resultMap="KnowledgeBaseMap">
+        SELECT kb.*,
+               COUNT(dm.id) AS document_count
+        FROM knowledge_base kb
+        LEFT JOIN document_metadata dm
+               ON dm.knowledge_base_id = kb.knowledge_base_id
+              AND dm.tenant_id = kb.tenant_id
+              AND dm.owner_user_id = kb.owner_user_id
+              AND dm.deleted_flag = 0
+        WHERE kb.knowledge_base_id = #{knowledgeBaseId}
+          AND kb.deleted_flag = 0
+          AND kb.tenant_id = #{scope.tenantId}
+          AND kb.owner_user_id = #{scope.ownerUserId}
+        GROUP BY kb.id
+    </select>
+
+    <update id="markDeleted">
+        UPDATE knowledge_base
+        SET deleted_flag = 1,
+            update_time = NOW()
+        WHERE knowledge_base_id = #{knowledgeBaseId}
+          AND tenant_id = #{scope.tenantId}
+          AND owner_user_id = #{scope.ownerUserId}
+          AND deleted_flag = 0
+    </update>
+
+</mapper>

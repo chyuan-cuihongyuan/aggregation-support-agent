@@ -13,6 +13,9 @@ public interface DocumentMetadataMapper {
 
     List<DocumentMetadataPO> queryByScope(@Param("scope") TenantScopeVO scope);
 
+    List<DocumentMetadataPO> queryByScopeAndKnowledgeBaseId(@Param("scope") TenantScopeVO scope,
+                                                            @Param("knowledgeBaseId") String knowledgeBaseId);
+
     DocumentMetadataPO queryByDocumentId(@Param("documentId") String documentId);
 
     DocumentMetadataPO queryByDocumentIdAndScope(@Param("documentId") String documentId,

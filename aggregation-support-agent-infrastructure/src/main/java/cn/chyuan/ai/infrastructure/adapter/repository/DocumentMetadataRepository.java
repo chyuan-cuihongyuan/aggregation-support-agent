@@ -25,6 +25,8 @@ public class DocumentMetadataRepository implements IDocumentMetadataRepository {
                 .documentId(entity.getDocumentId())
                 .tenantId(entity.getTenantId())
                 .ownerUserId(entity.getOwnerUserId())
+                .knowledgeBaseId(entity.getKnowledgeBaseId() != null ? entity.getKnowledgeBaseId() : "")
+                .knowledgeBaseName(entity.getKnowledgeBaseName() != null ? entity.getKnowledgeBaseName() : "")
                 .fileName(entity.getFileName())
                 .fileExtension(entity.getFileExtension())
                 .fileSize(entity.getFileSize())
@@ -46,6 +48,12 @@ public class DocumentMetadataRepository implements IDocumentMetadataRepository {
     @Override
     public List<DocumentMetadataEntity> queryByScope(TenantScopeVO scope) {
         List<DocumentMetadataPO> poList = documentMetadataMapper.queryByScope(scope);
+        return poList.stream().map(this::toEntity).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<DocumentMetadataEntity> queryByScopeAndKnowledgeBaseId(TenantScopeVO scope, String knowledgeBaseId) {
+        List<DocumentMetadataPO> poList = documentMetadataMapper.queryByScopeAndKnowledgeBaseId(scope, knowledgeBaseId);
         return poList.stream().map(this::toEntity).collect(Collectors.toList());
     }
 
@@ -78,6 +86,8 @@ public class DocumentMetadataRepository implements IDocumentMetadataRepository {
                 .documentId(po.getDocumentId())
                 .tenantId(po.getTenantId())
                 .ownerUserId(po.getOwnerUserId())
+                .knowledgeBaseId(po.getKnowledgeBaseId())
+                .knowledgeBaseName(po.getKnowledgeBaseName())
                 .fileName(po.getFileName())
                 .fileExtension(po.getFileExtension())
                 .fileSize(po.getFileSize())

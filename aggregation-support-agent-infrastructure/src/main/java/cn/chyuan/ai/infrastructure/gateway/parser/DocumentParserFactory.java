@@ -77,7 +77,7 @@ public class DocumentParserFactory implements IDocumentParserFactory {
      * 获取所有支持的文档格式
      */
     public List<String> getSupportedFormats() {
-        return List.of("txt", "md", "pdf", "doc", "docx", "html", "htm");
+        return List.of("txt", "md", "pdf", "doc", "docx", "html", "htm", "csv", "xls", "xlsx");
     }
 
 }
