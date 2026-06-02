@@ -41,8 +41,8 @@ public class KnowledgeGraphService implements IKnowledgeGraphService {
     private IEmbeddingService embeddingService;
 
     @Override
-    @Async
-    public ExtractionTaskEntity buildGraphFromDocument(String documentId, List<DocumentChunkEntity> chunks) {
+    @Async("ragDocumentExecutor")
+    public void buildGraphFromDocument(String documentId, List<DocumentChunkEntity> chunks) {
         String taskId = UUID.randomUUID().toString().replace("-", "");
         ExtractionTaskEntity task = ExtractionTaskEntity.builder()
                 .taskId(taskId)
@@ -123,6 +123,9 @@ public class KnowledgeGraphService implements IKnowledgeGraphService {
                 if (entity.getEntityId() == null) {
                     entity.setEntityId(UUID.randomUUID().toString().replace("-", ""));
                 }
+                if (entity.getSourceDocumentId() == null) {
+                    entity.setSourceDocumentId(documentId);
+                }
                 entity.setCreatedAt(new Date());
                 entity.setUpdatedAt(new Date());
             }
@@ -130,7 +133,11 @@ public class KnowledgeGraphService implements IKnowledgeGraphService {
             graphDatabaseService.saveEntities(uniqueEntities);
 
             // 保存关系
+            Map<String, String> entityIdByName = uniqueEntities.stream()
+                    .filter(e -> e.getEntityName() != null && e.getEntityId() != null)
+                    .collect(Collectors.toMap(GraphEntity::getEntityName, GraphEntity::getEntityId, (left, right) -> left));
             List<GraphRelation> validRelations = allRelations.stream()
+                    .peek(r -> resolveRelationEntityIds(r, entityIdByName, documentId))
                     .filter(r -> r.getSourceEntityId() != null && r.getTargetEntityId() != null)
                     .collect(Collectors.toList());
             for (GraphRelation relation : validRelations) {
@@ -158,7 +165,21 @@ public class KnowledgeGraphService implements IKnowledgeGraphService {
             task.setErrorMessage(e.getMessage());
         }
 
-        return task;
+    }
+
+    private void resolveRelationEntityIds(GraphRelation relation, Map<String, String> entityIdByName, String documentId) {
+        if (relation.getSourceEntityId() == null && relation.getSourceEntityName() != null) {
+            relation.setSourceEntityId(entityIdByName.get(relation.getSourceEntityName()));
+        }
+        if (relation.getTargetEntityId() == null && relation.getTargetEntityName() != null) {
+            relation.setTargetEntityId(entityIdByName.get(relation.getTargetEntityName()));
+        }
+        if (relation.getSourceDocumentId() == null) {
+            relation.setSourceDocumentId(documentId);
+        }
+        if (relation.getConfidence() == null) {
+            relation.setConfidence(1.0f);
+        }
     }
 
     @Override

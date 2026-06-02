@@ -26,6 +26,12 @@ public class GraphRelation {
     /** 目标实体ID */
     private String targetEntityId;
 
+    /** 源实体名称（LLM抽取结果，用于构建阶段映射实体ID） */
+    private String sourceEntityName;
+
+    /** 目标实体名称（LLM抽取结果，用于构建阶段映射实体ID） */
+    private String targetEntityName;
+
     /** 关系类型：RELATED_TO | PART_OF | DEPENDS_ON | BELONGS_TO | USES | LOCATED_IN */
     private String relationType;
 

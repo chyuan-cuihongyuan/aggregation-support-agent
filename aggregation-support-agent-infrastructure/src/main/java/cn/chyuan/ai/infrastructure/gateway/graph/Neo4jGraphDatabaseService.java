@@ -48,19 +48,19 @@ public class Neo4jGraphDatabaseService implements IGraphDatabaseService {
     public String saveEntity(GraphEntity entity) {
         neo4jClient.query("""
                 MERGE (e:Entity {entityId: $entityId})
+                ON CREATE SET e.createdAt = datetime()
                 SET e.name = $name, e.type = $type, e.description = $description,
                     e.properties = $properties, e.sourceDocumentId = $sourceDocumentId,
                     e.sourceChunkId = $sourceChunkId, e.embedding = $embedding,
                     e.updatedAt = datetime()
-                ON CREATE SET e.createdAt = datetime()
                 """)
                 .bind(entity.getEntityId()).to("entityId")
-                .bind(entity.getEntityName()).to("name")
-                .bind(entity.getEntityType()).to("type")
-                .bind(entity.getDescription()).to("description")
-                .bind(entity.getProperties() != null ? entity.getProperties() : Collections.emptyMap()).to("properties")
-                .bind(entity.getSourceDocumentId()).to("sourceDocumentId")
-                .bind(entity.getSourceChunkId()).to("sourceChunkId")
+                .bind(safeString(entity.getEntityName())).to("name")
+                .bind(safeString(entity.getEntityType())).to("type")
+                .bind(safeString(entity.getDescription())).to("description")
+                .bind(entity.getProperties() != null ? entity.getProperties().toString() : "").to("properties")
+                .bind(safeString(entity.getSourceDocumentId())).to("sourceDocumentId")
+                .bind(safeString(entity.getSourceChunkId())).to("sourceChunkId")
                 .bind(entity.getEmbedding() != null ? floatArrayToList(entity.getEmbedding()) : Collections.emptyList()).to("embedding")
                 .run();
         return entity.getEntityId();
@@ -77,17 +77,17 @@ public class Neo4jGraphDatabaseService implements IGraphDatabaseService {
                 MATCH (s:Entity {entityId: $sourceId})
                 MATCH (t:Entity {entityId: $targetId})
                 MERGE (s)-[r:RELATES_TO {relationId: $relationId}]->(t)
+                ON CREATE SET r.createdAt = datetime()
                 SET r.type = $type, r.description = $description,
-                    r.confidence = $confidence, r.sourceDocumentId = $sourceDocumentId,
-                    r.createdAt = datetime()
+                    r.confidence = $confidence, r.sourceDocumentId = $sourceDocumentId
                 """)
-                .bind(relation.getSourceEntityId()).to("sourceId")
-                .bind(relation.getTargetEntityId()).to("targetId")
+                .bind(safeString(relation.getSourceEntityId())).to("sourceId")
+                .bind(safeString(relation.getTargetEntityId())).to("targetId")
                 .bind(relation.getRelationId()).to("relationId")
-                .bind(relation.getRelationType()).to("type")
-                .bind(relation.getDescription()).to("description")
-                .bind(relation.getConfidence()).to("confidence")
-                .bind(relation.getSourceDocumentId()).to("sourceDocumentId")
+                .bind(safeString(relation.getRelationType())).to("type")
+                .bind(safeString(relation.getDescription())).to("description")
+                .bind(relation.getConfidence() != null ? relation.getConfidence() : 1.0f).to("confidence")
+                .bind(safeString(relation.getSourceDocumentId())).to("sourceDocumentId")
                 .run();
         return relation.getRelationId();
     }
@@ -280,5 +280,9 @@ public class Neo4jGraphDatabaseService implements IGraphDatabaseService {
             result.add(f);
         }
         return result;
+    }
+
+    private String safeString(String value) {
+        return value != null ? value : "";
     }
 }

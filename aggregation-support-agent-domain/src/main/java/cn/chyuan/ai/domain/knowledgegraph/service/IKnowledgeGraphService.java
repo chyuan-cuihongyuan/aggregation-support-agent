@@ -1,6 +1,5 @@
 package cn.chyuan.ai.domain.knowledgegraph.service;
 
-import cn.chyuan.ai.domain.knowledgegraph.model.entity.ExtractionTaskEntity;
 import cn.chyuan.ai.domain.knowledgegraph.model.entity.GraphEntity;
 import cn.chyuan.ai.domain.knowledgegraph.model.valobj.GraphSearchResultVO;
 import cn.chyuan.ai.domain.knowledgegraph.model.valobj.SubgraphVO;
@@ -15,7 +14,7 @@ import java.util.Map;
 public interface IKnowledgeGraphService {
 
     /** 文档上传后触发图谱构建 */
-    ExtractionTaskEntity buildGraphFromDocument(String documentId, List<DocumentChunkEntity> chunks);
+    void buildGraphFromDocument(String documentId, List<DocumentChunkEntity> chunks);
 
     /** 实体搜索 */
     List<GraphEntity> searchEntities(String query, int topK);

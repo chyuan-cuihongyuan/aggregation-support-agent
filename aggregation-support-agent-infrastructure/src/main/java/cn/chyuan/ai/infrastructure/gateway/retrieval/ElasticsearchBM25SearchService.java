@@ -101,6 +101,15 @@ public class ElasticsearchBM25SearchService implements IBM25SearchService {
                             .properties("knowledgeBaseName", p -> p
                                     .keyword(k -> k)
                             )
+                            .properties("source", p -> p
+                                    .keyword(k -> k)
+                            )
+                            .properties("fileName", p -> p
+                                    .keyword(k -> k)
+                            )
+                            .properties("chunkIndex", p -> p
+                                    .integer(integer -> integer)
+                            )
                     )
             );
             log.info("创建Elasticsearch索引: {}", indexName);
@@ -146,8 +155,8 @@ public class ElasticsearchBM25SearchService implements IBM25SearchService {
                     String ownerUserId = (String) source.get("ownerUserId");
                     String knowledgeBaseId = (String) source.get("knowledgeBaseId");
                     String knowledgeBaseName = (String) source.get("knowledgeBaseName");
-                    Object sourceName = source.get("_source");
-                    Object fileName = source.get("_file_name");
+                    Object sourceName = firstNonNull(source.get("source"), source.get("_source"));
+                    Object fileName = firstNonNull(source.get("fileName"), source.get("_file_name"));
                     Object chunkIndex = source.get("chunkIndex");
 
                     Map<String, Object> metadata = new HashMap<>();
@@ -194,10 +203,7 @@ public class ElasticsearchBM25SearchService implements IBM25SearchService {
     @Override
     public void addDocument(String docId, String content, Map<String, Object> metadata) {
         try {
-            Map<String, Object> doc = new HashMap<>();
-            doc.put("docId", docId);
-            doc.put("content", content);
-            doc.putAll(metadata);
+            Map<String, Object> doc = buildIndexDocument(docId, content, metadata);
 
             esClient.index(i -> i
                     .index(indexName)
@@ -222,10 +228,11 @@ public class ElasticsearchBM25SearchService implements IBM25SearchService {
             var bulkRequest = new co.elastic.clients.elasticsearch.core.BulkRequest.Builder();
 
             for (Map.Entry<String, String> entry : documents.entrySet()) {
-                Map<String, Object> doc = new HashMap<>();
-                doc.put("docId", entry.getKey());
-                doc.put("content", entry.getValue());
-                doc.putAll(metadataByDocId.getOrDefault(entry.getKey(), Collections.emptyMap()));
+                Map<String, Object> doc = buildIndexDocument(
+                        entry.getKey(),
+                        entry.getValue(),
+                        metadataByDocId.getOrDefault(entry.getKey(), Collections.emptyMap())
+                );
 
                 bulkRequest.operations(op -> op
                         .index(idx -> idx
@@ -302,6 +309,42 @@ public class ElasticsearchBM25SearchService implements IBM25SearchService {
             log.error("获取Elasticsearch文档数量失败", e);
             return 0;
         }
+    }
+
+    private Map<String, Object> buildIndexDocument(String docId, String content, Map<String, Object> metadata) {
+        Map<String, Object> doc = sanitizeMetadata(metadata);
+        doc.put("docId", docId);
+        doc.put("content", content);
+        return doc;
+    }
+
+    private Map<String, Object> sanitizeMetadata(Map<String, Object> metadata) {
+        Map<String, Object> sanitized = new HashMap<>();
+        if (metadata == null || metadata.isEmpty()) {
+            return sanitized;
+        }
+
+        Object source = firstNonNull(metadata.get("_source"), metadata.get("source"));
+        if (source != null) {
+            sanitized.put("source", source);
+        }
+        Object fileName = firstNonNull(metadata.get("_file_name"), metadata.get("fileName"));
+        if (fileName != null) {
+            sanitized.put("fileName", fileName);
+        }
+
+        for (Map.Entry<String, Object> entry : metadata.entrySet()) {
+            String key = entry.getKey();
+            if (key == null || key.isBlank() || key.startsWith("_")) {
+                continue;
+            }
+            sanitized.put(key, entry.getValue());
+        }
+        return sanitized;
+    }
+
+    private Object firstNonNull(Object first, Object second) {
+        return first != null ? first : second;
     }
 
 }

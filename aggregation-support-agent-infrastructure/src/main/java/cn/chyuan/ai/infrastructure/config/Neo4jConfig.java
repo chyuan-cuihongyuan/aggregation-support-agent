@@ -22,7 +22,7 @@ public class Neo4jConfig {
     @Data
     public static class Authentication {
         private String username = "neo4j";
-        private String password = "12345678";
+        private String password = "REDACTED";
     }
 
     @Bean

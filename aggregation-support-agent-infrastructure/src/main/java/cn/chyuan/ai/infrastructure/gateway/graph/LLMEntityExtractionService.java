@@ -181,10 +181,11 @@ public class LLMEntityExtractionService implements IEntityExtractionService {
             if (relationMaps != null) {
                 for (Map<String, Object> rm : relationMaps) {
                     relations.add(GraphRelation.builder()
+                            .sourceEntityName((String) rm.get("source"))
+                            .targetEntityName((String) rm.get("target"))
                             .relationType((String) rm.get("type"))
                             .description((String) rm.get("description"))
                             .build());
-                    // sourceEntityId 和 targetEntityId 在合并阶段通过名称匹配设置
                 }
             }
 
