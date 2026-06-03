@@ -112,14 +112,22 @@ public interface AgentMemoryMapper {
     /**
      * 根据内容哈希检查是否存在
      */
-    @Select("SELECT COUNT(*) FROM agent_memory " +
-            "WHERE content_hash = #{contentHash} " +
-            "AND tenant_id = #{tenantId} " +
-            "AND user_id = #{userId} " +
-            "AND status = 1")
+    @Select("""
+            <script>
+            SELECT COUNT(*) FROM agent_memory
+            WHERE content_hash = #{contentHash}
+              AND tenant_id = #{tenantId}
+              AND user_id = #{userId}
+              AND status = 1
+            <if test="scope != null and scope != ''">
+              AND scope = #{scope}
+            </if>
+            </script>
+            """)
     int countByContentHash(@Param("contentHash") String contentHash,
                            @Param("tenantId") String tenantId,
-                           @Param("userId") String userId);
+                           @Param("userId") String userId,
+                           @Param("scope") String scope);
     
     /**
      * 软删除记忆

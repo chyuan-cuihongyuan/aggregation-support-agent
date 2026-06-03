@@ -48,7 +48,7 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
             
             // 检查是否已存在相同内容
             if (memoryRepository.existsByContentHash(
-                    contentHash, options.getTenantId(), options.getUserId())) {
+                    contentHash, options.getTenantId(), options.getUserId(), options.getScope())) {
                 log.debug("记忆已存在，跳过: {}", contentHash);
                 return;
             }
@@ -80,6 +80,7 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
             fact.getContent(), 
             options.getTenantId(), 
             options.getUserId(), 
+            options.getScope(),
             5
         );
         
@@ -244,7 +245,7 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
         
         // 按内容哈希去重
         Map<String, List<AgentMemoryEntity>> groupedByHash = allMemories.stream()
-            .collect(Collectors.groupingBy(AgentMemoryEntity::getContentHash));
+            .collect(Collectors.groupingBy(memory -> memory.getContentHash() + "#" + safeScope(memory.getScope())));
         
         for (Map.Entry<String, List<AgentMemoryEntity>> entry : groupedByHash.entrySet()) {
             if (entry.getValue().size() > 1) {
@@ -269,7 +270,7 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
             }
             
             List<MemoryEntry> similar = memoryRepository.searchSimilar(
-                memory.getContent(), tenantId, userId, 5);
+                memory.getContent(), tenantId, userId, memory.getScope(), 5);
             
             for (MemoryEntry similarEntry : similar) {
                 if (similarEntry.getScore() > 0.90 
@@ -361,7 +362,7 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
                 .hashString(content, StandardCharsets.UTF_8)
                 .toString();
 
-            if (memoryRepository.existsByContentHash(contentHash, options.getTenantId(), options.getUserId())) {
+            if (memoryRepository.existsByContentHash(contentHash, options.getTenantId(), options.getUserId(), options.getScope())) {
                 log.debug("降级存储：记忆已存在（contentHash={}），跳过重复写入", contentHash.substring(0, 8));
                 return;
             }
@@ -391,5 +392,9 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
         } catch (Exception e) {
             log.error("降级存储也失败", e);
         }
+    }
+
+    private String safeScope(String scope) {
+        return scope == null ? "" : scope;
     }
 }

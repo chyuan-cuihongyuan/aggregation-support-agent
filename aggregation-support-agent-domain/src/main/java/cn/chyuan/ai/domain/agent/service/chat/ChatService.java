@@ -24,8 +24,6 @@ import com.google.adk.runner.InMemoryRunner;
 import com.google.adk.sessions.Session;
 import com.google.genai.types.Content;
 import com.google.genai.types.Part;
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
 import io.reactivex.rxjava3.core.Flowable;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -34,7 +32,6 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -51,11 +48,6 @@ public class ChatService implements IChatService {
     
     @Resource
     private AgentMemoryService agentMemoryService;
-
-    private final Cache<String, String> userSessions = CacheBuilder.newBuilder()
-            .maximumSize(10000)
-            .expireAfterAccess(24, TimeUnit.HOURS)
-            .build();
 
     @Override
     public List<AiAgentConfigTableVO.Agent> queryAiAgentConfigList() {
@@ -89,20 +81,17 @@ public class ChatService implements IChatService {
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
         TenantScopeVO scope = currentScope(userId);
 
-        String sessionKey = scope.getTenantId() + ":" + scope.getOwnerUserId() + ":" + agentId;
         try {
-            return userSessions.get(sessionKey, () -> {
-                Session session = runner.sessionService().createSession(appName, scope.getOwnerUserId())
-                        .blockingGet();
-                chatHistoryRepository.saveSession(ChatSessionEntity.builder()
-                        .sessionId(session.id())
-                        .agentId(agentId)
-                        .tenantId(scope.getTenantId())
-                        .ownerUserId(scope.getOwnerUserId())
-                        .traceId("")
-                        .build());
-                return session.id();
-            });
+            Session session = runner.sessionService().createSession(appName, scope.getOwnerUserId())
+                    .blockingGet();
+            chatHistoryRepository.saveSession(ChatSessionEntity.builder()
+                    .sessionId(session.id())
+                    .agentId(agentId)
+                    .tenantId(scope.getTenantId())
+                    .ownerUserId(scope.getOwnerUserId())
+                    .traceId("")
+                    .build());
+            return session.id();
         } catch (Exception e) {
             throw new AppException(ResponseCode.E0001.getCode(), "创建会话失败", e);
         }
@@ -144,13 +133,13 @@ public class ChatService implements IChatService {
         final TenantScopeVO scopeSnapshot = currentScope(userId);
 
         // Step 1: 检索相关记忆
-        String memoryContext = buildMemoryContext(userId, agentId, message);
+        String memoryContext = buildMemoryContext(userId, agentId, sessionId, message);
 
         // Step 2: 增强消息（注入记忆上下文）
         String enhancedMessage = enhanceMessageWithMemory(message, memoryContext);
 
         // 开启 RAG 证据收集 — 收集器在 ThreadLocal 中，由调用方（Controller）在出口 drain 取走并清理
-        RagSourceCollector.begin();
+        RagSourceCollector.begin(scopeSnapshot);
 
         try {
             Content userMsg = Content.fromParts(Part.fromText(enhancedMessage));
@@ -197,13 +186,13 @@ public class ChatService implements IChatService {
         final TenantScopeVO scopeSnapshot = currentScope(userId);
 
         // Step 1: 检索相关记忆
-        String memoryContext = buildMemoryContext(userId, agentId, message);
+        String memoryContext = buildMemoryContext(userId, agentId, sessionId, message);
 
         // Step 2: 增强消息（注入记忆上下文）
         String enhancedMessage = enhanceMessageWithMemory(message, memoryContext);
 
         // 开启 RAG 证据收集 — 由 Controller 在 SSE complete / error 回调中 drain 并追发 sources 事件
-        RagSourceCollector.begin();
+        RagSourceCollector.begin(scopeSnapshot);
 
         Content userMsg = Content.fromParts(Part.fromText(enhancedMessage));
         RunConfig runConfig = RunConfig.builder()
@@ -291,7 +280,7 @@ public class ChatService implements IChatService {
         String userId = chatCommandEntity.getUserId();
         String sessionId = chatCommandEntity.getSessionId();
         String message = textContent.toString();
-        String memoryContext = buildMemoryContext(userId, agentId, message);
+        String memoryContext = buildMemoryContext(userId, agentId, sessionId, message);
         
         // Step 2: 增强消息（注入记忆上下文）
         if (memoryContext != null && !memoryContext.isEmpty()) {
@@ -333,14 +322,15 @@ public class ChatService implements IChatService {
         if (sessionEntity == null) {
             throw new AppException(ResponseCode.AUTH_PERMISSION_DENIED.getCode(), "会话不存在或无权访问");
         }
-        // 只检查用户权限，不检查智能体匹配
-        // 允许用户在任何智能体的会话中切换到其他智能体，保持上下文连续性
+        if (sessionEntity.getAgentId() != null && !sessionEntity.getAgentId().equals(agentId)) {
+            throw new AppException(ResponseCode.AUTH_PERMISSION_DENIED.getCode(), "会话不存在或无权访问");
+        }
     }
     
     /**
      * 构建记忆上下文
      */
-    private String buildMemoryContext(String userId, String agentId, String message) {
+    private String buildMemoryContext(String userId, String agentId, String sessionId, String message) {
         try {
             TenantScopeVO scope = currentScope(userId);
             List<MemoryMatch> memories = agentMemoryService.recall(
@@ -349,6 +339,7 @@ public class ChatService implements IChatService {
                     .tenantId(scope.getTenantId())
                     .userId(scope.getOwnerUserId())
                     .agentId(agentId)
+                    .scope(conversationScope(sessionId))
                     .limit(5)
                     .minScore(0.3)
                     .build()
@@ -410,7 +401,7 @@ public class ChatService implements IChatService {
                     .agentId(agentId)
                     .sessionId(sessionId)
                     .memoryType(MemoryType.EPISODE)
-                    .scope("/conversation/" + sessionId)
+                    .scope(conversationScope(sessionId))
                     .source("chat")
                     .build()
             );
@@ -428,6 +419,13 @@ public class ChatService implements IChatService {
             scope.setOwnerUserId(fallbackUserId);
         }
         return scope;
+    }
+
+    private String conversationScope(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return "/conversation/__unknown__";
+        }
+        return "/conversation/" + sessionId;
     }
 
 }

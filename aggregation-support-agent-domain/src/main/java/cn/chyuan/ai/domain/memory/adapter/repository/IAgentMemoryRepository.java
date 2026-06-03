@@ -29,7 +29,7 @@ public interface IAgentMemoryRepository {
     /**
      * 根据内容哈希检查是否存在
      */
-    boolean existsByContentHash(String contentHash, String tenantId, String userId);
+    boolean existsByContentHash(String contentHash, String tenantId, String userId, String scope);
     
     /**
      * 根据租户和用户查询记忆
@@ -59,7 +59,7 @@ public interface IAgentMemoryRepository {
     /**
      * 查询相似记忆（用于 Consolidation）
      */
-    List<MemoryEntry> searchSimilar(String content, String tenantId, String userId, int limit);
+    List<MemoryEntry> searchSimilar(String content, String tenantId, String userId, String scope, int limit);
     
     /**
      * 语义检索记忆

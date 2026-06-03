@@ -80,8 +80,11 @@ public class InternalDocsTools {
 
         try {
             // 强校验作用域：禁止无作用域检索导致跨租户数据泄露
-            TenantScopeVO scope = RequestScopeContext.get();
+            TenantScopeVO scope = RequestScopeContext.snapshot();
             if (scope == null) {
+                scope = RagSourceCollector.currentTenantScope();
+            }
+            if (!hasTenantScope(scope)) {
                 // 记录详细诊断信息，帮助排查作用域传递链路中的断裂点
                 log.warn("RAG检索缺失租户作用域，拒绝执行。诊断信息: query={}, thread={}, threadId={}",
                         query,
@@ -134,5 +137,13 @@ public class InternalDocsTools {
                 return "{\"error\":true,\"message\":\"文档检索失败且结果序列化异常\"}";
             }
         }
+    }
+
+    private boolean hasTenantScope(TenantScopeVO scope) {
+        return scope != null
+                && scope.getTenantId() != null
+                && !scope.getTenantId().isBlank()
+                && scope.getOwnerUserId() != null
+                && !scope.getOwnerUserId().isBlank();
     }
 }

@@ -274,8 +274,8 @@ public class AgentMemoryMilvusRepository implements IAgentMemoryRepository {
     }
     
     @Override
-    public boolean existsByContentHash(String contentHash, String tenantId, String userId) {
-        return agentMemoryMapper.countByContentHash(contentHash, tenantId, userId) > 0;
+    public boolean existsByContentHash(String contentHash, String tenantId, String userId, String scope) {
+        return agentMemoryMapper.countByContentHash(contentHash, tenantId, userId, scope) > 0;
     }
     
     @Override
@@ -308,12 +308,12 @@ public class AgentMemoryMilvusRepository implements IAgentMemoryRepository {
     }
     
     @Override
-    public List<MemoryEntry> searchSimilar(String content, String tenantId, String userId, int limit) {
+    public List<MemoryEntry> searchSimilar(String content, String tenantId, String userId, String scope, int limit) {
         // 获取内容的向量
         float[] embedding = embeddingService.embed(content);
         
         // 在 Milvus 中搜索
-        List<AgentMemoryEntity> results = search(embedding, tenantId, userId, null, limit);
+        List<AgentMemoryEntity> results = search(embedding, tenantId, userId, scope, limit);
         
         // 计算相似度分数
         return results.stream()

@@ -75,4 +75,49 @@ class ScopedToolCallbackTest {
         assertNull(RequestScopeContext.get());
         assertNull(RagSourceCollector.currentHolder());
     }
+
+    @Test
+    @DisplayName("ToolContext 缺少租户时从 RAG Holder 兜底恢复")
+    void shouldRestoreScopeFromHolderWhenToolContextScopeMissing() {
+        TenantScopeVO scope = TenantScopeVO.builder()
+                .tenantId("tenant-holder")
+                .ownerUserId("user-holder")
+                .build();
+        RagSourceCollector.begin(scope);
+        RagSourceCollector.Holder holder = RagSourceCollector.currentHolder();
+        RagSourceCollector.detach();
+
+        AtomicReference<TenantScopeVO> actualScope = new AtomicReference<>();
+        ToolCallback callback = ScopedToolCallback.wrap(new ToolCallback() {
+            @Override
+            public ToolDefinition getToolDefinition() {
+                return ToolDefinition.builder()
+                        .name("test_tool")
+                        .description("test")
+                        .inputSchema("{}")
+                        .build();
+            }
+
+            @Override
+            public String call(String toolInput) {
+                return "unused";
+            }
+
+            @Override
+            public String call(String toolInput, ToolContext toolContext) {
+                actualScope.set(RequestScopeContext.snapshot());
+                return "ok";
+            }
+        });
+
+        String result = callback.call("{}", new ToolContext(Map.of(
+                RagSourceCollector.TOOL_CONTEXT_HOLDER_KEY, holder
+        )));
+
+        assertEquals("ok", result);
+        assertEquals("tenant-holder", actualScope.get().getTenantId());
+        assertEquals("user-holder", actualScope.get().getOwnerUserId());
+        assertNull(RequestScopeContext.get());
+        assertNull(RagSourceCollector.currentHolder());
+    }
 }

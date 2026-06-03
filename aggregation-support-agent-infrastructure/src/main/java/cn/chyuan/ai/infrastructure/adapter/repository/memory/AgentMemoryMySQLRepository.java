@@ -54,8 +54,8 @@ public class AgentMemoryMySQLRepository implements IAgentMemoryRepository {
     }
     
     @Override
-    public boolean existsByContentHash(String contentHash, String tenantId, String userId) {
-        return agentMemoryMapper.countByContentHash(contentHash, tenantId, userId) > 0;
+    public boolean existsByContentHash(String contentHash, String tenantId, String userId, String scope) {
+        return agentMemoryMapper.countByContentHash(contentHash, tenantId, userId, scope) > 0;
     }
     
     @Override
@@ -86,7 +86,7 @@ public class AgentMemoryMySQLRepository implements IAgentMemoryRepository {
     }
     
     @Override
-    public List<MemoryEntry> searchSimilar(String content, String tenantId, String userId, int limit) {
+    public List<MemoryEntry> searchSimilar(String content, String tenantId, String userId, String scope, int limit) {
         // MySQL-only 模式下，使用内容哈希进行精确匹配
         // 无法进行语义相似度搜索
         log.warn("MySQL-only 模式不支持语义相似度搜索，返回空结果");
