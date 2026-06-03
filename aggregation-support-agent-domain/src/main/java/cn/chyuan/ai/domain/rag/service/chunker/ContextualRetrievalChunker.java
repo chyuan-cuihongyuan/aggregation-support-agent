@@ -52,15 +52,15 @@ public class ContextualRetrievalChunker {
     private ChatModel chatModel;
 
     /** 发送给LLM的最大文档长度 */
-    @Value("${document.chunk.contextual.max-doc-length:4000}")
+    @Value("${document.chunk.contextual.max-doc-length}")
     private int maxDocLength;
 
     /** Context最大长度 */
-    @Value("${document.chunk.contextual.max-context-length:200}")
+    @Value("${document.chunk.contextual.max-context-length}")
     private int maxContextLength;
 
     /** 是否使用批量处理（降低成本） */
-    @Value("${document.chunk.contextual.batch-enabled:true}")
+    @Value("${document.chunk.contextual.batch-enabled}")
     private boolean batchEnabled;
 
     /**

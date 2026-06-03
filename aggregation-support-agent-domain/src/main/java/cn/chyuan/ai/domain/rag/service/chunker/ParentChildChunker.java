@@ -25,15 +25,15 @@ import java.util.regex.Pattern;
 public class ParentChildChunker {
 
     /** 子chunk大小（token估算：1个中文字符≈2 token） */
-    @Value("${document.chunk.child-size:150}")
+    @Value("${document.chunk.child-size}")
     private int childSize;
 
     /** 父chunk大小 */
-    @Value("${document.chunk.parent-size:500}")
+    @Value("${document.chunk.parent-size}")
     private int parentSize;
 
     /** 子chunk重叠字符数 */
-    @Value("${document.chunk.child-overlap:30}")
+    @Value("${document.chunk.child-overlap}")
     private int childOverlap;
 
     /** 句子结束符 */

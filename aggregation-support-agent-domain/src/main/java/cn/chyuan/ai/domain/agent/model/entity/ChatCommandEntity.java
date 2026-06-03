@@ -11,7 +11,7 @@ import java.util.List;
 /**
  * 对话命令，实体对象
  *
- * @author xiaofuge bugstack.cn @小傅哥
+ * @author chyuan @chyuan
  * 2026/1/17 16:52
  */
 @Data

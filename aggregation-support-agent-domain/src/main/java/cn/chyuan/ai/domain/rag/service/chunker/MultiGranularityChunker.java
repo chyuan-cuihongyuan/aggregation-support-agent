@@ -33,15 +33,15 @@ import java.util.regex.Pattern;
 public class MultiGranularityChunker {
 
     /** 章节级chunk最大大小 */
-    @Value("${document.chunk.section-size:3000}")
+    @Value("${document.chunk.section-size}")
     private int sectionSize;
 
     /** 段落级chunk最大大小 */
-    @Value("${document.chunk.paragraph-size:800}")
+    @Value("${document.chunk.paragraph-size}")
     private int paragraphSize;
 
     /** 句子级chunk最大大小 */
-    @Value("${document.chunk.sentence-size:200}")
+    @Value("${document.chunk.sentence-size}")
     private int sentenceSize;
 
     /** 句子结束符 */

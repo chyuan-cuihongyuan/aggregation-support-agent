@@ -44,7 +44,7 @@ public class DashScopeEmbeddingGateway implements IEmbeddingService {
     @Value("${dashscope.api.key}")
     private String apiKey;
 
-    @Value("${dashscope.embedding.model:text-embedding-v4}")
+    @Value("${dashscope.embedding.model}")
     private String modelName;
 
     /** HTTP 客户端 — 设置合理的超时时间 */

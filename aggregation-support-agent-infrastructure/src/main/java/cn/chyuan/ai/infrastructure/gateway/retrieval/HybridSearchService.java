@@ -43,19 +43,19 @@ import java.util.List;
 @Service
 public class HybridSearchService implements IHybridSearchService {
 
-    @Value("${rag.retrieval.hybrid.enabled:false}")
+    @Value("${rag.retrieval.hybrid.enabled}")
     private boolean hybridEnabled;
 
-    @Value("${rag.retrieval.hybrid.vector-weight:0.6}")
+    @Value("${rag.retrieval.hybrid.vector-weight}")
     private double defaultVectorWeight;
 
-    @Value("${rag.retrieval.hybrid.bm25-weight:0.4}")
+    @Value("${rag.retrieval.hybrid.bm25-weight}")
     private double defaultBm25Weight;
 
-    @Value("${rag.retrieval.vector.top-k:20}")
+    @Value("${rag.retrieval.vector.top-k}")
     private int vectorTopK;
 
-    @Value("${rag.retrieval.bm25.top-k:20}")
+    @Value("${rag.retrieval.bm25.top-k}")
     private int bm25TopK;
 
     @Resource

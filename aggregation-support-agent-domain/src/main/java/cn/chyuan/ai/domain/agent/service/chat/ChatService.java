@@ -24,6 +24,8 @@ import com.google.adk.runner.InMemoryRunner;
 import com.google.adk.sessions.Session;
 import com.google.genai.types.Content;
 import com.google.genai.types.Part;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import io.reactivex.rxjava3.core.Flowable;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -32,10 +34,14 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
 public class ChatService implements IChatService {
+
+    /** 会话 ID 不存在时的兜底 scope 路径 */
+    private static final String SCOPE_UNKNOWN = "/conversation/__unknown__";
 
     @Resource
     private DefaultArmoryFactory defaultArmoryFactory;
@@ -45,9 +51,21 @@ public class ChatService implements IChatService {
 
     @Resource
     private IChatHistoryRepository chatHistoryRepository;
-    
+
     @Resource
     private AgentMemoryService agentMemoryService;
+
+    /**
+     * 会话 ID 缓存 — 按 tenantId:ownerUserId:agentId 复用同一 session，保持对话上下文连续
+     * <p>
+     * 最大容量 10000 条，24 小时无访问自动淘汰。
+     * Google ADK 的 InMemoryRunner 的 session 是内存对象，与 JVM 生命周期一致，
+     * 因此 Guava Cache 和 InMemoryRunner 的 session 生命周期对齐。
+     */
+    private final Cache<String, String> userSessions = CacheBuilder.newBuilder()
+            .maximumSize(10000)
+            .expireAfterAccess(24, TimeUnit.HOURS)
+            .build();
 
     @Override
     public List<AiAgentConfigTableVO.Agent> queryAiAgentConfigList() {
@@ -81,17 +99,20 @@ public class ChatService implements IChatService {
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
         TenantScopeVO scope = currentScope(userId);
 
+        String sessionKey = scope.getTenantId() + ":" + scope.getOwnerUserId() + ":" + agentId;
         try {
-            Session session = runner.sessionService().createSession(appName, scope.getOwnerUserId())
-                    .blockingGet();
-            chatHistoryRepository.saveSession(ChatSessionEntity.builder()
-                    .sessionId(session.id())
-                    .agentId(agentId)
-                    .tenantId(scope.getTenantId())
-                    .ownerUserId(scope.getOwnerUserId())
-                    .traceId("")
-                    .build());
-            return session.id();
+            return userSessions.get(sessionKey, () -> {
+                Session session = runner.sessionService().createSession(appName, scope.getOwnerUserId())
+                        .blockingGet();
+                chatHistoryRepository.saveSession(ChatSessionEntity.builder()
+                        .sessionId(session.id())
+                        .agentId(agentId)
+                        .tenantId(scope.getTenantId())
+                        .ownerUserId(scope.getOwnerUserId())
+                        .traceId("")
+                        .build());
+                return session.id();
+            });
         } catch (Exception e) {
             throw new AppException(ResponseCode.E0001.getCode(), "创建会话失败", e);
         }
@@ -412,7 +433,7 @@ public class ChatService implements IChatService {
 
     private TenantScopeVO currentScope(String fallbackUserId) {
         TenantScopeVO scope = RequestScopeContext.snapshot();
-        if (scope == null || scope.getTenantId() == null || scope.getTenantId().isBlank()) {
+        if (scope == null || !scope.isValid()) {
             return TenantScopeVO.singleUser(fallbackUserId);
         }
         if (scope.getOwnerUserId() == null || scope.getOwnerUserId().isBlank()) {
@@ -423,7 +444,7 @@ public class ChatService implements IChatService {
 
     private String conversationScope(String sessionId) {
         if (sessionId == null || sessionId.isBlank()) {
-            return "/conversation/__unknown__";
+            return SCOPE_UNKNOWN;
         }
         return "/conversation/" + sessionId;
     }

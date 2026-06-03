@@ -45,13 +45,13 @@ public class BigModelEmbeddingGateway implements IEmbeddingService {
     @Value("${bigmodel.api.key}")
     private String apiKey;
 
-    @Value("${bigmodel.embedding.base-url:https://open.bigmodel.cn/api/paas/v4/embeddings}")
+    @Value("${bigmodel.embedding.base-url}")
     private String baseUrl;
 
-    @Value("${bigmodel.embedding.model:embedding-3}")
+    @Value("${bigmodel.embedding.model}")
     private String modelName;
 
-    @Value("${bigmodel.embedding.dimension:1024}")
+    @Value("${bigmodel.embedding.dimension}")
     private int dimension;
 
     @Resource

@@ -36,13 +36,13 @@ import java.util.stream.Collectors;
 @Service
 public class QueryLogsTools {
 
-    @Value("${aiops.mock.enabled:false}")
+    @Value("${aiops.mock.enabled}")
     private boolean mockEnabled;
 
-    @Value("${aiops.loki.base-url:http://localhost:3100}")
+    @Value("${aiops.loki.base-url}")
     private String lokiBaseUrl;
 
-    @Value("${aiops.loki.timeout:10}")
+    @Value("${aiops.loki.timeout}")
     private int lokiTimeout;
 
     private OkHttpClient httpClient;

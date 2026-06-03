@@ -26,19 +26,19 @@ import java.util.concurrent.TimeUnit;
 @ConditionalOnProperty(name = "knowledge-graph.extraction.enabled", havingValue = "true")
 public class LLMEntityExtractionService implements IEntityExtractionService {
 
-    @Value("${ai-api.base-url:https://open.bigmodel.cn/api/paas/v4}")
+    @Value("${ai-api.base-url}")
     private String baseUrl;
 
-    @Value("${ai-api.api-key:}")
+    @Value("${ai-api.api-key}")
     private String apiKey;
 
-    @Value("${knowledge-graph.extraction.model:glm-5.1}")
+    @Value("${knowledge-graph.extraction.model}")
     private String model;
 
-    @Value("${knowledge-graph.extraction.temperature:0.1}")
+    @Value("${knowledge-graph.extraction.temperature}")
     private double temperature;
 
-    @Value("${knowledge-graph.extraction.timeout:60}")
+    @Value("${knowledge-graph.extraction.timeout}")
     private int timeout;
 
     @Resource

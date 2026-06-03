@@ -110,7 +110,11 @@ public interface AgentMemoryMapper {
                                                       @Param("limit") int limit);
     
     /**
-     * 根据内容哈希检查是否存在
+     * 根据内容哈希检查是否已存在
+     * <p>
+     * scope 参数语义：
+     * - scope 非 null 且非空字符串时，追加 scope 精确匹配条件（同内容同 scope 才算重复）
+     * - scope 为 null 或空字符串时，不追加 scope 条件（跨 scope 去重，即相同内容在同一租户+用户下视为重复）
      */
     @Select("""
             <script>
@@ -119,9 +123,9 @@ public interface AgentMemoryMapper {
               AND tenant_id = #{tenantId}
               AND user_id = #{userId}
               AND status = 1
-            <if test="scope != null and scope != ''">
-              AND scope = #{scope}
-            </if>
+              <if test="scope != null and scope != ''">
+                AND scope = #{scope}
+              </if>
             </script>
             """)
     int countByContentHash(@Param("contentHash") String contentHash,

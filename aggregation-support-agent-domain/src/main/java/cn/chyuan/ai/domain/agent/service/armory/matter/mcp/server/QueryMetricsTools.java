@@ -32,13 +32,13 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class QueryMetricsTools {
 
-    @Value("${aiops.prometheus.base-url:http://localhost:9090}")
+    @Value("${aiops.prometheus.base-url}")
     private String prometheusBaseUrl;
 
-    @Value("${aiops.prometheus.timeout:10}")
+    @Value("${aiops.prometheus.timeout}")
     private int prometheusTimeout;
 
-    @Value("${aiops.mock.enabled:false}")
+    @Value("${aiops.mock.enabled}")
     private boolean mockEnabled;
 
     private OkHttpClient httpClient;

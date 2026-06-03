@@ -27,16 +27,16 @@ import java.util.concurrent.TimeUnit;
 @ConditionalOnProperty(name = "agent.memory.enabled", havingValue = "true", matchIfMissing = false)
 public class MemoryExtractionService implements IMemoryExtractionGateway {
     
-    @Value("${ai-api.base-url:https://open.bigmodel.cn/api/paas/v4}")
+    @Value("${ai-api.base-url}")
     private String baseUrl;
     
-    @Value("${ai-api.api-key:}")
+    @Value("${ai-api.api-key}")
     private String apiKey;
     
-    @Value("${agent.memory.extraction.model:glm-4-flash}")
+    @Value("${agent.memory.extraction.model}")
     private String model;
     
-    @Value("${agent.memory.extraction.temperature:0.3}")
+    @Value("${agent.memory.extraction.temperature}")
     private double temperature;
     
     @Resource

@@ -48,15 +48,15 @@ import java.util.stream.Collectors;
 public class RagService implements IRagService {
 
     /** 检索返回的最相似文档数量 */
-    @Value("${rag.top-k:3}")
+    @Value("${rag.top-k}")
     private int defaultTopK;
 
     /** 分块最大字符数 */
-    @Value("${document.chunk.max-size:1000}")
+    @Value("${document.chunk.max-size}")
     private int chunkMaxSize;
 
     /** 分块重叠字符数 */
-    @Value("${document.chunk.overlap:100}")
+    @Value("${document.chunk.overlap}")
     private int chunkOverlap;
 
     @Resource

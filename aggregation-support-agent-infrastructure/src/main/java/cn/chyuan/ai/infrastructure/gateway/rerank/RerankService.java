@@ -32,16 +32,16 @@ import java.util.stream.Collectors;
 @ConditionalOnProperty(name = "rag.rerank.enabled", havingValue = "true", matchIfMissing = false)
 public class RerankService implements IRerankService {
 
-    @Value("${rag.rerank.api-url:https://api.cohere.ai/v1/rerank}")
+    @Value("${rag.rerank.api-url}")
     private String rerankApiUrl;
 
-    @Value("${rag.rerank.api-key:}")
+    @Value("${rag.rerank.api-key}")
     private String rerankApiKey;
 
-    @Value("${rag.rerank.model:bge-reranker-v2-m3}")
+    @Value("${rag.rerank.model}")
     private String rerankModel;
 
-    @Value("${rag.rerank.timeout:30}")
+    @Value("${rag.rerank.timeout}")
     private int timeout;
 
     @Resource

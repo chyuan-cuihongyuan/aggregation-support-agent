@@ -120,4 +120,39 @@ class ScopedToolCallbackTest {
         assertNull(RequestScopeContext.get());
         assertNull(RagSourceCollector.currentHolder());
     }
+
+    @Test
+    @DisplayName("ToolContext 和 Holder 都无 scope 时，工具执行不注入任何作用域")
+    void shouldNotRestoreScopeWhenBothToolContextAndHolderAreEmpty() {
+        // 不设置任何 scope — ToolContext 和 Holder 都为空
+        AtomicReference<TenantScopeVO> actualScope = new AtomicReference<>();
+        ToolCallback callback = ScopedToolCallback.wrap(new ToolCallback() {
+            @Override
+            public ToolDefinition getToolDefinition() {
+                return ToolDefinition.builder()
+                        .name("test_tool")
+                        .description("test")
+                        .inputSchema("{}")
+                        .build();
+            }
+
+            @Override
+            public String call(String toolInput) {
+                return "unused";
+            }
+
+            @Override
+            public String call(String toolInput, ToolContext toolContext) {
+                actualScope.set(RequestScopeContext.snapshot());
+                return "ok";
+            }
+        });
+
+        String result = callback.call("{}", new ToolContext(Map.of()));
+
+        assertEquals("ok", result);
+        assertNull(actualScope.get());
+        assertNull(RequestScopeContext.get());
+        assertNull(RagSourceCollector.currentHolder());
+    }
 }

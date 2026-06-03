@@ -42,11 +42,11 @@ public class AiAgentAutoConfigTest {
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
 
         Session session = runner.sessionService()
-                .createSession(appName, "xiaofuge")
+                .createSession(appName, "chyuan")
                 .blockingGet();
 
         Content userMsg = Content.fromParts(Part.fromText("编写冒泡排序"));
-        Flowable<Event> events = runner.runAsync("xiaofuge", session.id(), userMsg);
+        Flowable<Event> events = runner.runAsync("chyuan", session.id(), userMsg);
 
         List<String> outputs = new ArrayList<>();
         events.blockingForEach(event -> outputs.add(event.stringifyContent()));
@@ -64,11 +64,11 @@ public class AiAgentAutoConfigTest {
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
 
         Session session = runner.sessionService()
-                .createSession(appName, "xiaofuge")
+                .createSession(appName, "chyuan")
                 .blockingGet();
 
         Content userMsg = Content.fromParts(Part.fromText("你具备哪些能力"));
-        Flowable<Event> events = runner.runAsync("xiaofuge", session.id(), userMsg);
+        Flowable<Event> events = runner.runAsync("chyuan", session.id(), userMsg);
 
         List<String> outputs = new ArrayList<>();
         events.blockingForEach(event -> outputs.add(event.stringifyContent()));
@@ -84,14 +84,14 @@ public class AiAgentAutoConfigTest {
         InMemoryRunner runner = aiAgentRegisterVO.getRunner();
 
         Session session = runner.sessionService()
-                .createSession(appName, "xiaofuge")
+                .createSession(appName, "chyuan")
                 .blockingGet();
 
         Content userMsg = Content.fromParts(
                 Part.fromText("请描述这张图片的主要内容，并说明图中物品的可能用途。"),
                 Part.fromBytes(resource.getContentAsByteArray(), MimeTypeUtils.IMAGE_PNG_VALUE));
 
-        Flowable<Event> events = runner.runAsync("xiaofuge", session.id(), userMsg);
+        Flowable<Event> events = runner.runAsync("chyuan", session.id(), userMsg);
 
         List<String> outputs = new ArrayList<>();
         events.blockingForEach(event -> outputs.add(event.stringifyContent()));

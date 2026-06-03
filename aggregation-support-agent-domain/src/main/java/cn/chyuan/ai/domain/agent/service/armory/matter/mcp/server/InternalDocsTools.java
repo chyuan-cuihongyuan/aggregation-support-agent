@@ -45,7 +45,7 @@ public class InternalDocsTools {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /** 检索返回的最大文档数量，默认取 Top 3 最相关结果 */
-    @Value("${rag.top-k:3}")
+    @Value("${rag.top-k}")
     private int topK;
 
     /**
@@ -81,10 +81,11 @@ public class InternalDocsTools {
         try {
             // 强校验作用域：禁止无作用域检索导致跨租户数据泄露
             TenantScopeVO scope = RequestScopeContext.snapshot();
-            if (scope == null) {
+            // 当 snapshot 返回不完整的 scope（字段为 null/blank）时，也从 Holder 兜底
+            if (!scope.isValid()) {
                 scope = RagSourceCollector.currentTenantScope();
             }
-            if (!hasTenantScope(scope)) {
+            if (scope == null || !scope.isValid()) {
                 // 记录详细诊断信息，帮助排查作用域传递链路中的断裂点
                 log.warn("RAG检索缺失租户作用域，拒绝执行。诊断信息: query={}, thread={}, threadId={}",
                         query,
@@ -137,13 +138,5 @@ public class InternalDocsTools {
                 return "{\"error\":true,\"message\":\"文档检索失败且结果序列化异常\"}";
             }
         }
-    }
-
-    private boolean hasTenantScope(TenantScopeVO scope) {
-        return scope != null
-                && scope.getTenantId() != null
-                && !scope.getTenantId().isBlank()
-                && scope.getOwnerUserId() != null
-                && !scope.getOwnerUserId().isBlank();
     }
 }

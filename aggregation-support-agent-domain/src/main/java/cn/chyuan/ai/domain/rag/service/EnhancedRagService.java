@@ -65,62 +65,62 @@ import java.util.stream.Collectors;
 public class EnhancedRagService implements IRagService {
 
     /** 检索返回的最相似文档数量 */
-    @Value("${rag.top-k:5}")
+    @Value("${rag.top-k}")
     private int defaultTopK;
 
     /** 向量检索返回数量（用于多路召回） */
-    @Value("${rag.retrieval.vector.top-k:20}")
+    @Value("${rag.retrieval.vector.top-k}")
     private int vectorTopK;
 
     /** BM25检索返回数量 */
-    @Value("${rag.retrieval.bm25.top-k:20}")
+    @Value("${rag.retrieval.bm25.top-k}")
     private int bm25TopK;
 
     /** 是否启用Query优化 */
-    @Value("${rag.query.rewrite.enabled:false}")
+    @Value("${rag.query.rewrite.enabled}")
     private boolean queryRewriteEnabled;
 
     /** 是否启用Multi-Query */
-    @Value("${rag.query.multi-query.enabled:false}")
+    @Value("${rag.query.multi-query.enabled}")
     private boolean multiQueryEnabled;
 
     /** Multi-Query扩展数量 */
-    @Value("${rag.query.multi-query.count:3}")
+    @Value("${rag.query.multi-query.count}")
     private int multiQueryCount;
 
     /** 是否启用BM25多路召回 */
-    @Value("${rag.retrieval.bm25.enabled:false}")
+    @Value("${rag.retrieval.bm25.enabled}")
     private boolean bm25Enabled;
 
     /** 是否启用Rerank */
-    @Value("${rag.rerank.enabled:false}")
+    @Value("${rag.rerank.enabled}")
     private boolean rerankEnabled;
 
     /** 最终返回给LLM的chunk数量 */
-    @Value("${rag.rerank.top-k:5}")
+    @Value("${rag.rerank.top-k}")
     private int rerankTopK;
 
     /** 是否启用Lost in the Middle重排 */
-    @Value("${rag.reorder.enabled:false}")
+    @Value("${rag.reorder.enabled}")
     private boolean reorderEnabled;
 
     /** 是否启用答案质量评估 */
-    @Value("${rag.evaluation.enabled:false}")
+    @Value("${rag.evaluation.enabled}")
     private boolean evaluationEnabled;
 
     /** 是否启用知识图谱检索 */
-    @Value("${knowledge-graph.enabled:true}")
+    @Value("${knowledge-graph.enabled}")
     private boolean knowledgeGraphEnabled;
 
     /** 知识图谱检索返回数量 */
-    @Value("${knowledge-graph.search.entity-top-k:10}")
+    @Value("${knowledge-graph.search.entity-top-k}")
     private int graphEntityTopK;
 
     /** 知识图谱子图遍历深度 */
-    @Value("${knowledge-graph.search.default-depth:2}")
+    @Value("${knowledge-graph.search.default-depth}")
     private int graphDefaultDepth;
 
-    @Value("${rag.retrieval.timeout-ms:30000}")
+    @Value("${rag.retrieval.timeout-ms}")
     private long retrievalTimeoutMs;
 
     @Resource

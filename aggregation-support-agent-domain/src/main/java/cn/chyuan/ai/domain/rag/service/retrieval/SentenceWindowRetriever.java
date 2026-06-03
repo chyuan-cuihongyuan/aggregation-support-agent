@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
 public class SentenceWindowRetriever {
 
     /** 上下文窗口大小（前后各N句） */
-    @Value("${rag.retrieval.sentence-window.size:3}")
+    @Value("${rag.retrieval.sentence-window.size}")
     private int windowSize;
 
     /** 句子结束符 */

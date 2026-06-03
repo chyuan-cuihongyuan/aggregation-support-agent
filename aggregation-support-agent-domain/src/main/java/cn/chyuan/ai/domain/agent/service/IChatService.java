@@ -10,7 +10,7 @@ import java.util.List;
 /**
  * 对话接口
  *
- * @author xiaofuge bugstack.cn @小傅哥
+ * @author chyuan @chyuan
  * 2025/12/17 08:13
  */
 public interface IChatService {

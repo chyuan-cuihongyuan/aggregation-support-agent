@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * 默认的装配工厂
  *
- * @author xiaofuge bugstack.cn @小傅哥
+ * @author chyuan @chyuan
  * 2025/12/17 08:16
  */
 @Service

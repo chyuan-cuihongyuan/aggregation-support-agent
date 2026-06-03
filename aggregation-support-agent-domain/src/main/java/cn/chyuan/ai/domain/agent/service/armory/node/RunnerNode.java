@@ -24,7 +24,7 @@ import java.util.List;
 /**
  * 执行节点
  *
- * @author xiaofuge bugstack.cn @小傅哥
+ * @author chyuan @chyuan
  * 2025/12/29 16:09
  */
 @Slf4j

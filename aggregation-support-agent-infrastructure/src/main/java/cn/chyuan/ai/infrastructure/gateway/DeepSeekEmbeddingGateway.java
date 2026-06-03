@@ -44,10 +44,10 @@ public class DeepSeekEmbeddingGateway implements IEmbeddingService {
     @Value("${deepseek.api.key}")
     private String apiKey;
 
-    @Value("${deepseek.embedding.base-url:https://api.deepseek.com/v1/embeddings}")
+    @Value("${deepseek.embedding.base-url}")
     private String baseUrl;
 
-    @Value("${deepseek.embedding.model:deepseek-v4-pro}")
+    @Value("${deepseek.embedding.model}")
     private String modelName;
 
     private OkHttpClient httpClient;

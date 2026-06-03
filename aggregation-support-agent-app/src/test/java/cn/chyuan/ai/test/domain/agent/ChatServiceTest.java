@@ -28,14 +28,14 @@ public class ChatServiceTest {
 
     @Test
     public void test_handleMessage_01() {
-        List<String> message = chatService.handleMessage("100003", "xiaofuge", "你具备哪些skill技能");
+        List<String> message = chatService.handleMessage("100003", "chyuan", "你具备哪些skill技能");
         log.info("测试结果:{}", JSON.toJSONString(message));
     }
 
     @Test
     public void test_handleMessage_04_withImage() throws IOException {
         String agentId = "100003";
-        String userId = "xiaofuge";
+        String userId = "chyuan";
 
         String sessionId = chatService.createSession(agentId, userId);
 

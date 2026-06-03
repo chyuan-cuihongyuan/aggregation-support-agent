@@ -243,11 +243,11 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
         
         report.setTotalProcessed(allMemories.size());
         
-        // 按内容哈希去重
-        Map<String, List<AgentMemoryEntity>> groupedByHash = allMemories.stream()
-            .collect(Collectors.groupingBy(memory -> memory.getContentHash() + "#" + safeScope(memory.getScope())));
+        // 按内容哈希 + scope 去重（使用复合键避免字符串拼接碰撞）
+        Map<Map.Entry<String, String>, List<AgentMemoryEntity>> groupedByHash = allMemories.stream()
+            .collect(Collectors.groupingBy(memory -> Map.entry(memory.getContentHash(), safeScope(memory.getScope()))));
         
-        for (Map.Entry<String, List<AgentMemoryEntity>> entry : groupedByHash.entrySet()) {
+        for (Map.Entry<Map.Entry<String, String>, List<AgentMemoryEntity>> entry : groupedByHash.entrySet()) {
             if (entry.getValue().size() > 1) {
                 // 保留最新的，删除其他
                 AgentMemoryEntity latest = entry.getValue().stream()

@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 public class ResultFusionService implements IResultFusionService {
 
     /** RRF平滑参数，经验值k=60 */
-    @Value("${rag.retrieval.fusion.rrf-k:60}")
+    @Value("${rag.retrieval.fusion.rrf-k}")
     private int rrfK;
 
     @Override

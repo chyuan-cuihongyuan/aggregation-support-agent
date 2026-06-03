@@ -42,7 +42,7 @@ public class ElasticsearchBM25SearchService implements IBM25SearchService {
     @Autowired
     private ElasticsearchClient esClient;
 
-    @Value("${elasticsearch.index.name:rag-documents}")
+    @Value("${elasticsearch.index.name}")
     private String indexName;
 
     @PostConstruct

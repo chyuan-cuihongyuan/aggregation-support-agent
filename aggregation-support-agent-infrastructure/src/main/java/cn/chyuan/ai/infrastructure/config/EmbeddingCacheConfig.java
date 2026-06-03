@@ -18,16 +18,16 @@ import org.springframework.context.annotation.Primary;
 @Configuration(proxyBeanMethods = false)
 public class EmbeddingCacheConfig {
 
-    @Value("${rag.cache.embedding.enabled:false}")
+    @Value("${rag.cache.embedding.enabled}")
     private boolean cacheEnabled;
 
-    @Value("${rag.cache.embedding.max-size:10000}")
+    @Value("${rag.cache.embedding.max-size}")
     private int maxSize;
 
-    @Value("${rag.cache.embedding.expire-hours:24}")
+    @Value("${rag.cache.embedding.expire-hours}")
     private int expireHours;
 
-    @Value("${rag.cache.embedding.model-name:default}")
+    @Value("${rag.cache.embedding.model-name}")
     private String modelName;
 
     @Autowired(required = false)

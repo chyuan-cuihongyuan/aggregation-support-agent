@@ -26,16 +26,16 @@ import java.util.concurrent.TimeUnit;
 @ConditionalOnProperty(name = "agent.memory.enabled", havingValue = "true", matchIfMissing = false)
 public class MemoryConsolidationService implements IMemoryConsolidationGateway {
     
-    @Value("${ai-api.base-url:https://open.bigmodel.cn/api/paas/v4}")
+    @Value("${ai-api.base-url}")
     private String baseUrl;
     
-    @Value("${ai-api.api-key:}")
+    @Value("${ai-api.api-key}")
     private String apiKey;
     
-    @Value("${agent.memory.consolidation.model:glm-4-flash}")
+    @Value("${agent.memory.consolidation.model}")
     private String model;
     
-    @Value("${agent.memory.consolidation.temperature:0.1}")
+    @Value("${agent.memory.consolidation.temperature}")
     private double temperature;
     
     @Resource

@@ -20,7 +20,7 @@ import java.time.Duration;
 /**
  * Spring Ai Tool
  *
- * @author xiaofuge bugstack.cn @小傅哥
+ * @author chyuan @chyuan
  * 2025/12/14 09:51
  */
 @Slf4j

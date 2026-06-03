@@ -14,7 +14,7 @@ import java.util.List;
 /**
  * Spring AI Community 构建skills <a href="https://github.com/spring-ai-community/spring-ai-agent-utils">spring-ai-agent-utils</a>
  *
- * @author xiaofuge bugstack.cn @小傅哥
+ * @author chyuan @chyuan
  * 2026/2/6 08:04
  */
 @Slf4j

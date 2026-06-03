@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 /**
  * 装配命令
  *
- * @author xiaofuge bugstack.cn @小傅哥
+ * @author chyuan @chyuan
  * 2025/12/17 08:15
  */
 @Data

@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
 
 /**
  *
- * @author xiaofuge bugstack.cn @小傅哥
+ * @author chyuan @chyuan
  * 2026/1/20 08:23
  */
 @Slf4j

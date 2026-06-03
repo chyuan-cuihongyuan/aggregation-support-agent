@@ -25,11 +25,11 @@ import java.util.regex.Pattern;
 public class SemanticChunker {
 
     /** 每个分块最大字符数 */
-    @Value("${document.chunk.max-size:800}")
+    @Value("${document.chunk.max-size}")
     private int chunkMaxSize;
 
     /** 分块之间的重叠字符数 */
-    @Value("${document.chunk.overlap:100}")
+    @Value("${document.chunk.overlap}")
     private int chunkOverlap;
 
     /** 中文句子结束符 */

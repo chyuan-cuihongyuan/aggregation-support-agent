@@ -47,11 +47,11 @@ public class PropositionChunker {
     private ChatModel chatModel;
 
     /** 每次发送给LLM的最大文本长度 */
-    @Value("${document.chunk.proposition.max-input-length:2000}")
+    @Value("${document.chunk.proposition.max-input-length}")
     private int maxInputLength;
 
     /** 命题最大长度 */
-    @Value("${document.chunk.proposition.max-proposition-length:200}")
+    @Value("${document.chunk.proposition.max-proposition-length}")
     private int maxPropositionLength;
 
     /**

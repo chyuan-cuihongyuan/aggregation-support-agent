@@ -40,11 +40,11 @@ public class SummaryIndexChunker {
     private ChatModel chatModel;
 
     /** 摘要最大长度 */
-    @Value("${document.chunk.summary.max-length:200}")
+    @Value("${document.chunk.summary.max-length}")
     private int summaryMaxLength;
 
     /** 原始chunk最大大小 */
-    @Value("${document.chunk.max-size:800}")
+    @Value("${document.chunk.max-size}")
     private int chunkMaxSize;
 
     /**

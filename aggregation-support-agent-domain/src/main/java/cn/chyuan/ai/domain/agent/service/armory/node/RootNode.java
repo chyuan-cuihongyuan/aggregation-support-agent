@@ -13,7 +13,7 @@ import jakarta.annotation.Resource;
 /**
  * 根节点
  *
- * @author xiaofuge bugstack.cn @小傅哥
+ * @author chyuan @chyuan
  * 2025/12/17 08:16
  */
 @Slf4j

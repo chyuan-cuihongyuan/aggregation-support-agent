@@ -77,7 +77,7 @@ public class FileUploadController {
     @Qualifier("ragDocumentExecutor")
     private AsyncTaskExecutor ragDocumentExecutor;
 
-    @Value("${rag.upload.max-size-mb:50}")
+    @Value("${rag.upload.max-size-mb}")
     private long maxUploadSizeMb;
 
     /**

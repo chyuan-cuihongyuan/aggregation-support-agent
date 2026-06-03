@@ -18,7 +18,7 @@ import java.util.Arrays;
 public class WebMvcConfig implements WebMvcConfigurer {
 
     /** 允许的前端来源，多个用逗号分隔，可通过 application.yml 配置 */
-    @Value("${cors.allowed-origins:http://localhost:3000}")
+    @Value("${cors.allowed-origins}")
     private String allowedOrigins;
 
     /**

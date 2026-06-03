@@ -31,13 +31,13 @@ public class BusinessDataTools {
             .readTimeout(30, TimeUnit.SECONDS)
             .build();
 
-    @Value("${business.agent.base-url:http://127.0.0.1:8877}")
+    @Value("${business.agent.base-url}")
     private String businessAgentBaseUrl;
 
-    @Value("${business.agent.auth-key:agent-api-key-yunfanoil-2026}")
+    @Value("${business.agent.auth-key}")
     private String businessAgentAuthKey;
 
-    @Value("${business.agent.enabled:false}")
+    @Value("${business.agent.enabled}")
     private boolean businessAgentEnabled;
 
     /**

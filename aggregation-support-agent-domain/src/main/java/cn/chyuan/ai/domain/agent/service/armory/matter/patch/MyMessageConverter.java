@@ -15,7 +15,7 @@ import java.util.List;
 
 /**
  * Spring AI 补丁
- * @author xiaofuge bugstack.cn @小傅哥
+ * @author chyuan @chyuan
  * 2026/1/9 08:17
  */
 public class MyMessageConverter extends MessageConverter {

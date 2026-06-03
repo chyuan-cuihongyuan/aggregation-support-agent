@@ -42,13 +42,13 @@ public class AuthController {
 
     private static final String COOKIE_NAME = "auth_token";
 
-    @Value("${auth.cookie.max-age:86400}")
+    @Value("${auth.cookie.max-age}")
     private int cookieMaxAge;
 
-    @Value("${auth.cookie.secure:true}")
+    @Value("${auth.cookie.secure}")
     private boolean cookieSecure;
 
-    @Value("${auth.cookie.same-site:Strict}")
+    @Value("${auth.cookie.same-site}")
     private String cookieSameSite;
 
     /**
