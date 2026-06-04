@@ -98,6 +98,10 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+        </dependency>
 
         <!-- spring ai & google adk begin -->
 
@@ -190,10 +194,9 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.1.2</version>
                 <configuration>
-                    <skipTests>true</skipTests>
                     <testFailureIgnore>false</testFailureIgnore>
                     <includes>
-                        <include>**/*Test.java</include>
+                        <include>**/trigger/http/*Test.java</include>
                     </includes>
                 </configuration>
             </plugin>

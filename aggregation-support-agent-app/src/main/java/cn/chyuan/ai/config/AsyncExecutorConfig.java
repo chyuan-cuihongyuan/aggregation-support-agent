@@ -1,6 +1,10 @@
 package cn.chyuan.ai.config;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.AsyncTaskExecutor;
@@ -27,6 +31,9 @@ import java.util.concurrent.atomic.AtomicLong;
 @Configuration
 public class AsyncExecutorConfig {
 
+    @Autowired(required = false)
+    private MeterRegistry meterRegistry;
+
     /**
      * 审计日志专用线程池
      * <p>
@@ -47,6 +54,7 @@ public class AsyncExecutorConfig {
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(30);
         executor.initialize();
+        registerExecutorMetrics("auditExecutor", executor);
         log.info("初始化审计异步线程池 auditExecutor: core={}, max={}, queue={}", 4, 16, 2000);
         return executor;
     }
@@ -70,10 +78,12 @@ public class AsyncExecutorConfig {
         executor.setKeepAliveSeconds(60);
         executor.setThreadNamePrefix("rag-trace-async-");
         // 优先保护 RAG 主链路，队列满时丢弃 trace 写入但留下可观测日志
-        executor.setRejectedExecutionHandler(new LoggingDiscardPolicy("ragTraceExecutor"));
+        executor.setRejectedExecutionHandler(new LoggingDiscardPolicy(
+                "ragTraceExecutor", registerRejectedCounter("ragTraceExecutor")));
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(10);
         executor.initialize();
+        registerExecutorMetrics("ragTraceExecutor", executor);
         log.info("初始化 RAG 追踪异步线程池 ragTraceExecutor: core={}, max={}, queue={}", 4, 16, 2000);
         return executor;
     }
@@ -93,6 +103,7 @@ public class AsyncExecutorConfig {
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(10);
         executor.initialize();
+        registerExecutorMetrics("ragRetrievalExecutor", executor);
         log.info("初始化 RAG 检索线程池 ragRetrievalExecutor: core={}, max={}, queue={}", coreSize, maxSize, queueCapacity);
         return executor;
     }
@@ -112,8 +123,51 @@ public class AsyncExecutorConfig {
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(30);
         executor.initialize();
+        registerExecutorMetrics("ragDocumentExecutor", executor);
         log.info("初始化 RAG 文档处理线程池 ragDocumentExecutor: core={}, max={}, queue={}", coreSize, maxSize, queueCapacity);
         return executor;
+    }
+
+    private void registerExecutorMetrics(String executorName, ThreadPoolTaskExecutor executor) {
+        if (meterRegistry == null) {
+            return;
+        }
+
+        Gauge.builder("app_async_executor_queue_size", executor, this::queueSize)
+                .tag("executor", executorName)
+                .description("异步线程池当前队列大小")
+                .register(meterRegistry);
+        Gauge.builder("app_async_executor_active_threads", executor, this::activeThreads)
+                .tag("executor", executorName)
+                .description("异步线程池当前活跃线程数")
+                .register(meterRegistry);
+        Gauge.builder("app_async_executor_pool_size", executor, this::poolSize)
+                .tag("executor", executorName)
+                .description("异步线程池当前线程池大小")
+                .register(meterRegistry);
+    }
+
+    private Counter registerRejectedCounter(String executorName) {
+        if (meterRegistry == null) {
+            return null;
+        }
+
+        return Counter.builder("app_async_executor_rejected_total")
+                .tag("executor", executorName)
+                .description("异步线程池拒绝任务次数")
+                .register(meterRegistry);
+    }
+
+    private double queueSize(ThreadPoolTaskExecutor executor) {
+        return executor.getThreadPoolExecutor().getQueue().size();
+    }
+
+    private double activeThreads(ThreadPoolTaskExecutor executor) {
+        return executor.getThreadPoolExecutor().getActiveCount();
+    }
+
+    private double poolSize(ThreadPoolTaskExecutor executor) {
+        return executor.getThreadPoolExecutor().getPoolSize();
     }
 
     /**
@@ -124,15 +178,20 @@ public class AsyncExecutorConfig {
      */
     private static final class LoggingDiscardPolicy implements RejectedExecutionHandler {
         private final String executorName;
+        private final Counter rejectedCounter;
         private final AtomicLong discardCount = new AtomicLong(0);
 
-        LoggingDiscardPolicy(String executorName) {
+        LoggingDiscardPolicy(String executorName, Counter rejectedCounter) {
             this.executorName = executorName;
+            this.rejectedCounter = rejectedCounter;
         }
 
         @Override
         public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
             long discarded = discardCount.incrementAndGet();
+            if (rejectedCounter != null) {
+                rejectedCounter.increment();
+            }
             log.warn("[{}] 队列已满，静默丢弃异步任务: 累计丢弃={}, 当前队列={}, 活跃线程={}, 线程池大小={}",
                     executorName,
                     discarded,
@@ -161,6 +220,7 @@ public class AsyncExecutorConfig {
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(30);
         executor.initialize();
+        registerExecutorMetrics("memoryTaskExecutor", executor);
         log.info("初始化 Agent Memory 异步线程池 memoryTaskExecutor: core={}, max={}, queue={}", 2, 8, 1000);
         return executor;
     }
