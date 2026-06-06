@@ -47,7 +47,7 @@
   },
   "environment": {
     "SERVER_PORT": "8091",
-    "DATABASE_URL": "jdbc:mysql://localhost:3306/agent_db",
+    "DATABASE_URL": "jdbc:mysql://49.232.169.33:3306/agent_db",
     "GATEWAY_URL": "http://127.0.0.1:8092"
   },
   "apiEndpoints": {

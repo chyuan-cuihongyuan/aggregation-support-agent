@@ -218,7 +218,7 @@ java -jar aggregation-support-agent-app/target/aggregation-support-agent-app.jar
 5. **上传运维文档**
 ```bash
 for f in docs/aiops-docs/*.md; do
-  curl -X POST http://localhost:8091/api/v1/upload -F "file=@$f"
+  curl -X POST http://49.232.169.33:8091/api/v1/upload -F "file=@$f"
 done
 ```
 
@@ -226,10 +226,10 @@ done
 
 ```bash
 # 查询智能体列表
-curl http://localhost:8091/api/v1/query_ai_agent_config_list
+curl http://49.232.169.33:8091/api/v1/query_ai_agent_config_list
 
 # 检查 Milvus 健康状态
-curl http://localhost:8091/api/v1/milvus/health
+curl http://49.232.169.33:8091/api/v1/milvus/health
 ```
 
 ## 项目结构

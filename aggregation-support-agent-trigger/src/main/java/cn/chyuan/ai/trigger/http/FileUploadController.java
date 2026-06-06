@@ -17,6 +17,7 @@ import cn.chyuan.ai.types.enums.AuditAction;
 import cn.chyuan.ai.types.enums.AuditResult;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
+import cn.chyuan.ai.types.exception.EmbeddingException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -158,6 +159,16 @@ public class FileUploadController {
                     .code(e.getCode())
                     .info(e.getInfo())
                     .build();
+        } catch (EmbeddingException e) {
+            // 嵌入服务专用异常 — 返回用户友好的错误提示
+            String userMessage = buildEmbeddingErrorMessage(e);
+            log.error("文档上传嵌入失败: {}, 原因: {}", fileName, userMessage, e);
+            safeAudit(auditUserId, auditUsername, AuditResult.FAILURE,
+                    fileName, userMessage, ip, ua);
+            return Response.<UploadResponseDTO>builder()
+                    .code(ResponseCode.UN_ERROR.getCode())
+                    .info(userMessage)
+                    .build();
         } catch (Exception e) {
             log.error("文档上传失败: {}", fileName, e);
             safeAudit(auditUserId, auditUsername, AuditResult.FAILURE,
@@ -237,6 +248,15 @@ public class FileUploadController {
             return Response.<UploadResponseDTO>builder()
                     .code(e.getCode())
                     .info(e.getInfo())
+                    .build();
+        } catch (EmbeddingException e) {
+            String userMessage = buildEmbeddingErrorMessage(e);
+            log.error("异步文档上传嵌入失败: {}, 原因: {}", fileName, userMessage, e);
+            safeAudit(auditUserId, auditUsername, AuditResult.FAILURE,
+                    fileName, userMessage, ip, ua);
+            return Response.<UploadResponseDTO>builder()
+                    .code(ResponseCode.UN_ERROR.getCode())
+                    .info(userMessage)
                     .build();
         } catch (Exception e) {
             log.error("异步文档上传失败: {}", fileName, e);
@@ -402,6 +422,20 @@ public class FileUploadController {
             }
         }
         return dto;
+    }
+
+    /**
+     * 构建嵌入异常的用户友好错误信息 — 根据失败类型返回可读提示
+     */
+    private String buildEmbeddingErrorMessage(EmbeddingException e) {
+        return switch (e.getFailureType()) {
+            case QUOTA_EXCEEDED -> "嵌入服务余额不足（提供商: " + e.getProviderName() + "），请联系管理员充值或配置备用嵌入提供商";
+            case RATE_LIMITED -> "嵌入服务请求被限流，请稍后重试";
+            case AUTH_FAILED -> "嵌入服务认证失败（提供商: " + e.getProviderName() + "），请检查 API Key 配置";
+            case NETWORK_ERROR -> "嵌入服务网络异常，请检查网络连接后重试";
+            case PROVIDER_ERROR -> "嵌入服务提供商内部错误，请稍后重试";
+            default -> "嵌入服务调用失败: " + e.getMessage();
+        };
     }
 
 }

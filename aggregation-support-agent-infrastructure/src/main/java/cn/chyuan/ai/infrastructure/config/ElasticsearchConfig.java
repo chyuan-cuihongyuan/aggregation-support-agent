@@ -33,7 +33,7 @@ import org.springframework.util.StringUtils;
 public class ElasticsearchConfig {
 
     /** ES主机地址 */
-    private String host = "localhost";
+    private String host = "49.232.169.33";
 
     /** ES端口 */
     private int port = 9200;

@@ -4,11 +4,12 @@ import cn.chyuan.ai.domain.auth.adapter.repository.ITokenRepository;
 import cn.chyuan.ai.domain.auth.model.valobj.TokenVO;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import javax.crypto.SecretKey;
 import java.util.Date;
 import java.util.UUID;
 
@@ -50,7 +51,7 @@ public class TokenService implements ITokenService {
                 .claim("role", role)
                 .setIssuedAt(now)
                 .setExpiration(expireDate)
-                .signWith(SignatureAlgorithm.HS256, secret)
+                .signWith(getSigningKey())
                 .compact();
 
         String redisKey = buildRedisKey(userId, jti);
@@ -86,8 +87,9 @@ public class TokenService implements ITokenService {
 
     public Claims parseToken(String token) {
         try {
-            return Jwts.parser()
-                    .setSigningKey(secret)
+            return Jwts.parserBuilder()
+                    .setSigningKey(getSigningKey())
+                    .build()
                     .parseClaimsJws(token)
                     .getBody();
         } catch (Exception e) {
@@ -120,5 +122,14 @@ public class TokenService implements ITokenService {
 
     private String buildRedisKey(Long userId, String jti) {
         return "auth:token:" + userId + ":" + jti;
+    }
+
+    /**
+     * 获取 JWT 签名密钥
+     * 使用 Keys.hmacShaKeyFor 将 secret 字符串转换为符合 HS256 要求的 SecretKey，
+     * 避免旧版 API 的 Base64 解码问题
+     */
+    private SecretKey getSigningKey() {
+        return Keys.hmacShaKeyFor(secret.getBytes());
     }
 }

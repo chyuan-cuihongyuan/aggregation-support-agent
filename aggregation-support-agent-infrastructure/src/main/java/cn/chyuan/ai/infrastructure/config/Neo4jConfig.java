@@ -16,7 +16,7 @@ import org.springframework.data.neo4j.core.Neo4jClient;
 @ConfigurationProperties(prefix = "neo4j")
 public class Neo4jConfig {
 
-    private String uri = "bolt://localhost:7687";
+    private String uri = "bolt://49.232.169.33:7687";
     private Authentication authentication = new Authentication();
 
     @Data

@@ -10,6 +10,7 @@ import org.neo4j.driver.Driver;
 import org.neo4j.driver.Record;
 import org.neo4j.driver.Result;
 import org.neo4j.driver.Session;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.neo4j.core.Neo4jClient;
 import org.springframework.stereotype.Service;
@@ -31,16 +32,76 @@ public class Neo4jGraphDatabaseService implements IGraphDatabaseService {
     @Resource
     private Driver neo4jDriver;
 
+    /** 向量维度 — 从配置读取，与嵌入模型输出维度保持一致 */
+    @Value("${milvus.dimension:2048}")
+    private int vectorDimension;
+
     @Override
     public void ensureSchema() {
         try (Session session = neo4jDriver.session()) {
             // 创建唯一约束
             session.run("CREATE CONSTRAINT IF NOT EXISTS FOR (e:Entity) REQUIRE e.entityId IS UNIQUE");
-            // 创建向量索引（Neo4j 5.x）
-            session.run("CREATE VECTOR INDEX entity_embedding IF NOT EXISTS FOR (e:Entity) ON (e.embedding) OPTIONS {indexConfig: {`vector.dimensions`: 1024, `vector.similarity_function`: 'cosine'}}");
+
+            // 检查向量索引是否存在且维度是否匹配
+            boolean needRecreate = true;
+            try {
+                Result indexInfo = session.run("SHOW INDEXES YIELD name, type, options WHERE name = 'entity_embedding' RETURN options");
+                if (indexInfo.hasNext()) {
+                    Record record = indexInfo.next();
+                    String options = record.get("options").asString();
+                    // 解析当前索引的维度
+                    int currentDimension = parseIndexDimension(options);
+                    if (currentDimension == vectorDimension) {
+                        log.info("Neo4j 向量索引已存在且维度匹配: {}维，无需重建", vectorDimension);
+                        needRecreate = false;
+                    } else {
+                        log.warn("Neo4j 向量索引维度不匹配: 当前={}维, 期望={}维，需要重建", currentDimension, vectorDimension);
+                        session.run("DROP INDEX entity_embedding IF EXISTS");
+                        log.info("已删除旧向量索引，准备用维度 {} 重建", vectorDimension);
+                    }
+                }
+            } catch (Exception checkEx) {
+                log.debug("索引检查跳过（可能不存在）: {}", checkEx.getMessage());
+            }
+
+            // 仅在需要时创建向量索引
+            if (needRecreate) {
+                session.run(String.format(
+                        "CREATE VECTOR INDEX entity_embedding IF NOT EXISTS FOR (e:Entity) ON (e.embedding) " +
+                        "OPTIONS {indexConfig: {`vector.dimensions`: %d, `vector.similarity_function`: 'cosine'}}",
+                        vectorDimension));
+                log.info("Neo4j 向量索引创建完成: 维度={}", vectorDimension);
+            }
+
             log.info("Neo4j schema 初始化完成");
         } catch (Exception e) {
             log.warn("Schema 初始化警告: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 从索引 options JSON 中解析向量维度
+     */
+    private int parseIndexDimension(String options) {
+        if (options == null) return -1;
+        try {
+            // options 格式: {"indexConfig":{"vector.dimensions":1024,"vector.similarity_function":"cosine"}}
+            String dimKey = "vector.dimensions\":";
+            int idx = options.indexOf(dimKey);
+            if (idx < 0) return -1;
+            String after = options.substring(idx + dimKey.length());
+            // 读取数字
+            StringBuilder num = new StringBuilder();
+            for (char c : after.toCharArray()) {
+                if (Character.isDigit(c)) {
+                    num.append(c);
+                } else {
+                    break;
+                }
+            }
+            return num.length() > 0 ? Integer.parseInt(num.toString()) : -1;
+        } catch (Exception e) {
+            return -1;
         }
     }
 

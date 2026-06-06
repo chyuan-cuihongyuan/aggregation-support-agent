@@ -361,7 +361,7 @@ public class QueryMetricsTools {
     private String buildMockPromQLResult(String query) throws Exception {
         List<MetricResult> results = new ArrayList<>();
         results.add(MetricResult.builder()
-                .metric(Map.of("__name__", query.split("\\{")[0], "instance", "localhost:9090"))
+                .metric(Map.of("__name__", query.split("\\{")[0], "instance", "49.232.169.33:9090"))
                 .value("78.5")
                 .build());
         PromQLQueryOutput output = PromQLQueryOutput.builder()

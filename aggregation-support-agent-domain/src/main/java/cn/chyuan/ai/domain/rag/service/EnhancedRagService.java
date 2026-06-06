@@ -232,8 +232,18 @@ public class EnhancedRagService implements IRagService {
             }
 
             if (chunks.isEmpty()) {
-                log.warn("文档分块结果为空，跳过处理: {}", command.getFileName());
-                documentMetadataRepository.updateStatus(documentId, "success", 0, 0, 0, "文档分块结果为空");
+                // 区分两种空内容情况：文档无文本 vs 文档解析成功但内容不足
+                String textContent = parsedDocument.getTextContent();
+                String emptyReason;
+                if (textContent == null || textContent.trim().isEmpty()) {
+                    emptyReason = "文档内容为空：该PDF可能是扫描件或图片PDF，无法提取文字内容。请上传文字版PDF或先进行OCR处理";
+                } else if (textContent.trim().length() < 20) {
+                    emptyReason = "文档可提取内容过少（仅" + textContent.trim().length() + "字），可能是扫描件或格式不支持的PDF";
+                } else {
+                    emptyReason = "文档分块结果为空：内容已解析（" + textContent.length() + "字）但无法生成有效分块";
+                }
+                log.warn("文档分块结果为空，跳过处理: {}, 原因: {}", command.getFileName(), emptyReason);
+                documentMetadataRepository.updateStatus(documentId, "warning", 0, 0, 0, emptyReason);
                 return;
             }
 

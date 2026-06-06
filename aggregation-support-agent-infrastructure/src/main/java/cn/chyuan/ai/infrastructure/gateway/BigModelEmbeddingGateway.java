@@ -1,6 +1,7 @@
 package cn.chyuan.ai.infrastructure.gateway;
 
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
+import cn.chyuan.ai.types.exception.EmbeddingException;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
@@ -119,19 +120,26 @@ public class BigModelEmbeddingGateway implements IEmbeddingService {
                 if (!response.isSuccessful()) {
                     String errorMsg = response.body() != null ? response.body().string() : "unknown error";
                     log.error("智谱嵌入 API 调用失败: status={}, body={}", response.code(), errorMsg);
-                    throw new RuntimeException("智谱嵌入 API 调用失败: HTTP " + response.code());
+
+                    // 根据状态码和响应体推断失败类型，支持上游降级决策
+                    EmbeddingException.FailureType failureType =
+                            EmbeddingException.FailureType.fromHttpStatus(response.code(), errorMsg);
+                    throw new EmbeddingException(failureType, "bigmodel", response.code(), errorMsg);
                 }
 
                 String responseBody = response.body() != null ? response.body().string() : "{}";
                 return parseEmbeddingResponse(responseBody);
             }
 
+        } catch (EmbeddingException e) {
+            // 结构化异常直接抛出，不二次包装
+            throw e;
         } catch (IOException e) {
             log.error("智谱嵌入 API 网络异常: {}", e.getMessage(), e);
-            throw new RuntimeException("智谱嵌入 API 网络异常", e);
+            throw new EmbeddingException(EmbeddingException.FailureType.NETWORK_ERROR, "bigmodel", e.getMessage(), e);
         } catch (Exception e) {
             log.error("智谱嵌入 API 调用异常: {}", e.getMessage(), e);
-            throw new RuntimeException("智谱嵌入 API 调用异常", e);
+            throw new EmbeddingException(EmbeddingException.FailureType.UNKNOWN, "bigmodel", e.getMessage(), e);
         }
     }
 

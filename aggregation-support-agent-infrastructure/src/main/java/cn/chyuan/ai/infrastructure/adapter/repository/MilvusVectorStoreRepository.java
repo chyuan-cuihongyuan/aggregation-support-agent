@@ -49,7 +49,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * 集合 Schema 包含四个字段：
  * <ul>
  *   <li>id: INT64（自增主键）</li>
- *   <li>vector: FLOAT_VECTOR（1024 维，DashScope text-embedding-v4）</li>
+ *   <li>vector: FLOAT_VECTOR（2048 维，智谱 embedding-3，可通过 milvus.dimension 配置）</li>
  *   <li>content: VARCHAR（原文内容，最大 65535 字符）</li>
  *   <li>metadata: JSON（元数据，包含来源文件、分块索引等）</li>
  * </ul>
@@ -254,7 +254,7 @@ public class MilvusVectorStoreRepository implements IVectorStoreRepository {
      * 使用 L2 距离度量，IVF_FLAT 索引的 nprobe 参数设为 128，
      * 返回结果按 L2 距离升序排列（距离越小越相似）。
      *
-     * @param queryVector 查询文本的向量表示（1024 维）
+     * @param queryVector 查询文本的向量表示（维度由 milvus.dimension 配置，默认 2048 维）
      * @param topK        返回最相似的 K 个结果
      * @return 检索结果列表，按相似度降序排列
      */

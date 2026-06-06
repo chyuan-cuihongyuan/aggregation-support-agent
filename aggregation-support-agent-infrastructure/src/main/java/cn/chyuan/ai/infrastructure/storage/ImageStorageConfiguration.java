@@ -15,14 +15,11 @@ import org.springframework.stereotype.Component;
 @Component
 public class ImageStorageConfiguration {
 
-    private final LocalImageStorageService localImageStorageService;
+    @Autowired(required = false)
+    private LocalImageStorageService localImageStorageService;
 
     @Autowired(required = false)
     private CosImageStorageService cosImageStorageService;
-
-    public ImageStorageConfiguration(LocalImageStorageService localImageStorageService) {
-        this.localImageStorageService = localImageStorageService;
-    }
 
     /**
      * 本地文件系统存储服务（Primary当provider=local时）
@@ -32,6 +29,9 @@ public class ImageStorageConfiguration {
     @ConditionalOnProperty(prefix = "storage.image", name = "provider", havingValue = "local", matchIfMissing = true)
     public IImageStorageService localImageStorageServicePrimary() {
         log.info("启用本地文件系统存储服务");
+        if (localImageStorageService == null) {
+            throw new IllegalStateException("本地存储服务未配置，请检查 storage.image.local 相关配置");
+        }
         return localImageStorageService;
     }
 

@@ -23,7 +23,7 @@
       "Read(//e/Chyuan/1.java/project/code/**)",
       "Bash(npx create-next-app@latest aggregation-support-agent-web --typescript --tailwind --eslint --app --src-dir --no-turbopack --import-alias \"@/*\" --use-npm --yes)",
       "Bash(timeout 10 npm run dev)",
-      "Bash(curl -s http://localhost:3000)",
+      "Bash(curl -s http://49.232.169.33:3000)",
       "Bash(npm install *)",
       "Bash(npx shadcn@latest init --yes --defaults)",
       "Bash(npx shadcn@latest add button card tabs dialog select input textarea progress scroll-area separator badge dropdown-menu sheet tooltip)",

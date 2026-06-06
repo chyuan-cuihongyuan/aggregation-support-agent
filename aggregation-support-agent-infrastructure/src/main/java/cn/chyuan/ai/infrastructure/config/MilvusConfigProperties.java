@@ -34,8 +34,8 @@ public class MilvusConfigProperties {
     /** 集合名称 */
     private String collectionName = "biz";
 
-    /** 向量维度（DashScope text-embedding-v4 输出 1024 维） */
-    private int dimension = 1024;
+    /** 向量维度（智谱 embedding-3 默认输出 2048 维，可配置 256/512/1024/2048） */
+    private int dimension = 2048;
 
     /** 索引类型 */
     private String indexType = "IVF_FLAT";
