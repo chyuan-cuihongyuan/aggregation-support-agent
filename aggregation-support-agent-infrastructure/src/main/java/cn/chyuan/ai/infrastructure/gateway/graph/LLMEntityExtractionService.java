@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * LLM 实体抽取服务实现
- * 通过智谱 GLM-5.1（OpenAI 兼容接口）从文本中抽取实体和关系
+ * 通过智谱 glm-4.7（OpenAI 兼容接口）从文本中抽取实体和关系
  */
 @Slf4j
 @Service

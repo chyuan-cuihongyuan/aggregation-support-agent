@@ -51,6 +51,12 @@ public final class RagSourceCollector {
         private final CopyOnWriteArrayList<RagSourceVO> sources = new CopyOnWriteArrayList<>();
         /** 当前请求最近一次 RAG 检索的 traceId */
         private volatile String traceId = "";
+        /** 当前请求最近一次 RAG 检索的原始查询，供可观测性上报 */
+        private volatile String retrievalQuery = "";
+        /** 当前请求最近一次 RAG 检索的改写查询，供可观测性上报 */
+        private volatile String rewriteText = "";
+        /** 当前请求最近一次 RAG 检索的 TopK 配置，供可观测性上报 */
+        private volatile Integer topK;
         /** 当前请求的租户作用域，供工具跨线程执行时兜底恢复 */
         private final TenantScopeVO tenantScope;
 
@@ -61,6 +67,18 @@ public final class RagSourceCollector {
         /** 读取最近一次写入的 traceId，未设置时返回空字符串 */
         public String getTraceId() {
             return traceId == null ? "" : traceId;
+        }
+
+        public String getRetrievalQuery() {
+            return retrievalQuery == null ? "" : retrievalQuery;
+        }
+
+        public String getRewriteText() {
+            return rewriteText;
+        }
+
+        public Integer getTopK() {
+            return topK;
         }
 
         public TenantScopeVO getTenantScope() {
@@ -79,6 +97,24 @@ public final class RagSourceCollector {
             if (t != null && !t.isEmpty()) {
                 this.traceId = t;
             }
+        }
+
+        /** 内部检索元数据写入，供可观测性上报 */
+        void setRetrievalMetaInternal(String query, String rewriteText, Integer topK) {
+            if (query != null && !query.isEmpty()) {
+                this.retrievalQuery = query;
+            }
+            if (rewriteText != null) {
+                this.rewriteText = rewriteText;
+            }
+            if (topK != null) {
+                this.topK = topK;
+            }
+        }
+
+        /** 当前已累积证据的只读快照 */
+        public List<RagSourceVO> snapshotSources() {
+            return new ArrayList<>(sources);
         }
     }
 
@@ -163,6 +199,15 @@ public final class RagSourceCollector {
             return;
         }
         h.setTraceIdInternal(traceId);
+    }
+
+    /** 由 searchWithTrace 调用，记录本次检索的查询/改写/TopK，供出口上报 RAG 检索日志 */
+    public static void setRetrievalMeta(String query, String rewriteText, Integer topK) {
+        Holder h = HOLDER.get();
+        if (h == null) {
+            return;
+        }
+        h.setRetrievalMetaInternal(query, rewriteText, topK);
     }
 
     /** 读取当前线程最近一次写入的 traceId，未设置时返回空字符串 */

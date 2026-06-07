@@ -6,6 +6,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -68,7 +71,7 @@ public class ResultFusionService implements IResultFusionService {
                 .limit(topK)
                 .map(entry -> {
                     VectorSearchResultVO originalChunk = chunkMap.get(entry.getKey());
-                    // 创建新的结果对象，使用RRF分数
+                    // 排序已基于 double scoreMap 完成（见上方 sorted），此处 floatValue 仅承载展示分数，不影响排序结果
                     return VectorSearchResultVO.builder()
                             .content(originalChunk.getContent())
                             .score(entry.getValue().floatValue())
@@ -144,20 +147,45 @@ public class ResultFusionService implements IResultFusionService {
 
     /**
      * 生成chunk的唯一标识
-     * 使用内容的hashCode作为key
+     * <p>
+     * 优先使用元数据中的文档+分块定位信息（documentId + chunkIndex）作为稳定 key；
+     * 缺失时回退到内容的 SHA-256 摘要，避免 String.hashCode() 碰撞导致不同内容被错误去重。
      */
     private String generateChunkKey(VectorSearchResultVO chunk) {
-        // 使用内容hash和元数据中的docId（如果有）
-        String docId = chunk.getMetadata() != null
-                ? (String) chunk.getMetadata().get("docId")
-                : null;
-
-        if (docId != null) {
-            return docId;
+        Map<String, Object> metadata = chunk.getMetadata();
+        if (metadata != null) {
+            Object documentId = metadata.get("documentId");
+            if (documentId != null) {
+                Object chunkIndex = metadata.get("chunkIndex");
+                return chunkIndex != null
+                        ? documentId + "#" + chunkIndex
+                        : String.valueOf(documentId);
+            }
         }
 
-        // 使用内容的hashcode
-        return String.valueOf(chunk.getContent().hashCode());
+        // 回退：使用内容的 SHA-256 摘要
+        return sha256(chunk.getContent());
+    }
+
+    /**
+     * 计算文本的 SHA-256 摘要（十六进制字符串）
+     */
+    private String sha256(String text) {
+        if (text == null) {
+            return "null";
+        }
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(text.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            // 极端情况下 SHA-256 不可用，回退到内容长度+hashCode 降低碰撞概率
+            return text.length() + "_" + text.hashCode();
+        }
     }
 
 }

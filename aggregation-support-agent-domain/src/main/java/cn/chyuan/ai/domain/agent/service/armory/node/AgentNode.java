@@ -20,34 +20,34 @@ import java.util.List;
 public class AgentNode extends AbstractArmorySupport {
 
     private static final String REACT_PROMPT_PREFIX = """
-            You are working with optional tool-calling capability in ReAct (Reasoning + Acting) mode.
+            You are working with tool-calling capability in ReAct (Reasoning + Acting) mode.
 
-            ## Core Principle: Only call tools when truly necessary
-            You have access to tools, but you should NOT call them for every request. Many questions can be answered directly using your own knowledge.
+            ## Core Principle: Use tools proactively when they can provide accurate information
+            You have access to specialized tools. Use them when they can provide more accurate,
+            up-to-date, or specific information than your general knowledge.
 
             ## When to use tools:
-            - The user explicitly requests data, information, or actions that require external systems
-            - The question involves real-time data, business queries, or system operations that you cannot answer from your own knowledge
-            - The user's intent clearly maps to a specific tool's capability
+            - Any question about specific data, facts, or information that exists in the knowledge base
+            - Questions about prices, specifications, policies, or any domain-specific knowledge
+            - The user asks about anything that could be in the internal documents
+            - When accuracy matters more than speed
 
             ## When NOT to use tools:
-            - General conversation, greetings, chitchat
-            - Questions you can answer from your own knowledge (general knowledge, explanations, advice, etc.)
-            - Opinion, creative writing, or reasoning tasks
-            - When the user is just chatting or asking simple questions
+            - Pure greetings, chitchat, or casual conversation
+            - Creative writing, opinions, or subjective reasoning
+            - Simple math or logic puzzles unrelated to document knowledge
 
-            ## ReAct Loop (only when tools are needed):
-            Thought: Analyze whether this request requires tool usage. If not, answer directly.
-            Action: Call the appropriate tool only when you've determined it's necessary
+            ## ReAct Loop:
+            Thought: Analyze the user's request and determine which tool to use
+            Action: Call the appropriate tool
             Observation: (The system will return the tool execution result)
 
             You can perform multiple rounds of Thought→Action→Observation until you have enough information.
 
             ## Rules:
-            - First determine: does this request need a tool? If NO, answer directly without any tool call
-            - When tools ARE needed: Always output Thought first (explain why you need the tool)
-            - Do not call tools unnecessarily — each tool call has a cost in latency and resources
-            - If you already have enough information, give your answer directly without unnecessary tool calls
+            - When in doubt about whether to use a tool, prefer using it
+            - Always use tools for factual queries about data in the knowledge base
+            - Do not substitute your own knowledge for tool results on factual questions
             - Your final response should contain only the substantive content, do not include labels like "Final Answer:" or "Thought:"
             """;
 
@@ -80,8 +80,13 @@ public class AgentNode extends AbstractArmorySupport {
                     .instruction(instruction)
                     .outputKey(agentConfig.getOutputKey());
 
-            // 设置 ReAct 循环最大步数，防止 LLM 空响应导致无限循环
-            if (agentConfig.getMaxSteps() != null && agentConfig.getMaxSteps() > 0) {
+            // 设置 ReAct 循环最大步数
+            // 无工具的纯对话智能体：强制 maxSteps=1，不允许 ADK 多轮调用 LLM
+            // 有工具的智能体：使用配置的 maxSteps（需要多轮 Thought→Action→Observation）
+            if (!hasTools) {
+                log.info("Agent [{}] 无工具，强制 maxSteps=1，防止多轮自问自答", agentConfig.getName());
+                agentBuilder.maxSteps(1);
+            } else if (agentConfig.getMaxSteps() != null && agentConfig.getMaxSteps() > 0) {
                 agentBuilder.maxSteps(agentConfig.getMaxSteps());
             }
 

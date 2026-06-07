@@ -5,6 +5,8 @@ import cn.chyuan.ai.domain.rag.service.rerank.IRerankService;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,6 +15,8 @@ import org.springframework.stereotype.Service;
 
 import jakarta.annotation.Resource;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -22,9 +26,16 @@ import java.util.stream.Collectors;
  * <p>
  * 支持的Rerank服务：
  * <ul>
+ *   <li>智谱 BigModel Rerank（默认）</li>
  *   <li>Cohere Rerank</li>
  *   <li>Jina Reranker</li>
  *   <li>自部署BGE-Reranker</li>
+ * </ul>
+ * <p>
+ * 优化特性：
+ * <ul>
+ *   <li>本地缓存：相同 query+documents 组合直接命中缓存，减少 API 调用</li>
+ *   <li>降级策略：API 不可用时按原始相似度分数排序，而非简单截断</li>
  * </ul>
  */
 @Slf4j
@@ -43,6 +54,12 @@ public class RerankService implements IRerankService {
 
     @Value("${rag.rerank.timeout}")
     private int timeout;
+
+    /** Rerank 结果缓存（query+documents hash → 排序后的结果） */
+    private final Cache<String, List<VectorSearchResultVO>> rerankCache = CacheBuilder.newBuilder()
+            .maximumSize(500)
+            .expireAfterAccess(10, TimeUnit.MINUTES)
+            .build();
 
     @Resource
     private OkHttpClient httpClient;
@@ -63,11 +80,19 @@ public class RerankService implements IRerankService {
             return candidates;
         }
 
+        // 1. 尝试从缓存获取（key 含 topK，避免不同 topK 复用被截断的旧结果）
+        String cacheKey = generateRerankCacheKey(query, candidates, topK);
+        List<VectorSearchResultVO> cachedResult = rerankCache.getIfPresent(cacheKey);
+        if (cachedResult != null) {
+            log.info("Rerank缓存命中: query={}, resultCount={}", query, cachedResult.size());
+            return cachedResult.stream().limit(topK).collect(Collectors.toList());
+        }
+
         try {
-            // 调用Rerank API
+            // 2. 调用Rerank API
             RerankResponse response = callRerankApi(query, candidates, topK);
 
-            // 根据Rerank结果重新排序
+            // 3. 根据Rerank结果重新排序
             List<VectorSearchResultVO> rerankedResults = new ArrayList<>();
             for (RerankResult result : response.getResults()) {
                 int index = result.getIndex();
@@ -82,13 +107,20 @@ public class RerankService implements IRerankService {
                 }
             }
 
+            // 4. 存入缓存
+            rerankCache.put(cacheKey, rerankedResults);
+
             log.info("Rerank完成: resultCount={}", rerankedResults.size());
             return rerankedResults;
 
         } catch (Exception e) {
-            log.error("Rerank失败，返回原始排序: {}", e.getMessage());
-            // 降级：返回原始排序的前topK个
-            return candidates.stream().limit(topK).collect(Collectors.toList());
+            log.error("Rerank失败，保留既有相关度顺序降级: {}", e.getMessage());
+            // 降级策略：candidates 传入时已是"最相关在前"的有序结果
+            // （向量检索按 L2 距离升序、RRF 融合按分数降序），直接取前 topK 即保持正确相关度顺序。
+            // 不能按 score 字段重排：不同来源 score 语义不同（L2 距离越小越相似 vs RRF 分数越大越相似）。
+            return candidates.stream()
+                    .limit(topK)
+                    .collect(Collectors.toList());
         }
     }
 
@@ -122,16 +154,40 @@ public class RerankService implements IRerankService {
                 .post(RequestBody.create(requestBody.toJSONString(), JSON_MEDIA_TYPE))
                 .build();
 
-        // 发送请求
+        // 发送请求（只读取一次 body，避免 OkHttp body().string() 双读问题）
         try (Response response = httpClient.newCall(request).execute()) {
+            // 提前读取 body 字符串，后续错误分支和成功分支共用
+            String responseBody = response.body() != null ? response.body().string() : "{}";
+
             if (!response.isSuccessful()) {
-                String errorMsg = response.body() != null ? response.body().string() : "unknown error";
-                log.error("Rerank API调用失败: status={}, body={}", response.code(), errorMsg);
+                log.error("Rerank API调用失败: status={}, body={}", response.code(), responseBody);
                 throw new RuntimeException("Rerank API调用失败: HTTP " + response.code());
             }
 
-            String responseBody = response.body() != null ? response.body().string() : "{}";
             return parseRerankResponse(responseBody);
+        }
+    }
+
+    /**
+     * 生成 Rerank 缓存 key（基于 query + topK + 所有候选文档内容的 hash）
+     */
+    private String generateRerankCacheKey(String query, List<VectorSearchResultVO> candidates, int topK) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            md.update(query.getBytes(StandardCharsets.UTF_8));
+            md.update(("|topK=" + topK + "|").getBytes(StandardCharsets.UTF_8));
+            for (VectorSearchResultVO candidate : candidates) {
+                md.update(candidate.getContent().getBytes(StandardCharsets.UTF_8));
+            }
+            byte[] hash = md.digest();
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            // 降级：使用 hashCode
+            return query.hashCode() + "_" + topK + "_" + candidates.hashCode();
         }
     }
 

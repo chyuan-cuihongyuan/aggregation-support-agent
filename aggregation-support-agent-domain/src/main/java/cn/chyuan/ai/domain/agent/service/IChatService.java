@@ -29,4 +29,16 @@ public interface IChatService {
 
     void storeStreamConversationMemory(String userId, String agentId, String sessionId, String message, String response);
 
+    /**
+     * 确保 ADK 会话有效 — 如果 InMemorySessionService 中不存在，自动创建新会话
+     * <p>
+     * 处理应用重启后 ADK 内存会话丢失但数据库中仍有记录的场景。
+     *
+     * @param agentId   智能体ID
+     * @param userId    用户ID
+     * @param sessionId 待验证的会话ID
+     * @return 有效的 sessionId（可能与输入不同）
+     */
+    String ensureAdkSession(String agentId, String userId, String sessionId);
+
 }

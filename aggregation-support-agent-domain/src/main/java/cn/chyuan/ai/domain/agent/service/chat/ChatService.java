@@ -2,6 +2,7 @@ package cn.chyuan.ai.domain.agent.service.chat;
 
 import cn.chyuan.ai.domain.agent.adapter.repository.IChatHistoryRepository;
 import cn.chyuan.ai.domain.agent.model.entity.ChatCommandEntity;
+import cn.chyuan.ai.domain.agent.model.entity.ChatHistoryEntity;
 import cn.chyuan.ai.domain.agent.model.entity.ChatSessionEntity;
 import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.auth.support.RequestScopeContext;
@@ -15,6 +16,7 @@ import cn.chyuan.ai.domain.memory.model.valobj.MemoryMatch;
 import cn.chyuan.ai.domain.memory.model.valobj.MemoryOptions;
 import cn.chyuan.ai.domain.memory.model.valobj.RecallOptions;
 import cn.chyuan.ai.domain.memory.service.AgentMemoryService;
+import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import cn.chyuan.ai.domain.rag.support.RagSourceCollector;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
@@ -34,7 +36,11 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -42,6 +48,12 @@ public class ChatService implements IChatService {
 
     /** 会话 ID 不存在时的兜底 scope 路径 */
     private static final String SCOPE_UNKNOWN = "/conversation/__unknown__";
+
+    /** 会话重建时最大回灌历史条数（避免超出 LLM 上下文窗口） */
+    private static final int MAX_HISTORY_REPLAY = 6;
+
+    /** 单条历史消息最大字符数，超长截断防止历史中的自问自答污染新会话 */
+    private static final int MAX_HISTORY_CHAR_LENGTH = 2000;
 
     @Resource
     private DefaultArmoryFactory defaultArmoryFactory;
@@ -54,6 +66,9 @@ public class ChatService implements IChatService {
 
     @Resource
     private AgentMemoryService agentMemoryService;
+
+    @Resource
+    private IEmbeddingService embeddingService;
 
     /**
      * 会话 ID 缓存 — 按 tenantId:ownerUserId:agentId 复用同一 session，保持对话上下文连续
@@ -350,12 +365,23 @@ public class ChatService implements IChatService {
     
     /**
      * 构建记忆上下文
+     * <p>
+     * 优先检索会话级记忆（scope=/conversation/{sessionId}），
+     * 如果不足则回退到 agent 级记忆（scope=/agent/{agentId}），确保跨会话记忆可检索。
+     * <p>
+     * 优化：query 只嵌入一次，复用给两次 recall 调用，避免重复 API 调用。
      */
     private String buildMemoryContext(String userId, String agentId, String sessionId, String message) {
         try {
             TenantScopeVO scope = currentScope(userId);
+
+            // 预计算 query embedding，两次 recall 共用（节省 1 次 API 调用）
+            float[] queryEmbedding = embeddingService.embed(message);
+
+            // 优先检索会话级记忆
             List<MemoryMatch> memories = agentMemoryService.recall(
                 message,
+                queryEmbedding,
                 RecallOptions.builder()
                     .tenantId(scope.getTenantId())
                     .userId(scope.getOwnerUserId())
@@ -365,11 +391,37 @@ public class ChatService implements IChatService {
                     .minScore(0.3)
                     .build()
             );
-            
+
+            // 会话级记忆不足时，回退到 agent 级 scope（复用同一个 queryEmbedding）
+            if (memories.size() < 3) {
+                List<MemoryMatch> agentMemories = agentMemoryService.recall(
+                    message,
+                    queryEmbedding,
+                    RecallOptions.builder()
+                        .tenantId(scope.getTenantId())
+                        .userId(scope.getOwnerUserId())
+                        .agentId(agentId)
+                        .scope("/agent/" + agentId)
+                        .limit(5)
+                        .minScore(0.3)
+                        .build()
+                );
+                // 合并去重
+                Set<String> existingIds = memories.stream()
+                    .map(m -> m.getEntry().getMemoryId())
+                    .collect(Collectors.toSet());
+                for (MemoryMatch m : agentMemories) {
+                    if (!existingIds.contains(m.getEntry().getMemoryId())) {
+                        memories.add(m);
+                    }
+                    if (memories.size() >= 5) break;
+                }
+            }
+
             if (memories.isEmpty()) {
                 return "";
             }
-            
+
             StringBuilder sb = new StringBuilder();
             sb.append("\n## 相关记忆\n");
             for (int i = 0; i < memories.size(); i++) {
@@ -381,7 +433,7 @@ public class ChatService implements IChatService {
                     match.getEntry().getContent()
                 ));
             }
-            
+
             return sb.toString();
         } catch (Exception e) {
             log.warn("检索记忆失败", e);
@@ -408,12 +460,17 @@ public class ChatService implements IChatService {
     
     /**
      * 存储对话记忆
+     * <p>
+     * 同时写入会话级 scope（/conversation/{sessionId}）和 agent 级 scope（/agent/{agentId}），
+     * 确保跨会话记忆可检索。agentMemoryService.remember() 内部有 contentHash 去重机制。
      */
-    private void storeConversationMemory(String userId, String agentId, String sessionId, 
+    private void storeConversationMemory(String userId, String agentId, String sessionId,
                                          String question, String answer) {
         try {
             TenantScopeVO scope = currentScope(userId);
             String content = String.format("用户: %s\n助手: %s", question, answer);
+
+            // 存储到会话级 scope
             agentMemoryService.remember(
                 content,
                 MemoryOptions.builder()
@@ -426,9 +483,154 @@ public class ChatService implements IChatService {
                     .source("chat")
                     .build()
             );
+
+            // 同时存储到 agent 级 scope，确保跨会话可检索
+            agentMemoryService.remember(
+                content,
+                MemoryOptions.builder()
+                    .tenantId(scope.getTenantId())
+                    .userId(scope.getOwnerUserId())
+                    .agentId(agentId)
+                    .sessionId(sessionId)
+                    .memoryType(MemoryType.EPISODE)
+                    .scope("/agent/" + agentId)
+                    .source("chat")
+                    .build()
+            );
         } catch (Exception e) {
             log.warn("存储对话记忆失败", e);
         }
+    }
+
+    @Override
+    public String ensureAdkSession(String agentId, String userId, String sessionId) {
+        // sessionId 为空时直接创建新会话
+        if (sessionId == null || sessionId.isBlank()) {
+            return createSession(agentId, userId);
+        }
+
+        AiAgentRegisterVO register = defaultArmoryFactory.getAiAgentRegisterVO(agentId);
+        if (register == null) {
+            throw new AppException(ResponseCode.E0001.getCode());
+        }
+
+        InMemoryRunner runner = register.getRunner();
+        String appName = register.getAppName();
+        TenantScopeVO scope = currentScope(userId);
+
+        // 检查 ADK InMemorySessionService 中是否存在该会话
+        try {
+            Session session = runner.sessionService()
+                    .getSession(appName, scope.getOwnerUserId(), sessionId, Optional.empty())
+                    .blockingGet();
+            if (session != null) {
+                // 更新 Guava 缓存
+                String sessionKey = scope.getTenantId() + ":" + scope.getOwnerUserId() + ":" + agentId;
+                userSessions.put(sessionKey, sessionId);
+                return sessionId;
+            }
+        } catch (java.util.NoSuchElementException e) {
+            // ADK 内存中不存在该会话，需要重建
+            log.info("ADK 会话不存在，尝试用原 sessionId 重建: sessionId={}, userId={}", sessionId, userId);
+        } catch (Exception e) {
+            log.warn("检查 ADK 会话异常，尝试重建: sessionId={}, userId={}", sessionId, userId, e);
+        }
+
+        // ADK 会话不存在 — 用原 sessionId 重建并回灌历史消息
+        return rebuildSession(runner, appName, agentId, userId, sessionId, scope);
+    }
+
+    /**
+     * 重建 ADK 会话 — 用原 sessionId 在 ADK 内存中恢复会话，并回灌历史消息。
+     * <p>
+     * 解决应用重启后 ADK InMemoryRunner 会话丢失的问题，
+     * 确保切换到历史会话时 agent 能获取到之前的对话上下文。
+     *
+     * @param runner           ADK 运行器
+     * @param appName          应用名称
+     * @param agentId          智能体ID
+     * @param userId           用户ID
+     * @param originalSessionId 原始会话ID
+     * @param scope            租户作用域
+     * @return 恢复后的会话ID（与 originalSessionId 相同）
+     */
+    private String rebuildSession(InMemoryRunner runner, String appName,
+                                  String agentId, String userId,
+                                  String originalSessionId, TenantScopeVO scope) {
+        // Step 1: 验证该 sessionId 在数据库中确实存在且属于该用户
+        ChatSessionEntity sessionEntity = chatHistoryRepository.querySession(originalSessionId, scope);
+        if (sessionEntity == null) {
+            log.warn("会话在数据库中不存在，创建新会话: sessionId={}, userId={}", originalSessionId, userId);
+            return createSession(agentId, userId);
+        }
+
+        // Step 2: 并发安全 — 再次检查是否已被其他线程重建
+        try {
+            Session existingSession = runner.sessionService()
+                    .getSession(appName, scope.getOwnerUserId(), originalSessionId, Optional.empty())
+                    .blockingGet();
+            if (existingSession != null) {
+                log.info("会话已被其他线程重建: sessionId={}", originalSessionId);
+                String sessionKey = scope.getTenantId() + ":" + scope.getOwnerUserId() + ":" + agentId;
+                userSessions.put(sessionKey, originalSessionId);
+                return originalSessionId;
+            }
+        } catch (Exception ignored) {
+            // 仍然不存在，继续重建
+        }
+
+        // Step 3: 用原 sessionId 在 ADK 内存中创建 session
+        Session newSession = runner.sessionService()
+                .createSession(appName, scope.getOwnerUserId(), new ConcurrentHashMap<>(), originalSessionId)
+                .blockingGet();
+
+        // Step 4: 从 chat_history 查出历史对话并回灌（限制条数 + 截断超长内容）
+        List<ChatHistoryEntity> histories = chatHistoryRepository.queryBySessionId(originalSessionId, scope);
+        int replayCount = Math.min(histories.size(), MAX_HISTORY_REPLAY);
+        for (int i = 0; i < replayCount; i++) {
+            ChatHistoryEntity history = histories.get(i);
+            // 回灌用户消息（问题通常较短，不截断）
+            appendHistoryEvent(runner, newSession, "user", history.getQuestion());
+            // 回灌助手消息（截断超长回复，防止历史中的自问自答污染新会话）
+            String answer = history.getAnswer();
+            if (answer != null && answer.length() > MAX_HISTORY_CHAR_LENGTH) {
+                answer = answer.substring(0, MAX_HISTORY_CHAR_LENGTH) + "...[历史回复已截断]";
+            }
+            appendHistoryEvent(runner, newSession, "model", answer);
+        }
+
+        // Step 5: 更新 Guava 缓存
+        String sessionKey = scope.getTenantId() + ":" + scope.getOwnerUserId() + ":" + agentId;
+        userSessions.put(sessionKey, originalSessionId);
+
+        log.info("ADK 会话已重建: sessionId={}, 回灌历史消息 {} 条(共 {} 条记录), userId={}",
+                originalSessionId, replayCount * 2, histories.size(), userId);
+
+        return originalSessionId;
+    }
+
+    /**
+     * 将一条历史消息作为 Event 追加到 ADK Session 中
+     *
+     * @param runner  ADK 运行器
+     * @param session 目标会话
+     * @param author  消息作者（"user" 或 "model"）
+     * @param text    消息文本内容
+     */
+    private void appendHistoryEvent(InMemoryRunner runner, Session session,
+                                    String author, String text) {
+        if (text == null || text.isBlank()) {
+            return;
+        }
+        Content content = Content.builder()
+                .role(author)
+                .parts(List.of(Part.fromText(text)))
+                .build();
+        Event event = Event.builder()
+                .author(author)
+                .content(Optional.of(content))
+                .build();
+        runner.sessionService().appendEvent(session, event).blockingGet();
     }
 
     private TenantScopeVO currentScope(String fallbackUserId) {

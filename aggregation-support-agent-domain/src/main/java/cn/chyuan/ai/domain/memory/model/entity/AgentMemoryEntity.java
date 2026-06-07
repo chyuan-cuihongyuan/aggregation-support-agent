@@ -102,4 +102,12 @@ public class AgentMemoryEntity {
      * 更新时间
      */
     private Instant updatedAt;
+
+    /**
+     * 向量检索相似度分数（非持久化字段，仅在搜索结果中填充）
+     * <p>
+     * 由 Milvus COSINE 度量直接返回，范围 [0, 1]，值越大越相似。
+     * 避免在 calculateMatch 中重复调用嵌入 API 计算余弦相似度。
+     */
+    private Double searchScore;
 }

@@ -72,13 +72,20 @@ public class ChatModelNode extends AbstractArmorySupport {
             }
         }
 
+        // 构建对话模型选项
+        OpenAiChatOptions.Builder optionsBuilder = OpenAiChatOptions.builder()
+                .model(chatModelConfig.getModel())
+                .toolCallbacks(toolCallbackList);
+
+        // 设置最大输出 token 数，防止模型无限生成
+        if (chatModelConfig.getMaxTokens() != null && chatModelConfig.getMaxTokens() > 0) {
+            optionsBuilder.maxTokens(chatModelConfig.getMaxTokens());
+        }
+
         // 构建对话模型
         ChatModel chatModel = OpenAiChatModel.builder()
                 .openAiApi(openAiApi)
-                .defaultOptions(OpenAiChatOptions.builder()
-                        .model(chatModelConfig.getModel())
-                        .toolCallbacks(toolCallbackList)
-                        .build())
+                .defaultOptions(optionsBuilder.build())
                 .build();
 
         dynamicContext.setChatModel(chatModel);

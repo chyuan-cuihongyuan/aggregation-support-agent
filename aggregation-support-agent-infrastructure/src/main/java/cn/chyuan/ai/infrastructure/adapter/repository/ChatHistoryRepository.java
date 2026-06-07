@@ -101,6 +101,12 @@ public class ChatHistoryRepository implements IChatHistoryRepository {
         return toSessionEntity(po);
     }
 
+    @Override
+    public List<ChatHistoryEntity> queryBySessionId(String sessionId, TenantScopeVO scope) {
+        List<ChatHistoryPO> poList = chatHistoryMapper.queryBySessionIdAndScope(sessionId, scope);
+        return poList.stream().map(this::toEntity).collect(Collectors.toList());
+    }
+
     private ChatHistoryEntity toEntity(ChatHistoryPO po) {
         return ChatHistoryEntity.builder()
                 .id(po.getId())

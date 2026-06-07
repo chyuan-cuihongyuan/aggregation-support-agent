@@ -89,4 +89,15 @@
           AND owner_user_id = #{scope.ownerUserId}
     </select>
 
+    <!-- 根据 sessionId 和租户作用域查询对话历史（按时间正序，用于会话重建时回灌消息） -->
+    <select id="queryBySessionIdAndScope" resultMap="ChatHistoryMap">
+        SELECT id, tenant_id, owner_user_id, user_id, agent_id, agent_name, session_id, question, answer,
+               trace_id, prompt_tokens, completion_tokens, create_time, update_time
+        FROM chat_history
+        WHERE session_id = #{sessionId}
+          AND tenant_id = #{scope.tenantId}
+          AND owner_user_id = #{scope.ownerUserId}
+        ORDER BY create_time ASC
+    </select>
+
 </mapper>

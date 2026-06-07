@@ -41,6 +41,14 @@ public class DashScopeEmbeddingGateway implements IEmbeddingService {
     private static final String BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings";
     private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
 
+    /** DashScope text-embedding-v4 输出维度 */
+    private static final int EMBEDDING_DIMENSION = 1024;
+
+    @Override
+    public int dimension() {
+        return EMBEDDING_DIMENSION;
+    }
+
     @Value("${dashscope.api.key}")
     private String apiKey;
 

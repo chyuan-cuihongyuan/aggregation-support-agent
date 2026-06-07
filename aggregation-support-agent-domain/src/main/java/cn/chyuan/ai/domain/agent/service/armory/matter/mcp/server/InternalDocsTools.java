@@ -61,7 +61,7 @@ public class InternalDocsTools {
      * @param query 自然语言查询文本，例如："支付服务 CPU 飙高的排查方案"
      * @return JSON 格式的检索结果，包含匹配文档内容、相似度分数和元数据
      */
-    @Tool(description = "查询内部运维文档知识库，通过语义检索获取与查询最相关的运维文档、故障案例、架构说明等资料")
+    @Tool(description = "查询内部知识库文档，通过语义检索获取与查询最相关的资料，包括但不限于：产品信息与价格、运维文档、故障案例、架构说明、技术规范、业务数据等。当用户询问任何可能存在于知识库中的具体信息时，都应使用此工具")
     public String queryInternalDocs(String query) {
         log.info("工具调用: 查询内部文档, query={}, topK={}", query, topK);
 

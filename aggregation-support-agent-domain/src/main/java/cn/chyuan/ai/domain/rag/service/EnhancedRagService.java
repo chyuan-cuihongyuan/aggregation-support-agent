@@ -120,6 +120,10 @@ public class EnhancedRagService implements IRagService {
     @Value("${knowledge-graph.search.default-depth}")
     private int graphDefaultDepth;
 
+    /** 融合后返回的候选数量（应大于 rerank topK，给 Rerank 留筛选空间） */
+    @Value("${rag.retrieval.fusion.top-k:10}")
+    private int fusionTopK;
+
     @Value("${rag.retrieval.timeout-ms}")
     private long retrievalTimeoutMs;
 
@@ -428,6 +432,8 @@ public class EnhancedRagService implements IRagService {
 
         // 写入收集器，便于 ChatService 出口取出 traceId 拼到响应
         RagSourceCollector.setTraceId(traceId);
+        // 记录检索元数据，供请求出口上报 RAG 检索日志到可观测性服务
+        RagSourceCollector.setRetrievalMeta(query, internal.rewriteQuery, topK);
 
         return SearchOutcomeVO.builder()
                 .traceId(traceId)
@@ -572,57 +578,58 @@ public class EnhancedRagService implements IRagService {
      * 多路召回（第三层） — 向量检索 + BM25检索 + 知识图谱检索并行执行
      */
     private List<VectorSearchResultVO> multiPathRetrieval(String query, int topK, TenantScopeVO scope) {
-        // 并行执行向量检索和BM25检索
+        // 收集所有并行检索任务
+        List<CompletableFuture<List<VectorSearchResultVO>>> allFutures = new ArrayList<>();
+        List<String> futureLabels = new ArrayList<>();
+
+        // 第一路：向量检索
         CompletableFuture<List<VectorSearchResultVO>> vectorFuture =
                 supplyRetrievalAsync(() -> vectorRetrieval(query, vectorTopK, scope));
+        allFutures.add(vectorFuture);
+        futureLabels.add("向量检索");
 
+        // 第二路：BM25检索
         CompletableFuture<List<VectorSearchResultVO>> bm25Future = bm25Enabled
                 ? supplyRetrievalAsync(() -> bm25Retrieval(query, bm25TopK, scope))
                 : CompletableFuture.completedFuture(Collections.emptyList());
+        allFutures.add(bm25Future);
+        futureLabels.add("BM25检索");
 
-        // 知识图谱检索（第三路）
+        // 第三路：知识图谱检索
         CompletableFuture<List<VectorSearchResultVO>> graphFuture =
                 (knowledgeGraphEnabled && knowledgeGraphService != null)
                 ? supplyRetrievalAsync(() -> graphRetrieval(query, graphEntityTopK))
                 : CompletableFuture.completedFuture(Collections.emptyList());
+        allFutures.add(graphFuture);
+        futureLabels.add("知识图谱检索");
 
-        // 设置超时时间，防止无限阻塞（默认30秒）
+        // 第四路：Multi-Query 扩展检索（每个扩展查询作为独立路径参与融合，避免双重融合）
+        List<CompletableFuture<List<VectorSearchResultVO>>> multiQueryFutures = new ArrayList<>();
+        if (multiQueryEnabled) {
+            multiQueryFutures = expandAndLaunchMultiQuery(query, vectorTopK, scope);
+            for (int i = 0; i < multiQueryFutures.size(); i++) {
+                allFutures.add(multiQueryFutures.get(i));
+                futureLabels.add("Multi-Query#" + (i + 1));
+            }
+        }
+
+        // 统一超时等待所有并行任务
         try {
-            CompletableFuture.allOf(vectorFuture, bm25Future, graphFuture)
+            CompletableFuture.allOf(allFutures.toArray(new CompletableFuture[0]))
                     .get(retrievalTimeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
         } catch (java.util.concurrent.TimeoutException e) {
             log.warn("多路检索超时，使用已完成的结果继续处理");
-            // 取消未完成的任务
-            vectorFuture.cancel(true);
-            bm25Future.cancel(true);
-            graphFuture.cancel(true);
+            allFutures.forEach(f -> f.cancel(true));
         } catch (Exception e) {
             log.error("多路检索异常: {}", e.getMessage());
         }
 
+        // 安全获取结果
         List<List<VectorSearchResultVO>> allResults = new ArrayList<>();
-
-        // 安全获取结果，已完成的Future会立即返回，未完成的返回空列表
-        List<VectorSearchResultVO> vectorResults = safeGetFutureResult(vectorFuture, "向量检索");
-        if (!vectorResults.isEmpty()) {
-            allResults.add(vectorResults);
-        }
-
-        List<VectorSearchResultVO> bm25Results = safeGetFutureResult(bm25Future, "BM25检索");
-        if (!bm25Results.isEmpty()) {
-            allResults.add(bm25Results);
-        }
-
-        List<VectorSearchResultVO> graphResults = safeGetFutureResult(graphFuture, "知识图谱检索");
-        if (!graphResults.isEmpty()) {
-            allResults.add(graphResults);
-        }
-
-        // Multi-Query扩展检索（如果启用）
-        if (multiQueryEnabled) {
-            List<VectorSearchResultVO> multiQueryResults = multiQueryRetrieval(query, vectorTopK, scope);
-            if (!multiQueryResults.isEmpty()) {
-                allResults.add(multiQueryResults);
+        for (int i = 0; i < allFutures.size(); i++) {
+            List<VectorSearchResultVO> result = safeGetFutureResult(allFutures.get(i), futureLabels.get(i));
+            if (!result.isEmpty()) {
+                allResults.add(result);
             }
         }
 
@@ -636,8 +643,30 @@ public class EnhancedRagService implements IRagService {
             return Collections.emptyList();
         }
 
-        // RRF融合
-        return resultFusionService.rrfFusion(allResults, topK);
+        // RRF融合 — 使用 fusionTopK 而非 topK，确保融合后候选数 > rerankTopK，让 Rerank 有筛选空间
+        return resultFusionService.rrfFusion(allResults, fusionTopK);
+    }
+
+    /**
+     * 扩展查询并启动并行检索 — 每个扩展查询返回独立的检索结果列表，
+     * 直接作为独立路径参与外层 RRF 融合，避免内层再融合一次导致分数被压低
+     */
+    private List<CompletableFuture<List<VectorSearchResultVO>>> expandAndLaunchMultiQuery(
+            String originalQuery, int topK, TenantScopeVO scope) {
+        try {
+            List<String> expandedQueries = queryOptimizationService.expandQuery(originalQuery, multiQueryCount);
+            if (expandedQueries == null || expandedQueries.isEmpty()) {
+                return Collections.emptyList();
+            }
+
+            int perQueryTopK = topK / expandedQueries.size() + 1;
+            return expandedQueries.stream()
+                    .map(q -> supplyRetrievalAsync(() -> vectorRetrieval(q, perQueryTopK, scope)))
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("Multi-Query扩展失败: {}", e.getMessage());
+            return Collections.emptyList();
+        }
     }
 
     /**
@@ -732,43 +761,6 @@ public class EnhancedRagService implements IRagService {
         }
     }
 
-    /**
-     * Multi-Query扩展检索 — 所有扩展查询并行执行
-     */
-    private List<VectorSearchResultVO> multiQueryRetrieval(String originalQuery, int topK, TenantScopeVO scope) {
-        try {
-            // 扩展查询
-            List<String> expandedQueries = queryOptimizationService.expandQuery(originalQuery, multiQueryCount);
-
-            // 并行执行所有扩展查询的向量检索
-            List<CompletableFuture<List<VectorSearchResultVO>>> futures = expandedQueries.stream()
-                    .map(q -> supplyRetrievalAsync(() -> vectorRetrieval(q, topK / expandedQueries.size() + 1, scope)))
-                    .collect(Collectors.toList());
-
-            try {
-                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                        .get(retrievalTimeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
-            } catch (java.util.concurrent.TimeoutException e) {
-                log.warn("Multi-Query检索超时，使用已完成结果");
-                futures.forEach(future -> {
-                    if (!future.isDone()) {
-                        future.cancel(true);
-                    }
-                });
-            }
-
-            List<List<VectorSearchResultVO>> multiResults = futures.stream()
-                    .map(future -> safeGetFutureResult(future, "Multi-Query检索"))
-                    .collect(Collectors.toList());
-
-            // 融合多Query结果
-            return resultFusionService.rrfFusion(multiResults, topK);
-        } catch (Exception e) {
-            log.error("Multi-Query检索失败: {}", e.getMessage());
-            return new ArrayList<>();
-        }
-    }
-
     private CompletableFuture<List<VectorSearchResultVO>> supplyRetrievalAsync(java.util.function.Supplier<List<VectorSearchResultVO>> supplier) {
         if (ragRetrievalExecutor != null) {
             return CompletableFuture.supplyAsync(supplier, ragRetrievalExecutor);
@@ -800,55 +792,6 @@ public class EnhancedRagService implements IRagService {
     private boolean isParentChildEnabled() {
         // 可以通过配置控制
         return false; // 暂时禁用，需要更多测试
-    }
-
-    /**
-     * 带Multi-Query的检索方法
-     */
-    public List<VectorSearchResultVO> searchWithMultiQuery(String query, int topK) {
-        log.info("Multi-Query检索: query={}, topK={}", query, topK);
-
-        // 1. Query扩展
-        List<String> expandedQueries = queryOptimizationService.expandQuery(query, multiQueryCount);
-        log.info("Query扩展结果: {}", expandedQueries);
-
-        // 2. 对每个查询进行向量检索
-        List<List<VectorSearchResultVO>> allResults = new ArrayList<>();
-        for (String expandedQuery : expandedQueries) {
-            List<VectorSearchResultVO> results = vectorRetrieval(expandedQuery, vectorTopK, null);
-            allResults.add(results);
-        }
-
-        // 3. RRF融合
-        List<VectorSearchResultVO> fusedResults = resultFusionService.rrfFusion(allResults, topK);
-
-        // 4. Rerank精排
-        if (rerankEnabled && rerankService != null && rerankService.isAvailable()) {
-            fusedResults = rerankService.rerank(query, fusedResults, topK);
-        }
-
-        return fusedResults;
-    }
-
-    /**
-     * 带HyDE的检索方法
-     */
-    public List<VectorSearchResultVO> searchWithHyDE(String query, int topK) {
-        log.info("HyDE检索: query={}, topK={}", query, topK);
-
-        // 1. 生成假设文档
-        String hypotheticalDoc = queryOptimizationService.generateHypotheticalDocument(query);
-        log.info("HyDE假设文档生成完成: length={}", hypotheticalDoc.length());
-
-        // 2. 用假设文档的向量检索
-        List<VectorSearchResultVO> results = vectorRetrieval(hypotheticalDoc, topK, null);
-
-        // 3. Rerank精排（使用原始query）
-        if (rerankEnabled && rerankService != null && rerankService.isAvailable()) {
-            results = rerankService.rerank(query, results, topK);
-        }
-
-        return results;
     }
 
     /**

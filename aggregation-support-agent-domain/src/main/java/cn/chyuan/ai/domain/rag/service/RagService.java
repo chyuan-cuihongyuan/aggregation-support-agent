@@ -241,6 +241,8 @@ public class RagService implements IRagService {
 
         // 写入收集器，便于 ChatService 出口取出 traceId 拼到响应
         RagSourceCollector.setTraceId(traceId);
+        // 记录检索元数据，供请求出口上报 RAG 检索日志到可观测性服务
+        RagSourceCollector.setRetrievalMeta(query, null, effectiveTopK);
 
         return SearchOutcomeVO.builder()
                 .traceId(traceId)

@@ -20,7 +20,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /**
  * 智谱 BigModel 嵌入模型网关 — 使用 OpenAI 兼容接口调用 embedding-3 模型计算文本向量
@@ -71,6 +70,11 @@ public class BigModelEmbeddingGateway implements IEmbeddingService {
             return new float[0];
         }
         return results.get(0);
+    }
+
+    @Override
+    public int dimension() {
+        return dimension;
     }
 
     /** 智谱嵌入 API 单次最大批量数 */

@@ -3,7 +3,6 @@ package cn.chyuan.ai.infrastructure.gateway.cache;
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
@@ -38,15 +37,11 @@ public class CachedEmbeddingService implements IEmbeddingService {
     /** 缓存实例 */
     private final Cache<String, float[]> cache;
 
-    /** 缓存命中次数 */
+    /** 缓存命中次数（唯一计数源，Micrometer 通过 Gauge 绑定读取） */
     private final AtomicLong hitCount = new AtomicLong(0);
 
-    /** 缓存未命中次数 */
+    /** 缓存未命中次数（唯一计数源，Micrometer 通过 Gauge 绑定读取） */
     private final AtomicLong missCount = new AtomicLong(0);
-
-    /** Micrometer 指标计数器（可选） */
-    private final io.micrometer.core.instrument.Counter micrometerHitCounter;
-    private final io.micrometer.core.instrument.Counter micrometerMissCounter;
 
     public CachedEmbeddingService(
             IEmbeddingService delegate,
@@ -62,28 +57,29 @@ public class CachedEmbeddingService implements IEmbeddingService {
                 .recordStats()
                 .build();
 
+        // Micrometer 指标统一通过 Gauge 绑定到 AtomicLong，单一计数源，避免双重计数语义不一致
         if (meterRegistry != null) {
             Gauge.builder("rag_embedding_cache_size", cache, c -> c.size())
                     .tag("model", this.modelName)
                     .description("当前缓存大小")
                     .register(meterRegistry);
-            Counter hitCounter = Counter.builder("rag_embedding_cache_hit_total")
+            Gauge.builder("rag_embedding_cache_hit_total", hitCount, AtomicLong::get)
                     .tag("model", this.modelName)
                     .description("缓存命中次数")
                     .register(meterRegistry);
-            Counter missCounter = Counter.builder("rag_embedding_cache_miss_total")
+            Gauge.builder("rag_embedding_cache_miss_total", missCount, AtomicLong::get)
                     .tag("model", this.modelName)
                     .description("缓存未命中次数")
                     .register(meterRegistry);
-            // 用包装的 AtomicLong 追踪，在 getStats 中同步到 Micrometer
-            this.micrometerHitCounter = hitCounter;
-            this.micrometerMissCounter = missCounter;
-        } else {
-            this.micrometerHitCounter = null;
-            this.micrometerMissCounter = null;
         }
 
         log.info("嵌入向量缓存初始化: maxSize={}, expireHours={}, modelName={}", maxSize, expireHours, this.modelName);
+    }
+
+    @Override
+    public int dimension() {
+        // 透传底层提供商维度，供降级链的维度兼容校验使用
+        return delegate.dimension();
     }
 
     @Override
@@ -98,14 +94,12 @@ public class CachedEmbeddingService implements IEmbeddingService {
         float[] cached = cache.getIfPresent(cacheKey);
         if (cached != null) {
             hitCount.incrementAndGet();
-            incrementMicrometer(micrometerHitCounter);
             log.debug("嵌入缓存命中: key={}", cacheKey.substring(0, Math.min(8, cacheKey.length())));
             return cached;
         }
 
         // 缓存未命中，调用实际服务
         missCount.incrementAndGet();
-        incrementMicrometer(micrometerMissCounter);
         float[] result = delegate.embed(text);
 
         // 存入缓存
@@ -140,11 +134,9 @@ public class CachedEmbeddingService implements IEmbeddingService {
 
             if (cached != null) {
                 hitCount.incrementAndGet();
-                incrementMicrometer(micrometerHitCounter);
                 results.add(cached);
             } else {
                 missCount.incrementAndGet();
-                incrementMicrometer(micrometerMissCounter);
                 results.add(null); // 占位
                 uncachedIndices.add(i);
                 uncachedTexts.add(text);
@@ -173,12 +165,6 @@ public class CachedEmbeddingService implements IEmbeddingService {
         }
 
         return results;
-    }
-
-    private void incrementMicrometer(io.micrometer.core.instrument.Counter counter) {
-        if (counter != null) {
-            counter.increment();
-        }
     }
 
     /**

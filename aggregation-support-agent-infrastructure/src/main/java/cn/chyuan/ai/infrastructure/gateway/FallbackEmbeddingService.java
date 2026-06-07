@@ -158,11 +158,23 @@ public class FallbackEmbeddingService implements IEmbeddingService {
      * 尝试所有备用提供商
      */
     private List<float[]> tryFallbacks(List<String> texts, IEmbeddingService excludeService) {
+        // 获取主提供商的维度，用于校验备用提供商兼容性
+        int primaryDimension = primary.dimension();
+
         for (IEmbeddingService fallback : fallbacks) {
             if (fallback == excludeService) {
                 continue;
             }
             String providerName = getProviderName(fallback);
+
+            // 维度校验：备用提供商维度必须与主提供商一致，否则跳过
+            int fallbackDimension = fallback.dimension();
+            if (primaryDimension > 0 && fallbackDimension > 0 && primaryDimension != fallbackDimension) {
+                log.warn("嵌入服务降级跳过: {} 维度({})与主提供商维度({})不兼容",
+                        providerName, fallbackDimension, primaryDimension);
+                continue;
+            }
+
             try {
                 log.info("嵌入服务降级: 从 {} 切换到 {}", getProviderName(activeService), providerName);
                 List<float[]> result = fallback.embedBatch(texts);
@@ -221,6 +233,34 @@ public class FallbackEmbeddingService implements IEmbeddingService {
             log.info("嵌入服务恢复为主提供商: {}", getProviderName(primary));
             activeService = primary;
         }
+    }
+
+    /**
+     * 探测主提供商是否已恢复 — 仅在当前处于降级状态时执行。
+     * <p>
+     * 用一条轻量探测文本调用主提供商，成功则切回主提供商，避免长期停留在备用提供商上。
+     * 由外部定时任务周期性调用。
+     *
+     * @return 探测后是否处于主提供商状态
+     */
+    public boolean attemptRecovery() {
+        // 未降级，无需探测
+        if (activeService == primary) {
+            return true;
+        }
+
+        try {
+            float[] probe = primary.embed("health check");
+            if (probe != null && probe.length > 0) {
+                log.info("主嵌入提供商探测成功，恢复为主提供商: {}", getProviderName(primary));
+                activeService = primary;
+                return true;
+            }
+            log.debug("主嵌入提供商探测返回空向量，保持降级状态");
+        } catch (Exception e) {
+            log.debug("主嵌入提供商探测失败，保持降级状态: {}", e.getMessage());
+        }
+        return false;
     }
 
     /**

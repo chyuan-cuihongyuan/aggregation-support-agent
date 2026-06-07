@@ -21,7 +21,6 @@ import io.milvus.param.R;
 import io.milvus.param.RpcStatus;
 import io.milvus.param.collection.CreateCollectionParam;
 import io.milvus.param.collection.FieldType;
-import io.milvus.param.collection.FlushParam;
 import io.milvus.param.collection.HasCollectionParam;
 import io.milvus.param.collection.LoadCollectionParam;
 import io.milvus.param.dml.DeleteParam;
@@ -311,20 +310,16 @@ public class AgentMemoryMilvusRepository implements IAgentMemoryRepository {
     public List<MemoryEntry> searchSimilar(String content, String tenantId, String userId, String scope, int limit) {
         // 获取内容的向量
         float[] embedding = embeddingService.embed(content);
-        
-        // 在 Milvus 中搜索
+
+        // 在 Milvus 中搜索（search() 已将 COSINE 相似度分数填充到 entity.searchScore）
         List<AgentMemoryEntity> results = search(embedding, tenantId, userId, scope, limit);
-        
-        // 计算相似度分数
+
+        // 直接使用 Milvus 返回的 COSINE 相似度分数，无需重新嵌入
         return results.stream()
-            .map(entry -> {
-                float[] entryEmbedding = getEmbedding(entry.getMemoryId());
-                double similarity = cosineSimilarity(embedding, entryEmbedding);
-                return MemoryEntry.builder()
-                    .entry(entry)
-                    .score(similarity)
-                    .build();
-            })
+            .map(entry -> MemoryEntry.builder()
+                .entry(entry)
+                .score(entry.getSearchScore() != null ? entry.getSearchScore() : 0.0)
+                .build())
             .filter(e -> e.getScore() > 0.7)
             .sorted((a, b) -> Double.compare(b.getScore(), a.getScore()))
             .collect(Collectors.toList());
@@ -383,8 +378,9 @@ public class AgentMemoryMilvusRepository implements IAgentMemoryRepository {
                     .importance(((Number) fieldValues.get(FIELD_IMPORTANCE)).floatValue())
                     .contentHash((String) fieldValues.get(FIELD_CONTENT_HASH))
                     .createdAt(Instant.ofEpochMilli(((Number) fieldValues.get(FIELD_CREATED_AT)).longValue()))
+                    .searchScore((double) score.getScore())  // Milvus COSINE 度量直接返回相似度分数，避免下游重复嵌入
                     .build();
-                
+
                 results.add(entity);
             }
             
@@ -441,12 +437,10 @@ public class AgentMemoryMilvusRepository implements IAgentMemoryRepository {
                 log.error("Agent Memory 向量插入失败: {}", insertResult.getMessage());
                 throw new RuntimeException("Agent Memory 向量插入失败: " + insertResult.getMessage());
             }
-            
-            // 刷新数据
-            milvusServiceClient.flush(FlushParam.newBuilder()
-                .withCollectionNames(List.of(COLLECTION_NAME))
-                .build());
-            
+
+            // 不手动 flush：Milvus 会周期性自动 flush，数据写入 growing segment 后即可被检索。
+            // 每次插入都同步 flush 会触发服务端 FlushRequest 限流（rate=0.1，每 10 秒 1 次）。
+
             log.debug("Agent Memory 向量插入成功: {}", entity.getMemoryId());
             
         } catch (Exception e) {
@@ -498,24 +492,6 @@ public class AgentMemoryMilvusRepository implements IAgentMemoryRepository {
                 .userId((String) row.get("user_id"))
                 .build())
             .collect(Collectors.toList());
-    }
-    
-    /**
-     * 计算余弦相似度
-     */
-    private double cosineSimilarity(float[] a, float[] b) {
-        if (a.length != b.length) {
-            return 0.0;
-        }
-        double dotProduct = 0;
-        double normA = 0;
-        double normB = 0;
-        for (int i = 0; i < a.length; i++) {
-            dotProduct += a[i] * b[i];
-            normA += a[i] * a[i];
-            normB += b[i] * b[i];
-        }
-        return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
     }
     
     /**

@@ -69,9 +69,16 @@ public class LostInTheMiddleReorderer {
     /**
      * 带权重的Lost in the Middle重排
      * <p>
-     * 根据chunk的相关度分数动态调整位置权重
+     * 根据chunk的相关度分数动态调整位置权重。
+     * 排列策略：
+     * <ul>
+     *   <li>头部（headWeight 比例）：放最相关的内容（rank 1, 2, ...）</li>
+     *   <li>尾部（tailWeight 比例）：放次相关的内容（紧跟 head 之后的部分）</li>
+     *   <li>中间（剩余部分）：放相关度最低的内容</li>
+     * </ul>
+     * 这样 LLM 在处理长上下文时，对首尾位置的高关注度能覆盖到最相关和次相关的内容。
      *
-     * @param results 原始检索结果
+     * @param results 原始检索结果（已按相关度排序，最相关在前）
      * @param headWeight 开头位置的权重（默认0.4）
      * @param tailWeight 结尾位置的权重（默认0.4）
      * @return 重排后的结果
@@ -96,28 +103,28 @@ public class LostInTheMiddleReorderer {
         // 确保各区域至少有1个元素
         if (headCount == 0) headCount = 1;
         if (tailCount == 0) tailCount = 1;
-        if (middleCount < 0) middleCount = 0;
+        if (middleCount < 0) {
+            // head + tail 超过总数时，压缩 tail
+            tailCount = size - headCount;
+            middleCount = 0;
+        }
 
         List<VectorSearchResultVO> reordered = new ArrayList<>();
 
-        // 头部：放最相关的内容
+        // 头部：放最相关的内容 results[0..headCount-1]
         for (int i = 0; i < headCount && i < size; i++) {
             reordered.add(results.get(i));
         }
 
-        // 尾部：放次相关的内容
-        List<VectorSearchResultVO> tailItems = new ArrayList<>();
-        for (int i = size - 1; i >= size - tailCount && i >= headCount; i--) {
-            tailItems.add(results.get(i));
-        }
-
-        // 中间：放剩余内容
-        for (int i = headCount; i < size - tailCount; i++) {
+        // 中间：放相关度最低的内容 results[headCount+tailCount..size-1]
+        for (int i = headCount + tailCount; i < size; i++) {
             reordered.add(results.get(i));
         }
 
-        // 添加尾部内容
-        reordered.addAll(tailItems);
+        // 尾部：放次相关的内容 results[headCount..headCount+tailCount-1]
+        for (int i = headCount; i < headCount + tailCount && i < size; i++) {
+            reordered.add(results.get(i));
+        }
 
         log.debug("带权重重排完成: headCount={}, middleCount={}, tailCount={}",
                 headCount, middleCount, tailCount);

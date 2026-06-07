@@ -17,7 +17,6 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
@@ -52,10 +51,19 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
                 log.debug("记忆已存在，跳过: {}", contentHash);
                 return;
             }
-            
-            // Step 2: LLM 提取原子事实
-            List<ExtractedFact> facts = extractionGateway.extractFacts(content);
-            
+
+            // Step 2: 提取事实
+            // EPISODE 类型（对话片段）本身就是完整语义单元，无需再调 LLM 拆分为原子事实，
+            // 直接整段存储以节省 LLM 调用成本（高频对话场景下尤为明显）。
+            List<ExtractedFact> facts;
+            if (options.getMemoryType() == MemoryType.EPISODE) {
+                facts = Collections.singletonList(
+                        ExtractedFact.builder().content(content).type(MemoryType.EPISODE).build());
+            } else {
+                // 其他类型（FACT/PREFERENCE/DECISION/KNOWLEDGE）调用 LLM 提取原子事实
+                facts = extractionGateway.extractFacts(content);
+            }
+
             for (ExtractedFact fact : facts) {
                 processFact(fact, options);
             }
@@ -122,10 +130,16 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
         }
     }
     
+    /** EPISODE 类型对话记忆的默认重要性（跳过 LLM 评估，给中等偏上权重） */
+    private static final float EPISODE_DEFAULT_IMPORTANCE = 0.6f;
+
     private void storeNewMemory(ExtractedFact fact, MemoryOptions options) {
         // Step 5: 评估重要性
-        Float importance = extractionGateway.assessImportance(fact.getContent());
-        
+        // EPISODE 类型跳过 LLM 重要性评估，使用默认值，避免高频对话场景的额外 LLM 调用
+        Float importance = (fact.getType() == MemoryType.EPISODE)
+                ? EPISODE_DEFAULT_IMPORTANCE
+                : extractionGateway.assessImportance(fact.getContent());
+
         // Step 6: 生成 Embedding
         String memoryId = UUID.randomUUID().toString();
         float[] embedding = embeddingService.embed(fact.getContent());
@@ -166,9 +180,22 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
     public List<MemoryMatch> recall(String query, RecallOptions options) {
         // 设置默认值
         applyDefaults(options);
-        
+
         // Step 1: 向量检索
         float[] queryEmbedding = embeddingService.embed(query);
+        return doRecall(query, queryEmbedding, options);
+    }
+
+    @Override
+    public List<MemoryMatch> recall(String query, float[] queryEmbedding, RecallOptions options) {
+        applyDefaults(options);
+        return doRecall(query, queryEmbedding, options);
+    }
+
+    /**
+     * 内部检索逻辑 — 复用 queryEmbedding，避免重复嵌入
+     */
+    private List<MemoryMatch> doRecall(String query, float[] queryEmbedding, RecallOptions options) {
         List<AgentMemoryEntity> candidates = memoryRepository.search(
             queryEmbedding,
             options.getTenantId(),
@@ -176,34 +203,77 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
             options.getScope(),
             options.getLimit() * 3  // 检索更多候选
         );
-        
-        // Step 2: 复合评分
+
+        // 降级路径优化：对所有缺失 searchScore 的候选，一次性批量嵌入，
+        // 避免对每条候选单独调用嵌入 API（候选数为 limit*3 时尤为关键）
+        Map<String, float[]> fallbackEmbeddings = batchEmbedMissingScores(candidates);
+
+        // 复合评分（优先使用 Milvus 返回的 searchScore，避免重新嵌入）
         List<MemoryMatch> results = candidates.stream()
-            .map(entry -> calculateMatch(entry, queryEmbedding, options))
+            .map(entry -> calculateMatch(entry, queryEmbedding, options, fallbackEmbeddings))
             .filter(match -> match.getScore() >= options.getMinScore())
             .sorted(Comparator.comparingDouble(MemoryMatch::getScore).reversed())
             .limit(options.getLimit())
             .collect(Collectors.toList());
-        
+
         return results;
     }
-    
-    private MemoryMatch calculateMatch(AgentMemoryEntity entry, 
-                                       float[] queryEmbedding, 
-                                       RecallOptions options) {
-        float[] entryEmbedding = embeddingService.embed(entry.getContent());
-        
-        double semanticScore = cosineSimilarity(queryEmbedding, entryEmbedding);
+
+    /**
+     * 对缺失 searchScore 的候选批量计算嵌入向量
+     * <p>
+     * 仅在存储后端（如 MySQL）无法提供向量相似度分数时触发。
+     * 通过一次 embedBatch 调用代替 N 次 embed 调用，显著降低降级路径成本。
+     *
+     * @return contentHash → 嵌入向量 的映射；若全部候选都有 searchScore 则返回空 Map
+     */
+    private Map<String, float[]> batchEmbedMissingScores(List<AgentMemoryEntity> candidates) {
+        List<AgentMemoryEntity> missing = candidates.stream()
+            .filter(c -> c.getSearchScore() == null)
+            .collect(Collectors.toList());
+
+        if (missing.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        List<String> texts = missing.stream()
+            .map(AgentMemoryEntity::getContent)
+            .collect(Collectors.toList());
+        List<float[]> vectors = embeddingService.embedBatch(texts);
+
+        Map<String, float[]> embeddingMap = new HashMap<>();
+        for (int i = 0; i < missing.size() && i < vectors.size(); i++) {
+            embeddingMap.put(missing.get(i).getContentHash(), vectors.get(i));
+        }
+        return embeddingMap;
+    }
+
+    private MemoryMatch calculateMatch(AgentMemoryEntity entry,
+                                       float[] queryEmbedding,
+                                       RecallOptions options,
+                                       Map<String, float[]> fallbackEmbeddings) {
+        // 优先使用 Milvus COSINE 度量返回的相似度分数，避免对每条候选重新调用嵌入 API
+        double semanticScore;
+        if (entry.getSearchScore() != null) {
+            semanticScore = entry.getSearchScore();
+        } else {
+            // 降级路径：从批量嵌入结果中取出对应向量，本地计算余弦相似度
+            float[] entryEmbedding = fallbackEmbeddings.get(entry.getContentHash());
+            semanticScore = entryEmbedding != null
+                    ? cosineSimilarity(queryEmbedding, entryEmbedding)
+                    : 0.0;
+        }
+
         double recencyScore = calculateRecencyScore(
-            entry.getCreatedAt(), 
+            entry.getCreatedAt(),
             options.getRecencyHalfLifeDays()
         );
         double importanceScore = entry.getImportance();
-        
+
         double compositeScore = options.getSemanticWeight() * semanticScore
                               + options.getRecencyWeight() * recencyScore
                               + options.getImportanceWeight() * importanceScore;
-        
+
         return MemoryMatch.builder()
             .entry(entry)
             .score(compositeScore)

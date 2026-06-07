@@ -76,6 +76,11 @@ public class AiAgentConfigTableVO {
 
             private String model;
 
+            /**
+             * 最大输出 token 数，防止模型无限生成
+             */
+            private Integer maxTokens;
+
             private List<ToolMcp> toolMcpList;
 
             private List<ToolSkills> toolSkillsList;

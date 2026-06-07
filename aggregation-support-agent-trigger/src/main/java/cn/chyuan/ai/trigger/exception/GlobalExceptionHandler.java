@@ -4,6 +4,7 @@ import cn.chyuan.ai.api.response.Response;
 import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
@@ -26,11 +27,17 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(AppException.class)
-    @ResponseStatus(HttpStatus.OK)
-    public Response<?> handleAppException(AppException e, HttpServletRequest request) {
+    public Object handleAppException(AppException e, HttpServletRequest request, HttpServletResponse response) {
         log.warn("业务异常 [{} {}]: code={}, info={}",
             request.getMethod(), request.getRequestURI(),
             e.getCode(), e.getInfo());
+
+        // SSE 响应已提交时，无法再写入 JSON（Content-Type 已是 text/event-stream）
+        if (response.isCommitted()) {
+            return null;
+        }
+
+        response.setStatus(HttpStatus.OK.value());
         return Response.builder()
                 .code(e.getCode())
                 .info(e.getInfo())
@@ -53,19 +60,23 @@ public class GlobalExceptionHandler {
                 .build();
     }
 
-    @ExceptionHandler(ConstraintViolationException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public Response<?> handleConstraintViolationException(ConstraintViolationException e, HttpServletRequest request) {
-        String message = e.getConstraintViolations().stream()
-                .map(ConstraintViolation::getMessage)
-                .collect(Collectors.joining("; "));
+    @ExceptionHandler(Exception.class)
+    public Object handleException(Exception e, HttpServletRequest request, HttpServletResponse response) {
+        log.error("系统异常 [{} {}]: {}",
+            request.getMethod(), request.getRequestURI(), e.getMessage(), e);
 
-        log.warn("参数约束校验失败 [{} {}]: {}",
-            request.getMethod(), request.getRequestURI(), message);
+        // SSE 响应已提交时（已开始发送事件），无法再写入 JSON 响应体
+        // Content-Type 已被设为 text/event-stream，强制写入 JSON 会触发
+        // HttpMessageNotWritableException: No converter for Response with preset Content-Type
+        if (response.isCommitted()) {
+            log.warn("响应已提交，跳过异常响应写入: {} {}", request.getMethod(), request.getRequestURI());
+            return null;
+        }
 
+        response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value());
         return Response.builder()
-                .code(ResponseCode.E1001.getCode())
-                .info("参数约束校验失败: " + message)
+                .code(ResponseCode.UN_ERROR.getCode())
+                .info("系统繁忙，请稍后重试")
                 .build();
     }
 
@@ -85,15 +96,19 @@ public class GlobalExceptionHandler {
                 .build();
     }
 
-    @ExceptionHandler(Exception.class)
-    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    public Response<?> handleException(Exception e, HttpServletRequest request) {
-        log.error("系统异常 [{} {}]: {}",
-            request.getMethod(), request.getRequestURI(), e.getMessage(), e);
+    @ExceptionHandler(ConstraintViolationException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Response<?> handleConstraintViolationException(ConstraintViolationException e, HttpServletRequest request) {
+        String message = e.getConstraintViolations().stream()
+                .map(ConstraintViolation::getMessage)
+                .collect(Collectors.joining("; "));
+
+        log.warn("参数约束校验失败 [{} {}]: {}",
+            request.getMethod(), request.getRequestURI(), message);
 
         return Response.builder()
-                .code(ResponseCode.UN_ERROR.getCode())
-                .info("系统繁忙，请稍后重试")
+                .code(ResponseCode.E1001.getCode())
+                .info("参数约束校验失败: " + message)
                 .build();
     }
 }

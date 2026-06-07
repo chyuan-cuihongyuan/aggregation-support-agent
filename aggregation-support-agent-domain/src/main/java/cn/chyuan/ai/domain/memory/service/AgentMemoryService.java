@@ -36,6 +36,19 @@ public interface AgentMemoryService {
      * @return 匹配的记忆列表
      */
     List<MemoryMatch> recall(String query, RecallOptions options);
+
+    /**
+     * 检索相关记忆（复用预计算的查询向量）
+     * <p>
+     * 当调用方需要对同一 query 多次调用 recall（如会话级 + agent 级两次检索），
+     * 可以提前计算 query embedding 并传入，避免重复调用嵌入 API。
+     *
+     * @param query           查询内容
+     * @param queryEmbedding  预计算的查询向量（由调用方通过 embeddingService.embed(query) 生成）
+     * @param options         检索选项
+     * @return 匹配的记忆列表
+     */
+    List<MemoryMatch> recall(String query, float[] queryEmbedding, RecallOptions options);
     
     /**
      * 遗忘 (软删除)

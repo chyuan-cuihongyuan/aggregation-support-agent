@@ -31,4 +31,10 @@ public interface ChatHistoryMapper {
 
     ChatSessionPO querySessionByScope(@Param("sessionId") String sessionId,
                                       @Param("scope") TenantScopeVO scope);
+
+    /**
+     * 根据 sessionId 和租户作用域查询对话历史（按时间正序，用于会话重建时回灌消息）
+     */
+    List<ChatHistoryPO> queryBySessionIdAndScope(@Param("sessionId") String sessionId,
+                                                  @Param("scope") TenantScopeVO scope);
 }

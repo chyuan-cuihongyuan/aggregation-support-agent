@@ -38,6 +38,8 @@ public class MySpringAI extends BaseLlm {
     private final ObjectMapper objectMapper;
     private final MessageConverter messageConverter;
     private final SpringAIObservabilityHandler observabilityHandler;
+
+    /** 标识该智能体是否配置了工具，有工具时走同步路径防止流式输出中自问自答 */
     private boolean hasConfiguredTools;
 
     public MySpringAI(ChatModel chatModel) {
@@ -154,10 +156,13 @@ public class MySpringAI extends BaseLlm {
                 return Flowable.error(new IllegalStateException("StreamingChatModel is not configured"));
             }
 
+            // 有工具配置的智能体走同步路径：chatModel.call() 一次性返回完整响应，
+            // 模型在 stop token 处自然结束，避免流式模式下的自问自答持续输出
             if ((hasConfiguredTools || hasTools(llmRequest)) && this.chatModel != null) {
                 return generateContent(llmRequest);
             }
 
+            // 无工具的纯对话智能体走流式路径
             return generateStreamingContent(llmRequest);
         } else {
             if (this.chatModel == null) {
@@ -274,15 +279,15 @@ public class MySpringAI extends BaseLlm {
                 BackpressureStrategy.BUFFER);
     }
 
-    private boolean hasTools(LlmRequest llmRequest) {
-        return llmRequest.tools() != null && !llmRequest.tools().isEmpty();
-    }
-
     private boolean hasToolCallbacks(Prompt prompt) {
         ChatOptions options = prompt.getOptions();
         return options instanceof ToolCallingChatOptions toolOptions
                 && toolOptions.getToolCallbacks() != null
                 && !toolOptions.getToolCallbacks().isEmpty();
+    }
+
+    private boolean hasTools(LlmRequest llmRequest) {
+        return llmRequest.tools() != null && !llmRequest.tools().isEmpty();
     }
 
     private boolean isEmptyResponse(LlmResponse llmResponse) {

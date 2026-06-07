@@ -7,6 +7,7 @@ import cn.chyuan.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.chyuan.ai.domain.agent.service.IChatService;
 import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.auth.support.RequestScopeContext;
+import cn.chyuan.ai.domain.rag.model.valobj.RagSourceVO;
 import cn.chyuan.ai.domain.rag.support.RagSourceCollector;
 import cn.chyuan.ai.infrastructure.utils.ObservabilityHelper;
 import cn.chyuan.ai.trigger.support.CurrentUserSupport;
@@ -26,6 +27,8 @@ import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
@@ -43,6 +46,10 @@ public class AgentServiceController implements IAgentService {
 
     @Resource
     private ObservabilityHelper observabilityHelper;
+
+    /** 记忆存储线程池 — 复用全局 memoryTaskExecutor，替代裸 Thread，避免高并发下线程爆炸 */
+    @Resource(name = "memoryTaskExecutor")
+    private org.springframework.core.task.AsyncTaskExecutor memoryTaskExecutor;
 
     @RequestMapping(value = "query_ai_agent_config_list", method = RequestMethod.GET)
     public Response<List<AiAgentConfigResponseDTO>> queryAiAgentConfigList() {
@@ -120,17 +127,24 @@ public class AgentServiceController implements IAgentService {
     @RequestMapping(value = "chat", method = RequestMethod.POST)
     public Response<ChatResponseDTO> chat(HttpServletRequest request, @RequestBody ChatRequestDTO requestDTO) {
         long start = System.currentTimeMillis();
+        String userId = null;
+        String sessionId = null;
         try {
-            String userId = CurrentUserSupport.requireUserIdString(request);
+            userId = CurrentUserSupport.requireUserIdString(request);
             log.info("智能体对话 agentId:{} userId:{}", requestDTO.getAgentId(), userId);
-            String sessionId = resolveSessionId(requestDTO.getSessionId(), requestDTO.getAgentId(), userId);
+            sessionId = resolveSessionId(requestDTO.getSessionId(), requestDTO.getAgentId(), userId);
+
+            // 确保 ADK 内存会话有效（处理应用重启后 session 丢失场景）
+            sessionId = chatService.ensureAdkSession(requestDTO.getAgentId(), userId, sessionId);
 
             List<String> messages;
             String traceId;
+            RagSourceCollector.Holder holder;
             try {
                 messages = chatService.handleMessage(requestDTO.getAgentId(), userId, sessionId, requestDTO.getMessage());
             } finally {
-                // 出口统一 drain，确保异常路径也清理 ThreadLocal
+                // 出口统一取出 Holder 快照后 drain，确保异常路径也清理 ThreadLocal
+                holder = RagSourceCollector.currentHolder();
                 traceId = RagSourceCollector.getTraceId();
                 RagSourceCollector.drain();
             }
@@ -139,7 +153,9 @@ public class AgentServiceController implements IAgentService {
             responseDTO.setContent(String.join("\n", messages));
             // traceId 和 sources 仅用于内部可观测性上报，不再返回给前端
 
-            observabilityHelper.reportChatResult(traceId, sessionId, userId, requestDTO.getMessage(), responseDTO.getContent(), "SUCCESS", (int)(System.currentTimeMillis() - start));
+            int costMs = (int) (System.currentTimeMillis() - start);
+            reportObservability(holder, traceId, sessionId, userId, requestDTO.getAgentId(),
+                    requestDTO.getMessage(), responseDTO.getContent(), "SUCCESS", costMs, null);
 
             return Response.<ChatResponseDTO>builder()
                     .code(ResponseCode.SUCCESS.getCode())
@@ -148,12 +164,16 @@ public class AgentServiceController implements IAgentService {
                     .build();
         } catch (AppException e) {
             log.error("智能体对话异常", e);
+            reportChatFailure(sessionId, userId, requestDTO.getAgentId(), requestDTO.getMessage(),
+                    (int) (System.currentTimeMillis() - start), e.getInfo());
             return Response.<ChatResponseDTO>builder()
                     .code(e.getCode())
                     .info(e.getInfo())
                     .build();
         } catch (Exception e) {
             log.error("智能体对话失败 agentId:{} userId:{}", requestDTO.getAgentId(), requestDTO.getUserId(), e);
+            reportChatFailure(sessionId, userId, requestDTO.getAgentId(), requestDTO.getMessage(),
+                    (int) (System.currentTimeMillis() - start), e.getMessage());
             return Response.<ChatResponseDTO>builder()
                     .code(ResponseCode.UN_ERROR.getCode())
                     .info(ResponseCode.UN_ERROR.getInfo())
@@ -161,22 +181,65 @@ public class AgentServiceController implements IAgentService {
         }
     }
 
+    /**
+     * 统一上报一次对话的可观测性数据：问答结果 + RAG 检索 + Agent 决策。
+     * holder 为空（未触发检索）时仍上报问答结果与决策，仅跳过检索上报。
+     */
+    private void reportObservability(RagSourceCollector.Holder holder, String traceId,
+                                     String sessionId, String userId, String agentId,
+                                     String question, String answer, String status,
+                                     int costMs, String errorMessage) {
+        try {
+            observabilityHelper.reportChatResult(traceId, sessionId, userId, question, answer, status, costMs);
+            if (holder != null && traceId != null && !traceId.isEmpty()) {
+                observabilityHelper.reportRagRetrieval(traceId, sessionId, userId,
+                        holder.getRetrievalQuery(), holder.getRewriteText(), holder.getTopK(),
+                        holder.snapshotSources(), costMs);
+            }
+            String branchType = (holder != null && !holder.getTraceId().isEmpty()) ? "RAG" : "DIRECT_ANSWER";
+            observabilityHelper.reportAgentDecision(traceId, sessionId, userId, null, agentId,
+                    question, branchType, status, costMs, errorMessage);
+        } catch (Exception e) {
+            log.debug("observability report failed: {}", e.getMessage());
+        }
+    }
+
+    /** 对话失败路径上报：无检索证据，仅上报问答结果(FAIL) + 决策 */
+    private void reportChatFailure(String sessionId, String userId, String agentId,
+                                   String question, int costMs, String errorMessage) {
+        try {
+            observabilityHelper.reportChatResult(null, sessionId, userId, question, "", "FAIL", costMs);
+            observabilityHelper.reportAgentDecision(null, sessionId, userId, null, agentId,
+                    question, "DIRECT_ANSWER", "FAIL", costMs, errorMessage);
+        } catch (Exception e) {
+            log.debug("observability fail report failed: {}", e.getMessage());
+        }
+    }
+
     @RequestMapping(value = "chat_stream", method = RequestMethod.POST, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter chatStream(HttpServletRequest request, @RequestBody ChatRequestDTO requestDTO) {
         SseEmitter emitter = new SseEmitter(3 * 60 * 1000L);
         RagSourceCollector.Holder requestHolder = null;
+        long start = System.currentTimeMillis();
         try {
             String userId = CurrentUserSupport.requireUserIdString(request);
             String agentId = requestDTO.getAgentId();
             String sessionId = resolveSessionId(requestDTO.getSessionId(), agentId, userId);
             String message = requestDTO.getMessage();
+            final String finalUserIdForReport = userId;
+            final String finalSessionIdForReport = sessionId;
+            final String finalAgentIdForReport = agentId;
             TenantScopeVO requestScope = TenantScopeSupport.currentScope(request);
             
             log.info("流式对话 agentId:{} userId:{} sessionId:{}", agentId, userId, sessionId);
-            emitter.send(SseEmitter.event().name("session").data(Collections.singletonMap("sessionId", sessionId)));
-            
+
+            // 在发送 SSE session 事件前，确保 ADK 内存会话有效（处理应用重启后 session 丢失场景）
+            final String effectiveSessionId = chatService.ensureAdkSession(agentId, userId, sessionId);
+
+            emitter.send(SseEmitter.event().name("session").data(Collections.singletonMap("sessionId", effectiveSessionId)));
+
             // handleMessageStream 内部在 HTTP 线程上调 RagSourceCollector.begin() 创建新 Holder，立刻取出引用
-            Flowable<Event> events = chatService.handleMessageStream(agentId, userId, sessionId, message);
+            Flowable<Event> events = chatService.handleMessageStream(agentId, userId, effectiveSessionId, message);
             requestHolder = RagSourceCollector.currentHolder();
             final RagSourceCollector.Holder holderRef = requestHolder;
             final TenantScopeVO scopeRef = requestScope;
@@ -186,8 +249,22 @@ public class AgentServiceController implements IAgentService {
             
             // 用于收集流式响应内容
             StringBuilder responseCollector = new StringBuilder();
-            
-            events
+
+            // 响应字符数硬限制：maxTokens * 2（约 1 token ≈ 2 个中文字符），防止无限输出
+            final int maxResponseChars = 16384;
+
+            // SSE 发送失败标志，用于在 emitter 已关闭时取消 RxJava 订阅
+            AtomicBoolean emitterClosed = new AtomicBoolean(false);
+
+            // 注册 emitter 超时/错误回调，标记已关闭
+            emitter.onTimeout(() -> emitterClosed.set(true));
+            emitter.onError(e -> emitterClosed.set(true));
+
+            // 使用 AtomicReference 持有 Disposable，解决 lambda 内引用问题
+            AtomicReference<io.reactivex.rxjava3.disposables.Disposable> disposableRef =
+                    new AtomicReference<>();
+
+            disposableRef.set(events
                     // 订阅链运行在 RxJava IO worker 上：进入时把 Holder 和租户作用域注入子线程 ThreadLocal，
                     // 让链路里的工具调用 append() / setTraceId() / RequestScopeContext.get() 都能拿到正确上下文
                     .doOnSubscribe(s -> {
@@ -201,6 +278,10 @@ public class AgentServiceController implements IAgentService {
                     .subscribeOn(Schedulers.io())
                     .subscribe(
                             event -> {
+                                // 如果 emitter 已关闭（超时/客户端断开），取消订阅停止消费事件
+                                if (emitterClosed.get()) {
+                                    return;
+                                }
                                 try {
                                     StringBuilder sb = new StringBuilder();
                                     event.content().ifPresent(c ->
@@ -216,15 +297,54 @@ public class AgentServiceController implements IAgentService {
                                         )
                                     );
                                     if (sb.length() > 0) {
+                                        // 累计响应字符数硬限制检查，超限强制关闭 SSE 流
+                                        if (responseCollector.length() + sb.length() > maxResponseChars) {
+                                            log.warn("流式响应超过字符数限制({} chars)，强制截断。agentId:{}", maxResponseChars, agentId);
+                                            emitterClosed.set(true);
+                                            emitter.send(SseEmitter.event().data("[响应已截断]"));
+                                            emitter.complete();
+                                            io.reactivex.rxjava3.disposables.Disposable d = disposableRef.get();
+                                            if (d != null && !d.isDisposed()) {
+                                                d.dispose();
+                                            }
+                                            return;
+                                        }
                                         // 收集响应内容用于记忆存储
                                         responseCollector.append(sb).append("\n");
                                         emitter.send(SseEmitter.event().data(sb.toString()));
                                     }
                                 } catch (Exception e) {
-                                    log.error("流式对话发送失败", e);
+                                    // emitter.send() 失败：IllegalStateException(已完成) / IOException(Broken pipe) / 等
+                                    // 统一处理：标记关闭 + 取消订阅，防止后端继续消费 ADK 事件
+                                    if (!emitterClosed.getAndSet(true)) {
+                                        io.reactivex.rxjava3.disposables.Disposable d = disposableRef.get();
+                                        if (d != null && !d.isDisposed()) {
+                                            d.dispose();
+                                        }
+                                        log.debug("SSE 发送失败，取消 RxJava 订阅: {}", e.getMessage());
+                                    }
                                 }
                             },
                             err -> {
+                                try {
+                                    String traceId = holderRef == null ? "" : holderRef.getTraceId();
+                                    List<RagSourceVO> sources = holderRef == null ? null : holderRef.snapshotSources();
+                                    String rewriteText = holderRef == null ? null : holderRef.getRewriteText();
+                                    Integer topK = holderRef == null ? null : holderRef.getTopK();
+                                    int costMs = (int) (System.currentTimeMillis() - start);
+                                    observabilityHelper.reportChatResult(traceId, finalSessionIdForReport,
+                                            finalUserIdForReport, message, "", "FAIL", costMs);
+                                    if (traceId != null && !traceId.isEmpty()) {
+                                        observabilityHelper.reportRagRetrieval(traceId, finalSessionIdForReport,
+                                                finalUserIdForReport, message, rewriteText, topK, sources, costMs);
+                                    }
+                                    observabilityHelper.reportAgentDecision(traceId, finalSessionIdForReport,
+                                            finalUserIdForReport, null, finalAgentIdForReport, message,
+                                            (traceId != null && !traceId.isEmpty()) ? "RAG" : "DIRECT_ANSWER",
+                                            "FAIL", costMs, err.getMessage());
+                                } catch (Exception reportErr) {
+                                    log.debug("流式对话失败上报异常: {}", reportErr.getMessage());
+                                }
                                 RagSourceCollector.drainHolder(holderRef);
                                 emitter.completeWithError(err);
                             },
@@ -232,41 +352,70 @@ public class AgentServiceController implements IAgentService {
                                 try {
                                     // 内部收集 traceId 和 sources 仅用于可观测性上报，不再发送给前端
                                     String traceId = holderRef == null ? "" : holderRef.getTraceId();
+                                    List<RagSourceVO> sources = holderRef == null ? null : holderRef.snapshotSources();
+                                    String rewriteText = holderRef == null ? null : holderRef.getRewriteText();
+                                    Integer topK = holderRef == null ? null : holderRef.getTopK();
+                                    String fullAnswer = responseCollector.toString().trim();
+                                    int costMs = (int) (System.currentTimeMillis() - start);
                                     RagSourceCollector.drainHolder(holderRef);
+
+                                    // 上报问答结果 + RAG 检索 + Agent 决策
+                                    try {
+                                        observabilityHelper.reportChatResult(traceId, finalSessionIdForReport,
+                                                finalUserIdForReport, message, fullAnswer, "SUCCESS", costMs);
+                                        if (traceId != null && !traceId.isEmpty()) {
+                                            observabilityHelper.reportRagRetrieval(traceId, finalSessionIdForReport,
+                                                    finalUserIdForReport, message, rewriteText, topK, sources, costMs);
+                                        }
+                                        observabilityHelper.reportAgentDecision(traceId, finalSessionIdForReport,
+                                                finalUserIdForReport, null, finalAgentIdForReport, message,
+                                                (traceId != null && !traceId.isEmpty()) ? "RAG" : "DIRECT_ANSWER",
+                                                "SUCCESS", costMs, null);
+                                    } catch (Exception reportErr) {
+                                        log.debug("流式对话成功上报异常: {}", reportErr.getMessage());
+                                    }
 
                                     // 异步存储对话记忆
                                     String fullResponse = responseCollector.toString().trim();
                                     if (!fullResponse.isEmpty()) {
                                         final String finalAgentId = agentId;
                                         final String finalUserId = userId;
-                                        final String finalSessionId = sessionId;
                                         final String finalMessage = message;
                                         final TenantScopeVO finalScope = scopeRef;
-                                        // 使用独立线程存储记忆，避免阻塞 SSE 完成
-                                        new Thread(() -> {
+                                        // 提交到记忆线程池存储，避免阻塞 SSE 完成，同时复用线程池防止高并发下线程爆炸
+                                        memoryTaskExecutor.execute(() -> {
                                             RequestScopeContext.attach(finalScope);
                                             try {
                                                 chatService.storeStreamConversationMemory(
-                                                    finalUserId, finalAgentId, finalSessionId, 
+                                                    finalUserId, finalAgentId, effectiveSessionId,
                                                     finalMessage, fullResponse);
                                             } catch (Exception e) {
                                                 log.warn("流式对话记忆存储失败", e);
                                             } finally {
                                                 RequestScopeContext.clear();
                                             }
-                                        }, "memory-store-stream").start();
+                                        });
                                     }
                                 } catch (Exception sendErr) {
                                     log.warn("流式对话完成处理失败", sendErr);
                                 }
                                 emitter.complete();
                             }
-                    );
+                    )
+            );
         } catch (Exception e) {
             log.error("流式对话失败", e);
             RagSourceCollector.drainHolder(requestHolder);
             RagSourceCollector.detach();
-            emitter.completeWithError(e);
+            // 通过 SSE error 事件通知客户端，而非 completeWithError
+            // completeWithError 会触发 Tomcat 异步错误分发，因 Content-Type 已是 text/event-stream
+            // 导致 GlobalExceptionHandler 尝试写 JSON 时再次异常（No converter for text/event-stream）
+            try {
+                emitter.send(SseEmitter.event().name("error").data("系统繁忙，请稍后重试"));
+            } catch (Exception ignored) {
+                // 客户端可能已断开连接，忽略发送失败
+            }
+            emitter.complete();
         }
         return emitter;
     }

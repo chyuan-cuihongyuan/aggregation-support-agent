@@ -99,6 +99,38 @@ public class EmbeddingFallbackConfig {
     }
 
     /**
+     * 嵌入降级自动恢复探测器 — 周期性探测主提供商是否恢复，恢复后自动切回。
+     * <p>
+     * 仅当注入的 @Primary 嵌入服务确为 FallbackEmbeddingService 时才生效。
+     */
+    @Bean
+    public EmbeddingRecoveryProbe embeddingRecoveryProbe(IEmbeddingService fallbackEmbeddingService) {
+        return new EmbeddingRecoveryProbe(fallbackEmbeddingService);
+    }
+
+    /**
+     * 定时探测组件 — 作为 Spring Bean 承载 @Scheduled，调用 FallbackEmbeddingService 的恢复探测
+     */
+    public static class EmbeddingRecoveryProbe {
+
+        private final FallbackEmbeddingService fallbackService;
+
+        public EmbeddingRecoveryProbe(IEmbeddingService embeddingService) {
+            this.fallbackService = embeddingService instanceof FallbackEmbeddingService
+                    ? (FallbackEmbeddingService) embeddingService
+                    : null;
+        }
+
+        /** 每 5 分钟探测一次主提供商是否恢复 */
+        @org.springframework.scheduling.annotation.Scheduled(fixedDelayString = "${embedding.fallback.recovery-probe-ms:300000}")
+        public void probe() {
+            if (fallbackService != null) {
+                fallbackService.attemptRecovery();
+            }
+        }
+    }
+
+    /**
      * 根据配置构建备用提供商链
      */
     private List<IEmbeddingService> buildFallbackChain() {
