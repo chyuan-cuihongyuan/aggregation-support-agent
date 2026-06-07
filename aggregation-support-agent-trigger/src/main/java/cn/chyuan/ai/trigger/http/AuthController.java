@@ -8,6 +8,7 @@ import cn.chyuan.ai.domain.audit.service.IAuditLogService;
 import cn.chyuan.ai.domain.auth.model.entity.UserEntity;
 import cn.chyuan.ai.domain.auth.service.IAuthService;
 import cn.chyuan.ai.domain.auth.service.ITokenService;
+import cn.chyuan.ai.trigger.config.AuthCookieProperties;
 import cn.chyuan.ai.trigger.filter.JwtAuthFilter;
 import cn.chyuan.ai.trigger.support.AuditContextSupport;
 import cn.chyuan.ai.types.enums.AuditAction;
@@ -39,8 +40,8 @@ public class AuthController {
     @Resource
     private IAuditLogService auditLogService;
 
-    private static final String COOKIE_NAME = "auth_token";
-    private static final int COOKIE_MAX_AGE = 24 * 60 * 60;
+    @Resource
+    private AuthCookieProperties authCookieProperties;
 
     /**
      * 用户登录
@@ -147,7 +148,7 @@ public class AuthController {
             tokenService.removeToken(token);
         }
 
-        response.setHeader("Set-Cookie", String.format("%s=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict", COOKIE_NAME));
+        response.setHeader("Set-Cookie", buildCookieHeader("", 0));
 
         // 登出审计 — userId/username 从 request attr 读取，失败兜底
         Object uidAttr = request.getAttribute(JwtAuthFilter.ATTR_USER_ID);
@@ -183,8 +184,34 @@ public class AuthController {
     }
 
     private void setAuthCookie(HttpServletResponse response, String token) {
-        response.setHeader("Set-Cookie", String.format("%s=%s; Path=/; Max-Age=%d; HttpOnly; Secure; SameSite=Strict",
-                COOKIE_NAME, token, COOKIE_MAX_AGE));
+        response.setHeader("Set-Cookie", buildCookieHeader(token, authCookieProperties.getMaxAge()));
+    }
+
+    private String buildCookieHeader(String value, int maxAge) {
+        StringBuilder header = new StringBuilder();
+        header.append(authCookieProperties.getName())
+                .append("=")
+                .append(value == null ? "" : value)
+                .append("; Path=")
+                .append(normalizeCookiePath(authCookieProperties.getPath()))
+                .append("; Max-Age=")
+                .append(maxAge);
+
+        if (authCookieProperties.isHttpOnly()) {
+            header.append("; HttpOnly");
+        }
+        if (authCookieProperties.isSecure()) {
+            header.append("; Secure");
+        }
+        if (authCookieProperties.getSameSite() != null && !authCookieProperties.getSameSite().isEmpty()) {
+            header.append("; SameSite=").append(authCookieProperties.getSameSite());
+        }
+
+        return header.toString();
+    }
+
+    private String normalizeCookiePath(String path) {
+        return (path == null || path.isEmpty()) ? "/" : path;
     }
 
     private UserInfoDTO toUserInfoDTO(UserEntity entity) {

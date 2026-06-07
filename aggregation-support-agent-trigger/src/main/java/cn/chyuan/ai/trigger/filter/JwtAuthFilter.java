@@ -3,6 +3,7 @@ package cn.chyuan.ai.trigger.filter;
 import cn.chyuan.ai.domain.auth.service.TokenService;
 import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.auth.support.RequestScopeContext;
+import cn.chyuan.ai.trigger.config.AuthCookieProperties;
 import io.jsonwebtoken.Claims;
 import jakarta.annotation.Resource;
 import jakarta.servlet.FilterChain;
@@ -32,6 +33,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     @Resource
     private TokenService tokenService;
+
+    @Resource
+    private AuthCookieProperties authCookieProperties;
 
     private static final Set<String> WHITE_LIST = new HashSet<>(Arrays.asList(
             "/api/v1/auth/register",
@@ -92,7 +96,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         Cookie[] cookies = request.getCookies();
         if (cookies == null) return null;
         for (Cookie cookie : cookies) {
-            if ("auth_token".equals(cookie.getName())) {
+            if (authCookieProperties.getName().equals(cookie.getName())) {
                 return cookie.getValue();
             }
         }
