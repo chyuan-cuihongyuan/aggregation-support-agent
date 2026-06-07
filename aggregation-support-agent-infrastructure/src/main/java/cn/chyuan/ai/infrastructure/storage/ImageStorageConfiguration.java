@@ -1,8 +1,8 @@
 package cn.chyuan.ai.infrastructure.storage;
 
 import cn.chyuan.ai.domain.storage.service.IImageStorageService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
@@ -13,11 +13,13 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class ImageStorageConfiguration {
 
-    private final LocalImageStorageService localImageStorageService;
-    private final CosImageStorageService cosImageStorageService;
+    @Autowired
+    private LocalImageStorageService localImageStorageService;
+
+    @Autowired(required = false)
+    private CosImageStorageService cosImageStorageService;
 
     /**
      * 本地文件系统存储服务（Primary当provider=local时）
