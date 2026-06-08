@@ -7,6 +7,7 @@ import cn.chyuan.ai.domain.rag.model.valobj.RagSourceVO;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
@@ -60,6 +61,22 @@ public final class RagSourceCollector {
         /** 当前请求的租户作用域，供工具跨线程执行时兜底恢复 */
         private final TenantScopeVO tenantScope;
 
+        // ========== 新增：可观测性增强字段 ==========
+        /** Token 消耗：Prompt Token 数 */
+        private volatile int promptTokens = 0;
+        /** Token 消耗：Completion Token 数 */
+        private volatile int completionTokens = 0;
+        /** 模型版本 */
+        private volatile String modelVersion = null;
+        /** Agent Thought（推理过程） */
+        private volatile String agentThought = null;
+        /** 工具调用记录列表 */
+        private final CopyOnWriteArrayList<Map<String, Object>> toolCalls = new CopyOnWriteArrayList<>();
+        /** 工具调用重试次数 */
+        private volatile int toolRetryTimes = 0;
+        /** 记忆检索结果 */
+        private volatile Map<String, Object> memoryRecallResult = null;
+
         private Holder(TenantScopeVO tenantScope) {
             this.tenantScope = RequestScopeContext.copyOf(tenantScope);
         }
@@ -83,6 +100,66 @@ public final class RagSourceCollector {
 
         public TenantScopeVO getTenantScope() {
             return RequestScopeContext.copyOf(tenantScope);
+        }
+
+        // ========== 新增：可观测性增强字段的 getter/setter ==========
+
+        public int getPromptTokens() {
+            return promptTokens;
+        }
+
+        public void setPromptTokens(int promptTokens) {
+            this.promptTokens = promptTokens;
+        }
+
+        public int getCompletionTokens() {
+            return completionTokens;
+        }
+
+        public void setCompletionTokens(int completionTokens) {
+            this.completionTokens = completionTokens;
+        }
+
+        public String getModelVersion() {
+            return modelVersion;
+        }
+
+        public void setModelVersion(String modelVersion) {
+            this.modelVersion = modelVersion;
+        }
+
+        public String getAgentThought() {
+            return agentThought;
+        }
+
+        public void setAgentThought(String agentThought) {
+            this.agentThought = agentThought;
+        }
+
+        public List<Map<String, Object>> getToolCalls() {
+            return new ArrayList<>(toolCalls);
+        }
+
+        public void addToolCall(Map<String, Object> toolCall) {
+            if (toolCall != null) {
+                this.toolCalls.add(toolCall);
+            }
+        }
+
+        public int getToolRetryTimes() {
+            return toolRetryTimes;
+        }
+
+        public void setToolRetryTimes(int toolRetryTimes) {
+            this.toolRetryTimes = toolRetryTimes;
+        }
+
+        public Map<String, Object> getMemoryRecallResult() {
+            return memoryRecallResult;
+        }
+
+        public void setMemoryRecallResult(Map<String, Object> memoryRecallResult) {
+            this.memoryRecallResult = memoryRecallResult;
         }
 
         /** 内部追加方法 — null/空集合被忽略 */

@@ -194,6 +194,14 @@ public class MySpringAI extends BaseLlm {
             int outputTokens = extractOutputTokenCount(chatResponse);
 
             observabilityHandler.recordSuccess(context, totalTokens, inputTokens, outputTokens);
+
+            // 新增：写入 Holder，供可观测性上报
+            if (holder != null) {
+                holder.setPromptTokens(inputTokens);
+                holder.setCompletionTokens(outputTokens);
+                holder.setModelVersion(model());
+            }
+
             return Flowable.just(llmResponse);
         } catch (Exception e) {
             observabilityHandler.recordError(context, e);

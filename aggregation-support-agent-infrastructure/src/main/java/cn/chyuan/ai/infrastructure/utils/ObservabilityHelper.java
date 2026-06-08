@@ -26,14 +26,29 @@ public class ObservabilityHelper {
                                      String tenantId, String agentId, String userQuery,
                                      String branchType, String status, Integer costTimeMs,
                                      String errorMessage) {
+        reportAgentDecision(traceId, sessionId, userId, tenantId, agentId, userQuery,
+                null, null, null, branchType, null, 0, 0, status, costTimeMs, null, errorMessage);
+    }
+
+    public void reportAgentDecision(String traceId, String sessionId, String userId,
+                                     String tenantId, String agentId, String userQuery,
+                                     String intentType, String selectedToolList,
+                                     String decisionReason, String branchType,
+                                     String planSteps, Integer toolCallTimes,
+                                     Integer toolRetryTimes, String status,
+                                     Integer costTimeMs, String modelVersion,
+                                     String errorMessage) {
         try {
             AgentDecisionReport report = AgentDecisionReport.builder()
                     .traceId(traceId).sourceService(SOURCE_SERVICE)
                     .tenantId(tenantId).ownerUserId(userId)
                     .sessionId(sessionId).agentId(agentId)
-                    .userQuery(userQuery).branchType(branchType)
+                    .userQuery(userQuery).intentType(intentType)
+                    .selectedToolList(selectedToolList).decisionReason(decisionReason)
+                    .branchType(branchType).planSteps(planSteps)
+                    .toolCallTimes(toolCallTimes).toolRetryTimes(toolRetryTimes)
                     .agentStatus(status).costTimeMs(costTimeMs)
-                    .errorMessage(errorMessage).build();
+                    .modelVersion(modelVersion).errorMessage(errorMessage).build();
             observabilityClient.reportAgentDecision(report);
         } catch (Exception e) {
             log.debug("observability report failed: {}", e.getMessage());
@@ -43,12 +58,21 @@ public class ObservabilityHelper {
     public void reportChatResult(String traceId, String sessionId, String userId,
                                   String question, String answer, String status,
                                   Integer costTimeMs) {
+        reportChatResult(traceId, sessionId, userId, question, answer, 0, 0, status, costTimeMs, null);
+    }
+
+    public void reportChatResult(String traceId, String sessionId, String userId,
+                                  String question, String answer,
+                                  Integer promptTokens, Integer completionTokens,
+                                  String status, Integer costTimeMs, String modelVersion) {
         try {
             ChatResultReport report = ChatResultReport.builder()
                     .traceId(traceId).sourceService(SOURCE_SERVICE)
                     .ownerUserId(userId).sessionId(sessionId)
                     .question(question).answer(answer)
-                    .finalStatus(status).totalCostTimeMs(costTimeMs).build();
+                    .promptTokens(promptTokens).completionTokens(completionTokens)
+                    .finalStatus(status).totalCostTimeMs(costTimeMs)
+                    .modelVersion(modelVersion).build();
             observabilityClient.reportChatResult(report);
         } catch (Exception e) {
             log.debug("observability report failed: {}", e.getMessage());
@@ -62,6 +86,13 @@ public class ObservabilityHelper {
     public void reportRagRetrieval(String traceId, String sessionId, String userId,
                                    String queryText, String rewriteText, Integer topK,
                                    List<RagSourceVO> sources, Integer costTimeMs) {
+        reportRagRetrieval(traceId, sessionId, userId, queryText, rewriteText, topK, sources, costTimeMs, null, null);
+    }
+
+    public void reportRagRetrieval(String traceId, String sessionId, String userId,
+                                   String queryText, String rewriteText, Integer topK,
+                                   List<RagSourceVO> sources, Integer costTimeMs,
+                                   String retrievalStages, String ragStrategyVersion) {
         if (traceId == null || traceId.isEmpty()) {
             return;
         }
@@ -84,7 +115,9 @@ public class ObservabilityHelper {
                     .retrievalTopk(topK).retrievalCount(count)
                     .sourceDocs(sourceDocs).rerankScores(rerankScores)
                     .emptyRetrieval(count == 0 ? 1 : 0)
-                    .retrievalCostMs(costTimeMs).build();
+                    .retrievalCostMs(costTimeMs)
+                    .retrievalStages(retrievalStages)
+                    .ragStrategyVersion(ragStrategyVersion).build();
             observabilityClient.reportRagRetrieval(report);
         } catch (Exception e) {
             log.debug("observability rag retrieval report failed: {}", e.getMessage());

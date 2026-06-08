@@ -10,6 +10,7 @@ import org.springframework.ai.tool.metadata.ToolMetadata;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -84,6 +85,12 @@ public final class ScopedToolCallback implements ToolCallback {
 
         TenantScopeVO previousScope = RequestScopeContext.snapshot();
         RagSourceCollector.Holder previousHolder = RagSourceCollector.currentHolder();
+
+        long startTime = System.currentTimeMillis();
+        String toolOutput = null;
+        String status = "SUCCESS";
+        String errorMessage = null;
+
         try {
             if (tenantScope != null) {
                 RequestScopeContext.attach(tenantScope);
@@ -91,10 +98,28 @@ public final class ScopedToolCallback implements ToolCallback {
             if (holder != null) {
                 RagSourceCollector.attach(holder);
             }
-            return delegate.call(toolInput, toolContext);
+            toolOutput = delegate.call(toolInput, toolContext);
+            return toolOutput;
         } catch (RuntimeException e) {
+            status = "FAIL";
+            errorMessage = e.getMessage();
             return toolError(e);
         } finally {
+            long costTimeMs = System.currentTimeMillis() - startTime;
+
+            // 记录工具调用详情到 Holder
+            if (holder != null) {
+                Map<String, Object> toolCallRecord = new LinkedHashMap<>();
+                toolCallRecord.put("toolName", delegate.getToolDefinition().name());
+                toolCallRecord.put("toolInput", truncate(toolInput, 500));
+                toolCallRecord.put("toolOutput", truncate(toolOutput, 500));
+                toolCallRecord.put("costTimeMs", (int) costTimeMs);
+                toolCallRecord.put("status", status);
+                toolCallRecord.put("errorMessage", errorMessage);
+                toolCallRecord.put("callOrder", holder.getToolCalls().size() + 1);
+                holder.addToolCall(toolCallRecord);
+            }
+
             RequestScopeContext.attach(previousScope);
             RagSourceCollector.attach(previousHolder);
         }
@@ -144,5 +169,10 @@ public final class ScopedToolCallback implements ToolCallback {
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")
                 .replace("\r", "\\r");
+    }
+
+    private String truncate(String text, int maxLength) {
+        if (text == null) return null;
+        return text.length() > maxLength ? text.substring(0, maxLength) + "..." : text;
     }
 }

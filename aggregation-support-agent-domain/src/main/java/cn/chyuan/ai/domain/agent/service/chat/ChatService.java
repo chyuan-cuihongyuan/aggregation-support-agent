@@ -34,6 +34,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -372,6 +373,7 @@ public class ChatService implements IChatService {
      * 优化：query 只嵌入一次，复用给两次 recall 调用，避免重复 API 调用。
      */
     private String buildMemoryContext(String userId, String agentId, String sessionId, String message) {
+        long startTime = System.currentTimeMillis();
         try {
             TenantScopeVO scope = currentScope(userId);
 
@@ -379,7 +381,7 @@ public class ChatService implements IChatService {
             float[] queryEmbedding = embeddingService.embed(message);
 
             // 优先检索会话级记忆
-            List<MemoryMatch> memories = agentMemoryService.recall(
+            List<MemoryMatch> sessionMemories = agentMemoryService.recall(
                 message,
                 queryEmbedding,
                 RecallOptions.builder()
@@ -392,9 +394,11 @@ public class ChatService implements IChatService {
                     .build()
             );
 
+            List<MemoryMatch> agentMemories = new ArrayList<>();
+
             // 会话级记忆不足时，回退到 agent 级 scope（复用同一个 queryEmbedding）
-            if (memories.size() < 3) {
-                List<MemoryMatch> agentMemories = agentMemoryService.recall(
+            if (sessionMemories.size() < 3) {
+                agentMemories = agentMemoryService.recall(
                     message,
                     queryEmbedding,
                     RecallOptions.builder()
@@ -407,25 +411,41 @@ public class ChatService implements IChatService {
                         .build()
                 );
                 // 合并去重
-                Set<String> existingIds = memories.stream()
+                Set<String> existingIds = sessionMemories.stream()
                     .map(m -> m.getEntry().getMemoryId())
                     .collect(Collectors.toSet());
                 for (MemoryMatch m : agentMemories) {
                     if (!existingIds.contains(m.getEntry().getMemoryId())) {
-                        memories.add(m);
+                        sessionMemories.add(m);
                     }
-                    if (memories.size() >= 5) break;
+                    if (sessionMemories.size() >= 5) break;
                 }
             }
 
-            if (memories.isEmpty()) {
+            // 新增：记录记忆检索结果到 Holder
+            long costTimeMs = System.currentTimeMillis() - startTime;
+            RagSourceCollector.Holder holder = RagSourceCollector.currentHolder();
+            if (holder != null) {
+                Map<String, Object> memoryRecallResult = new LinkedHashMap<>();
+                memoryRecallResult.put("queryText", message);
+                memoryRecallResult.put("sessionMemoryCount", sessionMemories.size());
+                memoryRecallResult.put("agentMemoryCount", agentMemories.size());
+                memoryRecallResult.put("sessionMemoryScores", sessionMemories.stream()
+                    .map(MemoryMatch::getScore).collect(Collectors.toList()));
+                memoryRecallResult.put("agentMemoryScores", agentMemories.stream()
+                    .map(MemoryMatch::getScore).collect(Collectors.toList()));
+                memoryRecallResult.put("costTimeMs", (int) costTimeMs);
+                holder.setMemoryRecallResult(memoryRecallResult);
+            }
+
+            if (sessionMemories.isEmpty()) {
                 return "";
             }
 
             StringBuilder sb = new StringBuilder();
             sb.append("\n## 相关记忆\n");
-            for (int i = 0; i < memories.size(); i++) {
-                MemoryMatch match = memories.get(i);
+            for (int i = 0; i < sessionMemories.size(); i++) {
+                MemoryMatch match = sessionMemories.get(i);
                 sb.append(String.format(
                     "%d. [%.0f%%相关] %s\n",
                     i + 1,
