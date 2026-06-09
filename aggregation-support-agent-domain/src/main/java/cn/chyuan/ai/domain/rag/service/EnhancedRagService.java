@@ -350,29 +350,50 @@ public class EnhancedRagService implements IRagService {
     private InternalSearchOutput doSearchInternal(String query, int topK, TenantScopeVO scope) {
         log.info("开始检索: query={}, topK={}", query, topK);
 
+        // 记录各阶段耗时，用于可观测性上报
+        List<Map<String, Object>> stages = new ArrayList<>();
+
         // 第二层：查询优化（未启用时返回原 query）
+        long stepStart = System.currentTimeMillis();
         String optimizedQuery = optimizeQuery(query);
+        long rewriteCost = System.currentTimeMillis() - stepStart;
         // 记录是否真正发生了改写：启用且与原 query 不同
         String rewriteQuery = (queryRewriteEnabled && optimizedQuery != null && !optimizedQuery.equals(query))
                 ? optimizedQuery : null;
+        stages.add(Map.of("stage", "query_rewrite", "count", 1, "costTimeMs", (int) rewriteCost));
 
         // 第三层：多路召回
+        stepStart = System.currentTimeMillis();
         List<VectorSearchResultVO> results = multiPathRetrieval(optimizedQuery, topK, scope);
+        long retrievalCost = System.currentTimeMillis() - stepStart;
+        stages.add(Map.of("stage", "multi_path_retrieval", "count", results.size(), "costTimeMs", (int) retrievalCost));
 
         // 第四层：Rerank 精排
         boolean rerankApplied = false;
         if (rerankEnabled && rerankService != null && rerankService.isAvailable()) {
+            stepStart = System.currentTimeMillis();
             results = rerankService.rerank(optimizedQuery, results, topK);
+            long rerankCost = System.currentTimeMillis() - stepStart;
+            stages.add(Map.of("stage", "rerank", "count", results.size(), "costTimeMs", (int) rerankCost));
             rerankApplied = true;
         }
 
         // Lost in the Middle 重排：优化 chunk 排列顺序，提升 LLM 对关键内容的关注度
         if (reorderEnabled) {
+            stepStart = System.currentTimeMillis();
             results = lostInTheMiddleReorderer.reorder(results);
+            long reorderCost = System.currentTimeMillis() - stepStart;
+            stages.add(Map.of("stage", "litm_reorder", "count", results.size(), "costTimeMs", (int) reorderCost));
             log.debug("Lost in the Middle 重排完成");
         }
 
-        log.info("检索完成: resultCount={}, rerankApplied={}", results.size(), rerankApplied);
+        // 写入各阶段耗时到 RagSourceCollector Holder
+        RagSourceCollector.Holder holder = RagSourceCollector.currentHolder();
+        if (holder != null && !stages.isEmpty()) {
+            holder.setRetrievalStages(com.alibaba.fastjson.JSON.toJSONString(stages));
+        }
+
+        log.info("检索完成: resultCount={}, rerankApplied={}, stages={}", results.size(), rerankApplied, stages.size());
         return new InternalSearchOutput(rewriteQuery, results, rerankApplied);
     }
 

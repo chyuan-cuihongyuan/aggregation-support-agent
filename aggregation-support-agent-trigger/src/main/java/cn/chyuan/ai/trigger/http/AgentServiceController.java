@@ -27,6 +27,7 @@ import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -207,22 +208,42 @@ public class AgentServiceController implements IAgentService {
                     .collect(Collectors.toList()));
             }
 
+            // 从 branchType 推导 intentType
+            String branchType = (holder != null && !holder.getTraceId().isEmpty()) ? "RAG" : "DIRECT_ANSWER";
+            // 如果有工具调用但无 RAG 检索，则修正为 TOOL_CALL
+            if ("DIRECT_ANSWER".equals(branchType) && !toolCalls.isEmpty()) {
+                branchType = "TOOL_CALL";
+            }
+            String intentType = deriveIntentType(branchType);
+
+            // 从工具调用序列构建 planSteps（简化版：每个工具调用视为一个规划步骤）
+            String planSteps = null;
+            if (!toolCalls.isEmpty()) {
+                planSteps = com.alibaba.fastjson.JSON.toJSONString(toolCalls.stream()
+                    .map(tc -> Map.of("step", tc.get("toolName"), "order", tc.get("callOrder"), "status", tc.get("status")))
+                    .collect(Collectors.toList()));
+            }
+
             // 上报问答结果（含 Token 消耗）
             observabilityHelper.reportChatResult(traceId, sessionId, userId, question, answer,
                     promptTokens, completionTokens, status, costMs, modelVersion);
 
-            // 上报 RAG 检索
+            // 上报 RAG 检索（含 retrievalStages）
             if (holder != null && traceId != null && !traceId.isEmpty()) {
                 observabilityHelper.reportRagRetrieval(traceId, sessionId, userId,
                         holder.getRetrievalQuery(), holder.getRewriteText(), holder.getTopK(),
-                        holder.snapshotSources(), costMs);
+                        holder.snapshotSources(), costMs,
+                        holder.getRetrievalStages(), holder.getRagStrategyVersion());
             }
 
-            // 上报 Agent 决策（含工具调用信息）
-            String branchType = (holder != null && !holder.getTraceId().isEmpty()) ? "RAG" : "DIRECT_ANSWER";
+            // 上报 Agent 决策（含工具调用信息、意图类型、规划步骤）
             observabilityHelper.reportAgentDecision(traceId, sessionId, userId, null, agentId,
-                    question, null, selectedToolList, decisionReason, branchType, null,
+                    question, intentType, selectedToolList, decisionReason, branchType, planSteps,
                     toolCallTimes, toolRetryTimes, status, costMs, modelVersion, errorMessage);
+
+            // 上报工具调用详情 + 记忆检索结果
+            reportToolCallDetails(traceId, toolCalls);
+            reportMemoryRecallDetails(traceId, holder);
         } catch (Exception e) {
             log.debug("observability report failed: {}", e.getMessage());
         }
@@ -238,6 +259,73 @@ public class AgentServiceController implements IAgentService {
         } catch (Exception e) {
             log.debug("observability fail report failed: {}", e.getMessage());
         }
+    }
+
+    /**
+     * 从分支类型推导意图类型
+     */
+    private String deriveIntentType(String branchType) {
+        if (branchType == null) return "general_chat";
+        return switch (branchType) {
+            case "RAG" -> "knowledge_query";
+            case "TOOL_CALL" -> "tool_invocation";
+            case "REJECT" -> "rejection";
+            default -> "general_chat";
+        };
+    }
+
+    /**
+     * 安全地从 Map 中获取 Integer 值，避免 ClassCastException
+     * （JSON 反序列化可能将整数解析为 Long/Double 等类型）
+     */
+    private int safeGetInt(Map<String, Object> map, String key, int defaultValue) {
+        Object val = map.get(key);
+        if (val == null) return defaultValue;
+        if (val instanceof Number) return ((Number) val).intValue();
+        return defaultValue;
+    }
+
+    /**
+     * 上报工具调用详情（安全获取整数值，防止 ClassCastException；traceId 为空时跳过）
+     */
+    private void reportToolCallDetails(String traceId, List<Map<String, Object>> toolCalls) {
+        if (traceId == null || traceId.isEmpty() || toolCalls == null || toolCalls.isEmpty()) {
+            return;
+        }
+        for (Map<String, Object> tc : toolCalls) {
+            observabilityHelper.reportToolCall(
+                traceId,
+                traceId + "_" + safeGetInt(tc, "callOrder", 0),
+                traceId,
+                (String) tc.get("toolName"),
+                tc.get("toolInput") != null ? tc.get("toolInput").toString() : null,
+                tc.get("toolOutput") != null ? tc.get("toolOutput").toString() : null,
+                (String) tc.get("status"),
+                safeGetInt(tc, "costTimeMs", 0),
+                (String) tc.get("errorMessage"),
+                safeGetInt(tc, "callOrder", 0)
+            );
+        }
+    }
+
+    /**
+     * 上报记忆检索结果（安全获取整数值，防止 ClassCastException；traceId 为空时跳过）
+     */
+    private void reportMemoryRecallDetails(String traceId, RagSourceCollector.Holder holder) {
+        if (traceId == null || traceId.isEmpty() || holder == null || holder.getMemoryRecallResult() == null) {
+            return;
+        }
+        Map<String, Object> mr = holder.getMemoryRecallResult();
+        observabilityHelper.reportMemoryRecall(
+            traceId,
+            (String) mr.get("queryText"),
+            safeGetInt(mr, "sessionMemoryCount", 0),
+            safeGetInt(mr, "agentMemoryCount", 0),
+            com.alibaba.fastjson.JSON.toJSONString(mr.get("sessionMemoryScores")),
+            com.alibaba.fastjson.JSON.toJSONString(mr.get("agentMemoryScores")),
+            null, // injectContent 不记录（可能过大）
+            safeGetInt(mr, "costTimeMs", 0)
+        );
     }
 
     @RequestMapping(value = "chat_stream", method = RequestMethod.POST, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -273,6 +361,9 @@ public class AgentServiceController implements IAgentService {
             
             // 用于收集流式响应内容
             StringBuilder responseCollector = new StringBuilder();
+
+            // 收集 Agent 推理过程（Thought），用于可观测性上报
+            List<String> thoughtParts = new java.util.ArrayList<>();
 
             // 响应字符数硬限制：maxTokens * 2（约 1 token ≈ 2 个中文字符），防止无限输出
             final int maxResponseChars = 16384;
@@ -315,6 +406,8 @@ public class AgentServiceController implements IAgentService {
                                                     if (!text.isEmpty()) {
                                                         if (sb.length() > 0) sb.append("\n");
                                                         sb.append(text);
+                                                        // 捕获 Agent Thought（推理过程）
+                                                        thoughtParts.add(text.trim());
                                                     }
                                                 })
                                             )
@@ -355,6 +448,8 @@ public class AgentServiceController implements IAgentService {
                                     List<RagSourceVO> sources = holderRef == null ? null : holderRef.snapshotSources();
                                     String rewriteText = holderRef == null ? null : holderRef.getRewriteText();
                                     Integer topK = holderRef == null ? null : holderRef.getTopK();
+                                    String retrievalStages = holderRef == null ? null : holderRef.getRetrievalStages();
+                                    String ragStrategyVersion = holderRef == null ? null : holderRef.getRagStrategyVersion();
                                     int costMs = (int) (System.currentTimeMillis() - start);
 
                                     // 从 Holder 获取增强字段
@@ -367,13 +462,19 @@ public class AgentServiceController implements IAgentService {
                                             promptTokens, completionTokens, "FAIL", costMs, modelVersion);
                                     if (traceId != null && !traceId.isEmpty()) {
                                         observabilityHelper.reportRagRetrieval(traceId, finalSessionIdForReport,
-                                                finalUserIdForReport, message, rewriteText, topK, sources, costMs);
+                                                finalUserIdForReport, message, rewriteText, topK, sources, costMs,
+                                                retrievalStages, ragStrategyVersion);
                                     }
+                                    String failBranchType = (traceId != null && !traceId.isEmpty()) ? "RAG" : "DIRECT_ANSWER";
                                     observabilityHelper.reportAgentDecision(traceId, finalSessionIdForReport,
                                             finalUserIdForReport, null, finalAgentIdForReport, message,
-                                            null, null, null,
-                                            (traceId != null && !traceId.isEmpty()) ? "RAG" : "DIRECT_ANSWER",
-                                            null, 0, 0, "FAIL", costMs, modelVersion, err.getMessage());
+                                            deriveIntentType(failBranchType), null, null,
+                                            failBranchType, null, 0, 0, "FAIL", costMs, modelVersion, err.getMessage());
+
+                                    // 上报工具调用详情 + 记忆检索结果（失败前可能已有部分工具调用）
+                                    List<Map<String, Object>> failToolCalls = holderRef != null ? holderRef.getToolCalls() : Collections.emptyList();
+                                    reportToolCallDetails(traceId, failToolCalls);
+                                    reportMemoryRecallDetails(traceId, holderRef);
                                 } catch (Exception reportErr) {
                                     log.debug("流式对话失败上报异常: {}", reportErr.getMessage());
                                 }
@@ -387,6 +488,8 @@ public class AgentServiceController implements IAgentService {
                                     List<RagSourceVO> sources = holderRef == null ? null : holderRef.snapshotSources();
                                     String rewriteText = holderRef == null ? null : holderRef.getRewriteText();
                                     Integer topK = holderRef == null ? null : holderRef.getTopK();
+                                    String retrievalStages = holderRef == null ? null : holderRef.getRetrievalStages();
+                                    String ragStrategyVersion = holderRef == null ? null : holderRef.getRagStrategyVersion();
                                     String fullAnswer = responseCollector.toString().trim();
                                     int costMs = (int) (System.currentTimeMillis() - start);
 
@@ -394,16 +497,42 @@ public class AgentServiceController implements IAgentService {
                                     int promptTokens = holderRef != null ? holderRef.getPromptTokens() : 0;
                                     int completionTokens = holderRef != null ? holderRef.getCompletionTokens() : 0;
                                     String modelVersion = holderRef != null ? holderRef.getModelVersion() : null;
-                                    String decisionReason = holderRef != null ? holderRef.getAgentThought() : null;
                                     List<Map<String, Object>> toolCalls = holderRef != null ? holderRef.getToolCalls() : Collections.emptyList();
                                     int toolCallTimes = toolCalls.size();
                                     int toolRetryTimes = holderRef != null ? holderRef.getToolRetryTimes() : 0;
+
+                                    // 写入 Agent Thought（推理过程）到 Holder
+                                    if (holderRef != null && thoughtParts.size() > 1) {
+                                        // 多轮推理：前面的文本是 Thought，最后一条是最终答案
+                                        String thought = String.join(" → ", thoughtParts.subList(0, thoughtParts.size() - 1));
+                                        holderRef.setAgentThought(thought);
+                                    } else if (holderRef != null && thoughtParts.size() == 1 && toolCalls.isEmpty()) {
+                                        // 单轮推理且无工具调用：Thought 就是推理过程
+                                        holderRef.setAgentThought(thoughtParts.get(0));
+                                    }
+
+                                    String decisionReason = holderRef != null ? holderRef.getAgentThought() : null;
 
                                     // 构建 selectedToolList JSON
                                     String selectedToolList = null;
                                     if (!toolCalls.isEmpty()) {
                                         selectedToolList = com.alibaba.fastjson.JSON.toJSONString(toolCalls.stream()
                                             .map(tc -> Map.of("toolName", tc.get("toolName"), "callOrder", tc.get("callOrder")))
+                                            .collect(Collectors.toList()));
+                                    }
+
+                                    // 推导 intentType 和 branchType
+                                    String branchType = (traceId != null && !traceId.isEmpty()) ? "RAG" : "DIRECT_ANSWER";
+                                    if ("DIRECT_ANSWER".equals(branchType) && !toolCalls.isEmpty()) {
+                                        branchType = "TOOL_CALL";
+                                    }
+                                    String intentType = deriveIntentType(branchType);
+
+                                    // 构建 planSteps
+                                    String planSteps = null;
+                                    if (!toolCalls.isEmpty()) {
+                                        planSteps = com.alibaba.fastjson.JSON.toJSONString(toolCalls.stream()
+                                            .map(tc -> Map.of("step", tc.get("toolName"), "order", tc.get("callOrder"), "status", tc.get("status")))
                                             .collect(Collectors.toList()));
                                     }
 
@@ -416,13 +545,18 @@ public class AgentServiceController implements IAgentService {
                                                 promptTokens, completionTokens, "SUCCESS", costMs, modelVersion);
                                         if (traceId != null && !traceId.isEmpty()) {
                                             observabilityHelper.reportRagRetrieval(traceId, finalSessionIdForReport,
-                                                    finalUserIdForReport, message, rewriteText, topK, sources, costMs);
+                                                    finalUserIdForReport, message, rewriteText, topK, sources, costMs,
+                                                    retrievalStages, ragStrategyVersion);
                                         }
                                         observabilityHelper.reportAgentDecision(traceId, finalSessionIdForReport,
                                                 finalUserIdForReport, null, finalAgentIdForReport, message,
-                                                null, selectedToolList, decisionReason,
-                                                (traceId != null && !traceId.isEmpty()) ? "RAG" : "DIRECT_ANSWER",
-                                                null, toolCallTimes, toolRetryTimes, "SUCCESS", costMs, modelVersion, null);
+                                                intentType, selectedToolList, decisionReason,
+                                                branchType, planSteps, toolCallTimes, toolRetryTimes,
+                                                "SUCCESS", costMs, modelVersion, null);
+
+                                        // 上报工具调用详情 + 记忆检索结果
+                                        reportToolCallDetails(traceId, toolCalls);
+                                        reportMemoryRecallDetails(traceId, holderRef);
                                     } catch (Exception reportErr) {
                                         log.debug("流式对话成功上报异常: {}", reportErr.getMessage());
                                     }

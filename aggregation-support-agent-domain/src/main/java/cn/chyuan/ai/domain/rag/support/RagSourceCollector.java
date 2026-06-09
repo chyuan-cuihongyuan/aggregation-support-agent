@@ -76,6 +76,10 @@ public final class RagSourceCollector {
         private volatile int toolRetryTimes = 0;
         /** 记忆检索结果 */
         private volatile Map<String, Object> memoryRecallResult = null;
+        /** RAG 各阶段耗时（JSON 字符串，如 query_rewrite/vector_search/rerank 等） */
+        private volatile String retrievalStages = null;
+        /** RAG 策略版本 */
+        private volatile String ragStrategyVersion = null;
 
         private Holder(TenantScopeVO tenantScope) {
             this.tenantScope = RequestScopeContext.copyOf(tenantScope);
@@ -160,6 +164,22 @@ public final class RagSourceCollector {
 
         public void setMemoryRecallResult(Map<String, Object> memoryRecallResult) {
             this.memoryRecallResult = memoryRecallResult;
+        }
+
+        public String getRetrievalStages() {
+            return retrievalStages;
+        }
+
+        public void setRetrievalStages(String retrievalStages) {
+            this.retrievalStages = retrievalStages;
+        }
+
+        public String getRagStrategyVersion() {
+            return ragStrategyVersion;
+        }
+
+        public void setRagStrategyVersion(String ragStrategyVersion) {
+            this.ragStrategyVersion = ragStrategyVersion;
         }
 
         /** 内部追加方法 — null/空集合被忽略 */

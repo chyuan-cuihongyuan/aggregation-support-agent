@@ -183,13 +183,42 @@ public class ChatService implements IChatService {
             Flowable<Event> events = runner.runAsync(userId, sessionId, userMsg);
 
             List<String> outputs = new ArrayList<>();
+            // 收集 Agent 的推理过程（Thought），排除最终答案
+            List<String> thoughtParts = new ArrayList<>();
             // 确保 blockingForEach 执行期间租户作用域可用
             TenantScopeVO previousScope = RequestScopeContext.snapshot();
             try {
                 RequestScopeContext.attach(scopeSnapshot);
-                events.blockingForEach(event -> outputs.add(event.stringifyContent()));
+                events.blockingForEach(event -> {
+                    String content = event.stringifyContent();
+                    outputs.add(content);
+
+                    // 捕获 Agent Thought：提取事件中的纯文本内容（非函数调用/响应）
+                    event.content().ifPresent(c ->
+                        c.parts().ifPresent(parts ->
+                            parts.forEach(part ->
+                                part.text().ifPresent(text -> {
+                                    if (!text.isEmpty() && !text.isBlank()) {
+                                        thoughtParts.add(text.trim());
+                                    }
+                                })
+                            )
+                        )
+                    );
+                });
             } finally {
                 RequestScopeContext.attach(previousScope);
+            }
+
+            // 写入 Agent Thought 到 Holder：取所有推理文本（排除最后一条即最终答案）
+            RagSourceCollector.Holder holder = RagSourceCollector.currentHolder();
+            if (holder != null && thoughtParts.size() > 1) {
+                // 多轮推理：前面的文本是 Thought，最后一条是最终答案
+                String thought = String.join(" → ", thoughtParts.subList(0, thoughtParts.size() - 1));
+                holder.setAgentThought(thought);
+            } else if (holder != null && thoughtParts.size() == 1 && !toolCallsDetected(outputs)) {
+                // 单轮推理且无工具调用：Thought 就是推理过程
+                holder.setAgentThought(thoughtParts.get(0));
             }
 
             // Step 3: 异步存储对话记忆
@@ -669,6 +698,16 @@ public class ChatService implements IChatService {
             return SCOPE_UNKNOWN;
         }
         return "/conversation/" + sessionId;
+    }
+
+    /**
+     * 判断事件输出列表中是否包含工具调用事件
+     * （通过 stringifyContent 结果的特征判断，函数调用事件的文本通常以特定模式开头）
+     */
+    private boolean toolCallsDetected(List<String> outputs) {
+        // 如果 Holder 中有工具调用记录，说明确实有工具调用
+        RagSourceCollector.Holder holder = RagSourceCollector.currentHolder();
+        return holder != null && !holder.getToolCalls().isEmpty();
     }
 
 }

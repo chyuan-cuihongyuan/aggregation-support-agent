@@ -4,7 +4,9 @@ import cn.chyuan.ai.domain.rag.model.valobj.RagSourceVO;
 import cn.chyuan.ai.observability.client.ObservabilityClient;
 import cn.chyuan.ai.observability.client.model.AgentDecisionReport;
 import cn.chyuan.ai.observability.client.model.ChatResultReport;
+import cn.chyuan.ai.observability.client.model.MemoryRecallLogReport;
 import cn.chyuan.ai.observability.client.model.RagRetrievalReport;
+import cn.chyuan.ai.observability.client.model.ToolCallLogReport;
 import com.alibaba.fastjson.JSON;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -121,6 +123,44 @@ public class ObservabilityHelper {
             observabilityClient.reportRagRetrieval(report);
         } catch (Exception e) {
             log.debug("observability rag retrieval report failed: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 上报工具调用日志
+     */
+    public void reportToolCall(String traceId, String spanId, String parentSpanId,
+                               String toolName, String toolInput, String toolOutput,
+                               String status, Integer costTimeMs, String errorMessage,
+                               Integer callOrder) {
+        try {
+            ToolCallLogReport report = ToolCallLogReport.builder()
+                    .traceId(traceId).spanId(spanId).parentSpanId(parentSpanId)
+                    .toolName(toolName).toolInput(toolInput).toolOutput(toolOutput)
+                    .status(status).costTimeMs(costTimeMs).errorMessage(errorMessage)
+                    .callOrder(callOrder).build();
+            observabilityClient.reportToolCall(report);
+        } catch (Exception e) {
+            log.debug("observability tool call report failed: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 上报记忆检索日志
+     */
+    public void reportMemoryRecall(String traceId, String queryText,
+                                   Integer sessionMemoryCount, Integer agentMemoryCount,
+                                   String sessionMemoryScores, String agentMemoryScores,
+                                   String injectContent, Integer costTimeMs) {
+        try {
+            MemoryRecallLogReport report = MemoryRecallLogReport.builder()
+                    .traceId(traceId).queryText(queryText)
+                    .sessionMemoryCount(sessionMemoryCount).agentMemoryCount(agentMemoryCount)
+                    .sessionMemoryScores(sessionMemoryScores).agentMemoryScores(agentMemoryScores)
+                    .injectContent(injectContent).costTimeMs(costTimeMs).build();
+            observabilityClient.reportMemoryRecall(report);
+        } catch (Exception e) {
+            log.debug("observability memory recall report failed: {}", e.getMessage());
         }
     }
 }
