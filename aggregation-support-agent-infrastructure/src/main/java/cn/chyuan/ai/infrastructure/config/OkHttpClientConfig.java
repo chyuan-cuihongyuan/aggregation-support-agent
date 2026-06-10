@@ -20,7 +20,7 @@ public class OkHttpClientConfig {
     public OkHttpClient httpClient() {
         return new OkHttpClient.Builder()
                 .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(60, TimeUnit.SECONDS)
+                .readTimeout(600, TimeUnit.SECONDS)
                 .writeTimeout(30, TimeUnit.SECONDS)
                 .connectionPool(new ConnectionPool(10, 5, TimeUnit.MINUTES))
                 .build();

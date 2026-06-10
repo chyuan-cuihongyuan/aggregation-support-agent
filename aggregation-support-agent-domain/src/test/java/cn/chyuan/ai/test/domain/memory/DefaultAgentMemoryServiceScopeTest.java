@@ -4,7 +4,6 @@ import cn.chyuan.ai.domain.memory.adapter.port.IMemoryConsolidationGateway;
 import cn.chyuan.ai.domain.memory.adapter.port.IMemoryExtractionGateway;
 import cn.chyuan.ai.domain.memory.adapter.repository.IAgentMemoryRepository;
 import cn.chyuan.ai.domain.memory.model.enums.MemoryType;
-import cn.chyuan.ai.domain.memory.model.valobj.ExtractedFact;
 import cn.chyuan.ai.domain.memory.model.valobj.MemoryOptions;
 import cn.chyuan.ai.domain.memory.model.valobj.RecallOptions;
 import cn.chyuan.ai.domain.memory.service.impl.DefaultAgentMemoryService;
@@ -72,21 +71,15 @@ class DefaultAgentMemoryServiceScopeTest {
     void shouldDeduplicateWithinConversationScope() {
         when(memoryRepository.existsByContentHash(anyString(), eq("tenant-a"), eq("user-a"), eq("/conversation/session-a")))
                 .thenReturn(false);
-        when(extractionGateway.extractFacts("用户: A\n助手: B")).thenReturn(List.of(
-                ExtractedFact.builder()
-                        .content("A 和 B 的对话事实")
-                        .type(MemoryType.EPISODE)
-                        .build()
-        ));
+        // EPISODE 类型跳过 LLM 事实提取，直接使用原始内容进行相似检索
         when(memoryRepository.searchSimilar(
-                eq("A 和 B 的对话事实"),
+                eq("用户: A\n助手: B"),
                 eq("tenant-a"),
                 eq("user-a"),
                 eq("/conversation/session-a"),
                 eq(5)
         )).thenReturn(List.of());
-        when(extractionGateway.assessImportance("A 和 B 的对话事实")).thenReturn(0.5f);
-        when(embeddingService.embed("A 和 B 的对话事实")).thenReturn(new float[]{0.5f, 0.5f});
+        when(embeddingService.embed("用户: A\n助手: B")).thenReturn(new float[]{0.5f, 0.5f});
 
         memoryService.remember("用户: A\n助手: B", MemoryOptions.builder()
                 .tenantId("tenant-a")
@@ -100,7 +93,7 @@ class DefaultAgentMemoryServiceScopeTest {
 
         verify(memoryRepository).existsByContentHash(anyString(), eq("tenant-a"), eq("user-a"), eq("/conversation/session-a"));
         verify(memoryRepository).searchSimilar(
-                eq("A 和 B 的对话事实"),
+                eq("用户: A\n助手: B"),
                 eq("tenant-a"),
                 eq("user-a"),
                 eq("/conversation/session-a"),

@@ -55,4 +55,3 @@ docs/dev-ops/milvus/data/*
 docs/dev-ops/elasticsearch/data/*
 docs/dev-ops/elasticsearch/data-7.17.10/*
 docs/dev-ops/elasticsearch/plugins/*
-/aggregation-support-agent-app/${project.build.directory}

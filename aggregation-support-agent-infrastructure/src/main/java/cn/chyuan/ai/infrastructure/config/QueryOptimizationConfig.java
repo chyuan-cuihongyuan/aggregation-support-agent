@@ -9,6 +9,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.web.client.RestClient;
 
 /**
  * 查询优化专用 ChatModel 配置
@@ -41,10 +43,18 @@ public class QueryOptimizationConfig {
         log.info("初始化查询优化 ChatModel: baseUrl={}, model={}", baseUrl, model);
         // base-url 为智谱 .../api/paas/v4，需覆盖默认补全路径 /v1/chat/completions，
         // 否则拼成 .../v4/v1/chat/completions 触发 404
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(30000);
+        requestFactory.setReadTimeout(180000);
+
+        RestClient.Builder restClientBuilder = RestClient.builder()
+                .requestFactory(requestFactory);
+
         OpenAiApi openAiApi = OpenAiApi.builder()
                 .baseUrl(baseUrl)
                 .completionsPath("/chat/completions")
                 .apiKey(apiKey)
+                .restClientBuilder(restClientBuilder)
                 .build();
         return OpenAiChatModel.builder()
                 .openAiApi(openAiApi)

@@ -4,6 +4,7 @@ import cn.chyuan.ai.domain.memory.adapter.port.IMemoryConsolidationGateway;
 import cn.chyuan.ai.domain.memory.model.enums.ConsolidationAction;
 import cn.chyuan.ai.domain.memory.model.valobj.ConsolidationDecision;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -43,7 +44,7 @@ public class MemoryConsolidationService implements IMemoryConsolidationGateway {
     
     private final OkHttpClient httpClient = new OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(600, TimeUnit.SECONDS)
         .build();
     
     /**
@@ -142,26 +143,40 @@ public class MemoryConsolidationService implements IMemoryConsolidationGateway {
                 json = json.substring(0, json.indexOf("```"));
             }
             json = json.trim();
-            
-            Map<String, Object> parsed = objectMapper.readValue(json, new TypeReference<>() {});
-            
-            String actionStr = (String) parsed.get("action");
-            String mergedContent = (String) parsed.get("mergedContent");
-            String reason = (String) parsed.get("reason");
-            
+
+            // 使用 JsonNode 树模型解析，避免 LinkedHashMap 强转 String 的 ClassCastException
+            JsonNode rootNode = objectMapper.readTree(json);
+
+            String actionStr = rootNode.has("action") && !rootNode.get("action").isNull()
+                    ? rootNode.get("action").asText() : null;
+            String reason = rootNode.has("reason") && !rootNode.get("reason").isNull()
+                    ? rootNode.get("reason").asText() : null;
+
+            // mergedContent 可能是字符串或嵌套对象，统一转为字符串
+            String mergedContent = null;
+            if (rootNode.has("mergedContent") && !rootNode.get("mergedContent").isNull()) {
+                JsonNode mergedNode = rootNode.get("mergedContent");
+                if (mergedNode.isTextual()) {
+                    mergedContent = mergedNode.asText();
+                } else {
+                    // 嵌套对象/数组序列化回 JSON 字符串
+                    mergedContent = objectMapper.writeValueAsString(mergedNode);
+                }
+            }
+
             ConsolidationAction action = ConsolidationAction.KEEP;
             try {
                 action = ConsolidationAction.valueOf(actionStr.toUpperCase());
             } catch (Exception e) {
                 // 默认使用 KEEP
             }
-            
+
             return ConsolidationDecision.builder()
                 .action(action)
                 .mergedContent(mergedContent)
                 .reason(reason)
                 .build();
-            
+
         } catch (Exception e) {
             log.warn("解析整合决策失败: {}", e.getMessage());
             return ConsolidationDecision.builder()

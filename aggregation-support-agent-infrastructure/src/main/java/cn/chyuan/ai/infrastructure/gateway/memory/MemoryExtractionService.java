@@ -44,7 +44,7 @@ public class MemoryExtractionService implements IMemoryExtractionGateway {
     
     private final OkHttpClient httpClient = new OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(600, TimeUnit.SECONDS)
         .build();
     
     /**

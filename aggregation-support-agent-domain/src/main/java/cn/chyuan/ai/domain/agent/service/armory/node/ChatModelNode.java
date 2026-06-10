@@ -20,7 +20,9 @@ import org.springframework.stereotype.Service;
 
 import jakarta.annotation.Resource;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -48,15 +50,23 @@ public class ChatModelNode extends AbstractArmorySupport {
         List<AiAgentConfigTableVO.Module.ChatModel.ToolMcp> toolMcpList = chatModelConfig.getToolMcpList();
         List<AiAgentConfigTableVO.Module.ChatModel.ToolSkills> toolSkillsList = chatModelConfig.getToolSkillsList();
 
-        // 构建mcp服务（工厂）
+        // 构建mcp服务（工厂）— 使用 Set 按工具名去重，防止多个 Provider 注册同名工具
         List<ToolCallback> toolCallbackList = new ArrayList<>();
+        Set<String> registeredToolNames = new HashSet<>();
 
         if (null != toolMcpList && !toolMcpList.isEmpty()) {
             for (AiAgentConfigTableVO.Module.ChatModel.ToolMcp toolMcp : toolMcpList) {
                 try {
                     TooMcpCreateService tooMcpCreateService = defaultMcpClientFactory.getTooMcpCreateService(toolMcp);
                     ToolCallback[] toolCallbacks = tooMcpCreateService.buildToolCallback(toolMcp);
-                    toolCallbackList.addAll(ScopedToolCallback.wrapAll(toolCallbacks));
+                    for (ToolCallback toolCallback : ScopedToolCallback.wrapAll(toolCallbacks)) {
+                        String toolName = toolCallback.getToolDefinition().name();
+                        if (registeredToolNames.add(toolName)) {
+                            toolCallbackList.add(toolCallback);
+                        } else {
+                            log.warn("工具 [{}] 重复注册，已跳过。agent: {}", toolName, aiAgentConfigTableVO.getAppName());
+                        }
+                    }
                 } catch (Exception e) {
                     log.error("MCP 工具初始化失败，跳过该工具。agent: {}, 错误: {}",
                             aiAgentConfigTableVO.getAppName(), e.getMessage());
@@ -68,7 +78,14 @@ public class ChatModelNode extends AbstractArmorySupport {
         if (null != toolSkillsList && !toolSkillsList.isEmpty()) {
             for (AiAgentConfigTableVO.Module.ChatModel.ToolSkills toolSkills : toolSkillsList) {
                 ToolCallback[] toolCallbacks = toolSkillsCreateService.buildToolCallback(toolSkills);
-                toolCallbackList.addAll(ScopedToolCallback.wrapAll(toolCallbacks));
+                for (ToolCallback toolCallback : ScopedToolCallback.wrapAll(toolCallbacks)) {
+                    String toolName = toolCallback.getToolDefinition().name();
+                    if (registeredToolNames.add(toolName)) {
+                        toolCallbackList.add(toolCallback);
+                    } else {
+                        log.warn("Skills 工具 [{}] 重复注册，已跳过。agent: {}", toolName, aiAgentConfigTableVO.getAppName());
+                    }
+                }
             }
         }
 

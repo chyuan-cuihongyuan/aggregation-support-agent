@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * LLM 实体抽取服务实现
- * 通过智谱 glm-4.7（OpenAI 兼容接口）从文本中抽取实体和关系
+ * 通过智谱 glm-4-flash（OpenAI 兼容接口）从文本中抽取实体和关系
  */
 @Slf4j
 @Service
@@ -46,7 +46,7 @@ public class LLMEntityExtractionService implements IEntityExtractionService {
 
     private final OkHttpClient httpClient = new OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(120, TimeUnit.SECONDS)
+            .readTimeout(600, TimeUnit.SECONDS)
             .build();
 
     private static final String EXTRACTION_PROMPT = """
