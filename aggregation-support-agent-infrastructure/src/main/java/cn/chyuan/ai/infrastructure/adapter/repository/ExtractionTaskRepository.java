@@ -7,7 +7,10 @@ import cn.chyuan.ai.infrastructure.persistent.mapper.ExtractionTaskMapper;
 import org.springframework.stereotype.Repository;
 
 import jakarta.annotation.Resource;
+import java.util.Collections;
 import java.util.Date;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 图谱构建任务仓储实现
@@ -46,6 +49,15 @@ public class ExtractionTaskRepository implements IExtractionTaskRepository {
     public ExtractionTaskEntity queryByDocumentId(String documentId) {
         ExtractionTaskPO po = extractionTaskMapper.queryByDocumentId(documentId);
         return po != null ? toEntity(po) : null;
+    }
+
+    @Override
+    public List<ExtractionTaskEntity> queryByStatus(String status) {
+        List<ExtractionTaskPO> poList = extractionTaskMapper.queryByStatus(status);
+        if (poList == null || poList.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return poList.stream().map(this::toEntity).collect(Collectors.toList());
     }
 
     @Override

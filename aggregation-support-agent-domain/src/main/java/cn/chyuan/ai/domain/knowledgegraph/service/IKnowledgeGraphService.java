@@ -30,4 +30,7 @@ public interface IKnowledgeGraphService {
 
     /** 健康检查 */
     boolean healthCheck();
+
+    /** 重试失败的图谱构建任务 */
+    void retryTask(String documentId);
 }

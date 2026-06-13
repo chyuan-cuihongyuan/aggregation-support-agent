@@ -1,0 +1,109 @@
+# RAG 智能问答智能体配置 — Plan-Execute-Reflect Agentic Workflow
+# 工作流：Loop(resultCritic, exitOrReplan) → Sequential(queryPlanner, queryExecutor, reflexion_loop, responseGenerator)
+ai:
+  agent:
+    config:
+      tables:
+        ragChatAgent:
+          app-name: ragChatAgent
+          agent:
+            agent-id: "200001"
+            agent-name: RAG 智能问答
+            agent-desc: 基于 Plan-Execute-Reflect 工作流的文档知识库智能问答助手
+          module:
+            ai-api:
+              base-url: ${LLM_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
+              api-key: ${LLM_API_KEY:47b14566882e4e5ab68ae079e307667f.gYg6trXMmDAFQBT3}
+              completions-path: /chat/completions
+              embeddings-path: /embeddings
+            chat-model:
+              model: ${LLM_MODEL:glm-4-flash}
+              max-tokens: 8192
+              tool-mcp-list:
+                - local:
+                    name: ragToolCallbackProvider
+            agents:
+              - name: queryPlanner
+                react-mode: false
+                max-steps: 1
+                description: 分析用户查询并生成结构化检索计划
+                instruction: |
+                  你是一个查询分析专家。分析用户的查询，输出 JSON 格式的检索计划。
+                  1. 多个独立条目 → mode=batch
+                  2. 单一条目 → mode=single
+                  3. 闲聊/常识 → mode=none
+                  路由：简单事实查询（价格、规格）→ speed=fast；复杂查询（对比、分析）→ speed=standard
+                  输出：{"mode":"batch|single|none","speed":"fast|standard","queries":["查询1",...],"reason":"..."}
+                  只输出 JSON。
+                output-key: retrieval_plan
+              - name: queryExecutor
+                react-mode: true
+                max-steps: 3
+                description: 根据检索计划执行知识库检索
+                instruction: |
+                  根据 {retrieval_plan} 严格执行检索：
+                  mode=batch → queryInternalDocsBatch(queries)
+                  mode=single → queryInternalDocs(query)
+                  mode=none → 输出 "无需检索"
+
+                  快慢档路由（重要）：
+                  - speed=fast：跳过 Multi-Query 扩展和 LiTM 重排
+                  - speed=standard：走完整检索管道
+
+                  不要自行增加额外查询，不要重复检索。必须在工具调用时传递 speed 参数。
+                output-key: retrieval_results
+              - name: resultCritic
+                react-mode: false
+                max-steps: 1
+                description: 评估检索结果质量
+                instruction: |
+                  评估 {retrieval_results} 的完整性。
+                  输出：{"verdict":"SUFFICIENT","summary":"..."} 或
+                  {"verdict":"INSUFFICIENT","gap":"...","supplement_queries":["..."]}
+                  只输出 JSON。
+                output-key: quality_verdict
+              - name: exitOrReplan
+                react-mode: false
+                max-steps: 1
+                exit-loop-enabled: true
+                description: 决定退出循环或补充检索
+                instruction: |
+                  根据 {quality_verdict}：SUFFICIENT → 调用 exitLoop 工具退出循环；INSUFFICIENT → 输出补充 JSON。
+                  SUFFICIENT 时必须调用 exitLoop 工具，不要输出文本。
+                output-key: replan_action
+              - name: supplementExecutor
+                react-mode: true
+                max-steps: 3
+                description: 执行补充查询并合并结果
+                instruction: |
+                  根据 {replan_action} 执行补充检索并合并到 {retrieval_results}。
+                  mode=batch → queryInternalDocsBatch；mode=single → queryInternalDocs。
+                  输出合并后的完整结果，覆盖 retrieval_results。
+                output-key: retrieval_results
+              - name: responseGenerator
+                react-mode: false
+                max-steps: 1
+                description: 基于检索结果生成最终回答
+                instruction: |
+                  基于 {retrieval_results} 生成中文回答。基于检索结果回答，不编造。
+                  注明来源，结果不足则诚实告知。回答完毕立即停止。
+                output-key: final_answer
+            agent-workflows:
+              - type: loop
+                name: reflexion_loop
+                max-iterations: 2
+                sub-agents:
+                  - resultCritic
+                  - exitOrReplan
+                  - supplementExecutor
+              - type: sequential
+                name: rag_pipeline
+                sub-agents:
+                  - queryPlanner
+                  - queryExecutor
+                  - reflexion_loop
+                  - responseGenerator
+            runner:
+              agent-name: rag_pipeline
+              plugin-name-list:
+                - myLogPlugin

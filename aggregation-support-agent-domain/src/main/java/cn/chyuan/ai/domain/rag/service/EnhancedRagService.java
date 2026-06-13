@@ -340,7 +340,7 @@ public class EnhancedRagService implements IRagService {
     /**
      * 统一的检索内部流程 — 供 search 与 searchWithTrace 共用
      * <p>
-     * 流程：Query 改写 → 多路召回（向量 + BM25 + 可选 Multi-Query）→ Rerank → Lost-in-the-Middle 重排
+     * 流程：Query 改写 + Multi-Query 扩展（并行） → 多路召回（向量 + BM25 + Multi-Query）→ Rerank → Lost-in-the-Middle 重排
      *
      * @param query 用户查询文本
      * @param topK  返回结果数量
@@ -353,18 +353,63 @@ public class EnhancedRagService implements IRagService {
         // 记录各阶段耗时，用于可观测性上报
         List<Map<String, Object>> stages = new ArrayList<>();
 
-        // 第二层：查询优化（未启用时返回原 query）
+        // 第二层：查询优化 + Multi-Query 扩展并行执行（两者无数据依赖）
+        // expandQuery 使用原始 query 而非改写后的 query，因此可以并行
         long stepStart = System.currentTimeMillis();
-        String optimizedQuery = optimizeQuery(query);
-        long rewriteCost = System.currentTimeMillis() - stepStart;
-        // 记录是否真正发生了改写：启用且与原 query 不同
+
+        java.util.concurrent.CompletableFuture<String> rewriteFuture = java.util.concurrent.CompletableFuture.completedFuture(query);
+        if (queryRewriteEnabled) {
+            rewriteFuture = java.util.concurrent.CompletableFuture.supplyAsync(
+                () -> {
+                    try {
+                        return queryOptimizationService.rewriteQuery(query, null);
+                    } catch (Exception e) {
+                        log.warn("Query改写失败，使用原始查询: {}", e.getMessage());
+                        return query;
+                    }
+                },
+                ragRetrievalExecutor);
+        }
+
+        java.util.concurrent.CompletableFuture<List<String>> expandFuture = java.util.concurrent.CompletableFuture.completedFuture(null);
+        if (multiQueryEnabled) {
+            expandFuture = java.util.concurrent.CompletableFuture.supplyAsync(
+                () -> {
+                    try {
+                        return queryOptimizationService.expandQuery(query, multiQueryCount);
+                    } catch (Exception e) {
+                        log.warn("Multi-Query扩展失败: {}", e.getMessage());
+                        return null;
+                    }
+                },
+                ragRetrievalExecutor);
+        }
+
+        // 等待两者完成（各带独立超时）
+        String optimizedQuery = query;
+        List<String> preExpandedQueries = null;
+        try {
+            optimizedQuery = rewriteFuture.get(5, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception e) {
+            log.warn("Query改写超时或失败，使用原始查询: {}", e.getMessage());
+        }
+        try {
+            preExpandedQueries = expandFuture.get(8, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception e) {
+            log.warn("Multi-Query扩展超时或失败: {}", e.getMessage());
+        }
+
+        long rewriteExpandCost = System.currentTimeMillis() - stepStart;
         String rewriteQuery = (queryRewriteEnabled && optimizedQuery != null && !optimizedQuery.equals(query))
                 ? optimizedQuery : null;
-        stages.add(Map.of("stage", "query_rewrite", "count", 1, "costTimeMs", (int) rewriteCost));
+        stages.add(Map.of("stage", "query_rewrite_and_expand", "count", 1, "costTimeMs", (int) rewriteExpandCost));
 
-        // 第三层：多路召回
+        log.info("Query优化并行完成: rewrite={}ms, expandedQueries={}", rewriteExpandCost,
+                preExpandedQueries != null ? preExpandedQueries.size() : 0);
+
+        // 第三层：多路召回（传入预扩展的 queries，跳过内部 expand 调用）
         stepStart = System.currentTimeMillis();
-        List<VectorSearchResultVO> results = multiPathRetrieval(optimizedQuery, topK, scope);
+        List<VectorSearchResultVO> results = multiPathRetrieval(optimizedQuery, topK, scope, preExpandedQueries);
         long retrievalCost = System.currentTimeMillis() - stepStart;
         stages.add(Map.of("stage", "multi_path_retrieval", "count", results.size(), "costTimeMs", (int) retrievalCost));
 
@@ -577,7 +622,7 @@ public class EnhancedRagService implements IRagService {
     }
 
     /**
-     * 查询优化（第二层）
+     * 查询优化（第二层）— 保留供非 doSearchInternal 路径使用
      */
     private String optimizeQuery(String query) {
         if (!queryRewriteEnabled) {
@@ -585,7 +630,6 @@ public class EnhancedRagService implements IRagService {
         }
 
         try {
-            // Query改写
             String rewrittenQuery = queryOptimizationService.rewriteQuery(query, null);
             log.info("Query改写: original={}, rewritten={}", query, rewrittenQuery);
             return rewrittenQuery;
@@ -597,8 +641,14 @@ public class EnhancedRagService implements IRagService {
 
     /**
      * 多路召回（第三层） — 向量检索 + BM25检索 + 知识图谱检索并行执行
+     *
+     * @param query             改写后的查询文本
+     * @param topK              返回结果数量
+     * @param scope             租户作用域
+     * @param preExpandedQueries 预扩展的查询列表（来自 doSearchInternal 并行阶段），为 null 时走内部 expand 逻辑
      */
-    private List<VectorSearchResultVO> multiPathRetrieval(String query, int topK, TenantScopeVO scope) {
+    private List<VectorSearchResultVO> multiPathRetrieval(String query, int topK, TenantScopeVO scope,
+                                                           List<String> preExpandedQueries) {
         // 收集所有并行检索任务
         List<CompletableFuture<List<VectorSearchResultVO>>> allFutures = new ArrayList<>();
         List<String> futureLabels = new ArrayList<>();
@@ -624,14 +674,19 @@ public class EnhancedRagService implements IRagService {
         allFutures.add(graphFuture);
         futureLabels.add("知识图谱检索");
 
-        // 第四路：Multi-Query 扩展检索（每个扩展查询作为独立路径参与融合，避免双重融合）
+        // 第四路：Multi-Query 扩展检索
+        // 优先使用外部预扩展的 queries（doSearchInternal 并行阶段已 expand），否则走内部 expand
         List<CompletableFuture<List<VectorSearchResultVO>>> multiQueryFutures = new ArrayList<>();
-        if (multiQueryEnabled) {
+        if (preExpandedQueries != null && !preExpandedQueries.isEmpty()) {
+            // 使用预扩展结果，跳过内部 expandQuery LLM 调用
+            multiQueryFutures = launchMultiQueryFromExpanded(preExpandedQueries, vectorTopK, scope);
+        } else if (multiQueryEnabled) {
+            // 兼容性降级：无预扩展结果时走原有逻辑
             multiQueryFutures = expandAndLaunchMultiQuery(query, vectorTopK, scope);
-            for (int i = 0; i < multiQueryFutures.size(); i++) {
-                allFutures.add(multiQueryFutures.get(i));
-                futureLabels.add("Multi-Query#" + (i + 1));
-            }
+        }
+        for (int i = 0; i < multiQueryFutures.size(); i++) {
+            allFutures.add(multiQueryFutures.get(i));
+            futureLabels.add("Multi-Query#" + (i + 1));
         }
 
         // 统一超时等待所有并行任务
@@ -688,6 +743,46 @@ public class EnhancedRagService implements IRagService {
             log.error("Multi-Query扩展失败: {}", e.getMessage());
             return Collections.emptyList();
         }
+    }
+
+    /**
+     * 使用预扩展的查询列表启动并行检索 — 跳过内部 expandQuery LLM 调用，
+     * 并对扩展查询进行批量嵌入（embedBatch），将 N 次 HTTP 调用合并为 1 次，减少网络延迟。
+     * 每个扩展查询作为独立路径参与外层 RRF 融合。
+     */
+    private List<CompletableFuture<List<VectorSearchResultVO>>> launchMultiQueryFromExpanded(
+            List<String> expandedQueries, int topK, TenantScopeVO scope) {
+        if (expandedQueries == null || expandedQueries.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        int perQueryTopK = topK / expandedQueries.size() + 1;
+
+        // 批量嵌入：一次 embedBatch API 调用替代 N 次独立 embed 调用，减少 HTTP 往返
+        List<float[]> vectors;
+        try {
+            vectors = embeddingService.embedBatch(expandedQueries);
+        } catch (Exception e) {
+            log.error("批量嵌入失败，降级为逐条嵌入: {}", e.getMessage());
+            // 降级：回退到逐条检索（每条内部会各自 embed）
+            return expandedQueries.stream()
+                    .map(q -> supplyRetrievalAsync(() -> vectorRetrieval(q, perQueryTopK, scope)))
+                    .collect(Collectors.toList());
+        }
+
+        // 使用预计算的向量直接发起 Milvus 检索，跳过每个 vectorRetrieval 内部的 embed 调用
+        List<CompletableFuture<List<VectorSearchResultVO>>> futures = new ArrayList<>();
+        for (int i = 0; i < expandedQueries.size(); i++) {
+            final float[] vector = vectors.get(i);
+            futures.add(supplyRetrievalAsync(() -> {
+                List<VectorSearchResultVO> results = vectorStoreRepository.search(vector, perQueryTopK, scope);
+                for (VectorSearchResultVO result : results) {
+                    result.getMetadata().put("retrievalType", "vector_multi_query");
+                }
+                return results;
+            }));
+        }
+        return futures;
     }
 
     /**

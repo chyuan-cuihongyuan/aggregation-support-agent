@@ -1,0 +1,113 @@
+# MCP 网关智能体配置 — Plan-Execute-Reflect Agentic Workflow
+# 工作流：Loop(resultCritic, exitOrRetry) → Sequential(intentClassifier, toolExecutor, business_reflexion, responseGenerator)
+ai:
+  agent:
+    config:
+      tables:
+        mcpGatewayAgent:
+          app-name: mcpGatewayAgent
+          agent:
+            agent-id: "400001"
+            agent-name: MCP 网关智能体
+            agent-desc: 基于 Plan-Execute-Reflect 工作流的 MCP 网关业务智能体
+          module:
+            ai-api:
+              base-url: ${LLM_BASE_URL:https://open.bigmodel.cn/api/paas/v4}
+              api-key: ${LLM_API_KEY:47b14566882e4e5ab68ae079e307667f.gYg6trXMmDAFQBT3}
+              completions-path: /chat/completions
+              embeddings-path: /embeddings
+            chat-model:
+              model: ${LLM_MODEL:glm-4-flash}
+              max-tokens: 8192
+              tool-mcp-list:
+                - sse:
+                    name: mcp-gateway-business
+                    base-uri: ${MCP_GATEWAY_BASE_URI:http://127.0.0.1:8099}
+                    sse-endpoint: /api-gateway/gateway_business/mcp/sse?api_key=gw-biz-key-2026-chyuan-ai-agent
+                    request-timeout: 30000
+            agents:
+              # ===== Step 1: Plan =====
+              - name: intentClassifier
+                react-mode: false
+                max-steps: 1
+                description: 分析用户意图，判断是否需要调用业务工具
+                instruction: |
+                  你是 MCP 网关业务助手的意图分析器。分析用户问题，输出 JSON 格式的执行计划。
+                  意图分类：
+                  1. "business" — 需要调用业务工具（订单查询、退款、开票等）
+                  2. "chat" — 闲聊/通用问题，无需工具
+                  可用工具：agent_order_query / agent_order_status / agent_order_refund_apply /
+                  agent_order_refund_execute / agent_invoice_query / agent_invoice_info_query / agent_invoice_submit
+                  输出：{"intent":"business|chat","tools":[{"name":"工具名","params":{}}],"reason":"..."}
+                  只输出 JSON。
+                output-key: action_plan
+              # ===== Step 2: Execute =====
+              - name: toolExecutor
+                react-mode: true
+                max-steps: 5
+                description: 根据执行计划调用 MCP 网关业务工具
+                instruction: |
+                  根据 {action_plan} 调用工具。
+                  intent=business → 按计划调用业务工具
+                  intent=chat → 不调用工具，准备回答内容
+                  严格按计划执行，不要重复调用已返回结果的工具。
+                output-key: business_result
+              # ===== Step 3a: Reflect =====
+              - name: resultCritic
+                react-mode: false
+                max-steps: 1
+                description: 评估业务操作结果
+                instruction: |
+                  评估 {business_result}：操作是否成功？信息是否完整？
+                  输出 JSON：{"verdict":"SUFFICIENT"} 或 {"verdict":"INSUFFICIENT","gap":"..."}
+                  只输出 JSON。
+                output-key: quality_verdict
+              # ===== Step 3b: Replan =====
+              - name: exitOrRetry
+                react-mode: false
+                max-steps: 1
+                exit-loop-enabled: true
+                description: 决定退出循环或补充操作
+                instruction: |
+                  根据 {quality_verdict}：SUFFICIENT → 调用 exitLoop 工具退出循环；INSUFFICIENT → 输出补充计划 JSON。
+                  SUFFICIENT 时必须调用 exitLoop 工具，不要输出文本。
+                output-key: replan_action
+              # ===== Step 3c: Supplement — 执行补充业务操作 =====
+              - name: supplementBusiness
+                react-mode: true
+                max-steps: 3
+                description: 执行补充业务操作并更新结果
+                instruction: |
+                  根据补充计划 {replan_action} 调用 MCP 业务工具执行补充操作。
+                  将补充结果合并到 {business_result}，输出完整结果。
+                output-key: business_result
+              # ===== Step 4: Respond =====
+              - name: responseGenerator
+                react-mode: false
+                max-steps: 1
+                description: 基于业务结果生成最终回答
+                instruction: |
+                  基于 {business_result} 生成简洁明了的中文回答。
+                  业务结果友好呈现，日常对话自然回复。
+                  回答完毕立即停止，不要自问自答。
+                output-key: final_response
+            # 工作流（展平结构）
+            agent-workflows:
+              - type: loop
+                name: business_reflexion
+                max-iterations: 2
+                sub-agents:
+                  - resultCritic
+                  - exitOrRetry
+                  - supplementBusiness
+              - type: sequential
+                name: mcp_pipeline
+                sub-agents:
+                  - intentClassifier
+                  - toolExecutor
+                  - business_reflexion
+                  - responseGenerator
+            runner:
+              agent-name: mcp_pipeline
+              plugin-name-list:
+                - myLogPlugin

@@ -1,0 +1,168 @@
+# 并行研究测试智能体配置 — Plan-Execute-Reflect Agentic Workflow
+# 工作流：Loop(ReportCritic, exitOrRefineReport) → Sequential(Parallel(3 Researchers), SynthesisAgent, report_reflexion)
+# 在原有并行研究+汇总基础上增加 Reflexion 循环，支持报告质量评估和迭代改进
+ai:
+  agent:
+    config:
+      tables:
+        testAgent02:
+          app-name: ResearchAndSynthesisPipeline
+          agent:
+            agent-id: 100002
+            agent-name: 测试智能体02
+            agent-desc: 基于统一 Agentic Workflow 的并行研究+汇总+质量评估智能体
+          module:
+            ai-api:
+              base-url: https://apis.itedus.cn
+              api-key: sk-REDACTED
+              completions-path: v1/chat/completions
+              embeddings-path: v1/embeddings
+            chat-model:
+              model: gpt-4.1
+              max-tokens: 8192
+              tool-mcp-list:
+                - sse:
+                    name: baidu-search
+                    base-uri: http://appbuilder.baidu.com/v2/ai_search/mcp/
+                    sse-endpoint: sse?api_key=bce-v3/ALTAK-3zODLb9qHozIftQlGwez5/2696e92781f5bf1ba1870e2958f239fd6dc822a4
+                    request-timeout: 500000
+            agents:
+              # ===== Step 1+2: Plan+Execute — 并行研究（合并阶段） =====
+              - name: RenewableEnergyResearcher
+                react-mode: true
+                description: 研究可再生能源最新进展
+                instruction: |
+                  You are an AI Research Assistant specializing in energy.
+                  Research the latest advancements in 'renewable energy sources'.
+                  Use the Google Search tool provided.
+                  Summarize your key findings concisely (1-2 sentences).
+                  Output *only* the summary.
+                output-key: renewable_energy_result
+              - name: EVResearcher
+                react-mode: true
+                description: 研究电动汽车技术发展
+                instruction: |
+                  You are an AI Research Assistant specializing in transportation.
+                  Research the latest developments in 'electric vehicle technology'.
+                  Use the Google Search tool provided.
+                  Summarize your key findings concisely (1-2 sentences).
+                  Output *only* the summary.
+                output-key: ev_technology_result
+              - name: CarbonCaptureResearcher
+                react-mode: true
+                description: 研究碳捕获方法
+                instruction: |
+                  You are an AI Research Assistant specializing in climate solutions.
+                  Research the current state of 'carbon capture methods'.
+                  Use the Google Search tool provided.
+                  Summarize your key findings concisely (1-2 sentences).
+                  Output *only* the summary.
+                output-key: carbon_capture_result
+              # ===== Step 4: Respond — 综合研究报告 =====
+              - name: SynthesisAgent
+                react-mode: true
+                description: 将各领域研究结果汇总为结构化报告
+                instruction: |
+                  You are an AI Assistant responsible for combining research findings into a structured report.
+                  Your primary task is to synthesize the following research summaries, clearly attributing findings to their source areas. Structure your response using headings for each topic. Ensure the report is coherent and integrates the key points smoothly.
+                  **Crucially: Your entire response MUST be grounded *exclusively* on the information provided in the 'Input Summaries' below. Do NOT add any external knowledge, facts, or details not present in these specific summaries.**
+                  **Input Summaries:**
+
+                  *   **Renewable Energy:**
+                      {renewable_energy_result}
+
+                  *   **Electric Vehicles:**
+                      {ev_technology_result}
+
+                  *   **Carbon Capture:**
+                      {carbon_capture_result}
+
+                  **Output Format:**
+
+                  ## Summary of Recent Sustainable Technology Advancements
+
+                  ### Renewable Energy Findings
+                  (Based on RenewableEnergyResearcher's findings)
+                  [Synthesize and elaborate *only* on the renewable energy input summary provided above.]
+
+                  ### Electric Vehicle Findings
+                  (Based on EVResearcher's findings)
+                  [Synthesize and elaborate *only* on the EV input summary provided above.]
+
+                  ### Carbon Capture Findings
+                  (Based on CarbonCaptureResearcher's findings)
+                  [Synthesize and elaborate *only* on the carbon capture input summary provided above.]
+
+                  ### Overall Conclusion
+                  [Provide a brief (1-2 sentence) concluding statement that connects *only* the findings presented above.]
+
+                  Output *only* the structured report following this format. Do not include introductory or concluding phrases outside this structure, and strictly adhere to using only the provided input summary content.
+                output-key: synthesis_report
+              # ===== Step 3a: Reflect — 报告质量评估 =====
+              - name: ReportCritic
+                react-mode: false
+                max-steps: 1
+                description: 评估综合研究报告的质量
+                instruction: |
+                  评估综合研究报告 {synthesis_report} 的质量：
+                  1. 每个研究领域的发现是否被准确呈现？
+                  2. 报告结构是否清晰完整？
+                  3. 结论是否有效串联了各领域发现？
+                  4. 是否存在未涵盖的重要方面？
+
+                  输出 JSON：
+                  - 报告充足：{"verdict":"SUFFICIENT","summary":"评估摘要"}
+                  - 报告不足：{"verdict":"INSUFFICIENT","gaps":["缺少的重要方面1","缺少2"],"supplement_directions":["补充方向1"]}
+
+                  只输出 JSON，不要解释。
+                output-key: quality_verdict
+              # ===== Step 3b: Replan — 退出或补充研究 =====
+              - name: exitOrRefineReport
+                react-mode: false
+                max-steps: 1
+                exit-loop-enabled: true
+                description: 根据报告质量评估决定退出循环或补充研究
+                instruction: |
+                  根据 {quality_verdict}：
+                  SUFFICIENT → 调用 exitLoop 工具退出循环，报告质量已达标。
+                  INSUFFICIENT → 输出补充计划：{"action":"supplement","focus":["需要补充研究的方向1","方向2"]}
+
+                  SUFFICIENT 时必须调用 exitLoop 工具，不要输出文本。INSUFFICIENT 时只输出 JSON。
+                output-key: refine_action
+              - name: supplementResearcher
+                react-mode: true
+                max-steps: 5
+                description: 根据补充方向执行额外研究并更新报告
+                instruction: |
+                  根据补充方向 {refine_action} 使用搜索工具收集缺失信息。
+                  将补充研究合并到 {synthesis_report}，更新研究报告。
+                  输出完整的、更新后的报告，覆盖 synthesis_report。
+                output-key: synthesis_report
+            # 工作流（展平结构：先定义内部组件，再组装主流程）
+            agent-workflows:
+              # 1. 并行研究层
+              - type: parallel
+                name: ParallelWebResearchAgent
+                description: 并行执行多个研究 Agent 收集信息
+                sub-agents:
+                  - RenewableEnergyResearcher
+                  - EVResearcher
+                  - CarbonCaptureResearcher
+              # 2. Reflexion Loop（报告质量评估循环）
+              - type: loop
+                name: report_reflexion
+                max-iterations: 2
+                sub-agents:
+                  - ReportCritic
+                  - exitOrRefineReport
+                  - supplementResearcher
+              # 3. 主流程 Sequential
+              - type: sequential
+                name: ResearchAndSynthesisPipeline
+                description: 并行研究 → 汇总报告 → Reflexion 质量评估
+                sub-agents:
+                  - ParallelWebResearchAgent
+                  - SynthesisAgent
+                  - report_reflexion
+            runner:
+              agent-name: ResearchAndSynthesisPipeline

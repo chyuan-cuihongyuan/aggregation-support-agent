@@ -1,0 +1,62 @@
+[
+  {
+    "query": "你好",
+    "standardAnswer": "你好！有什么可以帮您的吗？",
+    "standardChunks": [],
+    "category": "闲聊兜底",
+    "difficulty": "easy",
+    "note": "应走 mode=none，不调用工具"
+  },
+  {
+    "query": "i5-14700KF 和 i7-14700KF 有什么区别？哪个更适合游戏？",
+    "standardAnswer": "i7-14700KF 比 i5-14700KF 多 4 个性能核心（20 核 28 线程 vs 14 核 20 线程），多线程性能强约 30%。纯游戏场景两者差距不大（5% 以内），推荐 i5-14700KF 性价比更高；如有直播/录制需求推荐 i7-14700KF。",
+    "standardChunks": ["i5-14700KF：14 核 20 线程，P 核睿频 5.4GHz，TDP 125W，售价约 1800 元。i7-14700KF：20 核 28 线程，P 核睿频 5.6GHz，TDP 125W，售价约 2500 元。游戏性能差距 3-5%，多线程差距 25-30%。"],
+    "category": "产品对比+推荐",
+    "difficulty": "hard"
+  },
+  {
+    "query": "RTX 4090 和 RTX 4080 差多少？",
+    "standardAnswer": "RTX 4090 比 RTX 4080 性能强约 30-40%，4K 游戏帧率差距明显。RTX 4090 售价约 12999 元，RTX 4080 售价约 7999 元。",
+    "standardChunks": ["RTX 4090：16384 CUDA 核心，24GB GDDR6X，TDP 450W，售价 12999 元。RTX 4080：9728 CUDA 核心，16GB GDDR6X，TDP 320W，售价 7999 元。4K 游戏性能差距 30-40%。"],
+    "category": "产品对比查询",
+    "difficulty": "medium"
+  },
+  {
+    "query": "退一赔三的适用条件是什么？",
+    "standardAnswer": "退一赔三的适用条件：1. 经营者存在欺诈行为；2. 消费者受到损失；3. 欺诈行为与损失之间有因果关系。欺诈行为包括虚假宣传、以次充好、隐瞒重要信息等。",
+    "standardChunks": ["消费者权益保护法第五十五条适用条件：经营者提供商品或者服务有欺诈行为。欺诈行为认定：故意告知虚假情况或故意隐瞒真实情况，诱使消费者作出错误意思表示。常见欺诈行为：虚假宣传、以次充好、假冒品牌、隐瞒瑕疵。"],
+    "category": "法律条文深度查询",
+    "difficulty": "hard"
+  },
+  {
+    "query": "Redis 集群模式和哨兵模式怎么选？",
+    "standardAnswer": "哨兵模式适合中小规模（数据量 < 16GB），自动故障转移；集群模式适合大规模（数据量 > 16GB），支持水平扩展。推荐数据量大或高并发场景使用集群模式。",
+    "standardChunks": ["Redis 哨兵模式：主从架构+哨兵监控，自动故障转移，适合数据量 < 16GB。Redis 集群模式：数据分片（16384 个 slot），支持水平扩展，适合数据量 > 16GB 或高并发。选择建议：数据量小选哨兵，数据量大或需要扩展选集群。"],
+    "category": "运维方案选择",
+    "difficulty": "medium"
+  },
+  {
+    "query": "今天的天气怎么样？",
+    "standardAnswer": "抱歉，我无法获取实时天气信息。建议您查看天气预报应用或网站。",
+    "standardChunks": [],
+    "category": "能力边界拒答",
+    "difficulty": "easy",
+    "note": "应走 mode=none，诚实告知能力边界"
+  },
+  {
+    "query": "帮我查一下订单号 20260612001 的状态",
+    "standardAnswer": "订单号 20260612001 状态：已支付，金额 350 元，加油站点：中石化朝阳路站，加油时间：2026-06-12 08:30。",
+    "standardChunks": [],
+    "category": "业务数据查询",
+    "difficulty": "easy",
+    "note": "应调用 BusinessDataTools.queryOrderStatus"
+  },
+  {
+    "query": "i5-14700KF 多少钱？i7-14700KF 多少钱？RTX 4070 多少钱？",
+    "standardAnswer": "i5-14700KF 售价约 2200 元，i7-14700KF 售价约 2500 元，RTX 4070 售价约 3999 元。",
+    "standardChunks": ["i5-14700KF 零售价 2200 元。i7-14700KF 零售价 2500 元。RTX 4070 零售价 3999 元。"],
+    "category": "多主题批量查询",
+    "difficulty": "medium",
+    "note": "应走 mode=batch，一次检索全部"
+  }
+]

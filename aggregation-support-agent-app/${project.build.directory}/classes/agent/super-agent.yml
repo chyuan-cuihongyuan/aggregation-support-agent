@@ -1,0 +1,121 @@
+# 超级智能体配置 — Plan-Execute-Reflect 分层工作流
+# 工作流：Loop(taskCritic, exitOrReplan) → Sequential(intentRouter, taskExecutor, task_reflexion, responseSynthesizer)
+ai:
+  agent:
+    config:
+      tables:
+        superAgent:
+          app-name: superAgent
+          agent:
+            agent-id: "500001"
+            agent-name: 超级智能助手
+            agent-desc: 基于 Plan-Execute-Reflect 工作流的全能智能助手，智能路由 RAG/AIOps/业务工具
+          module:
+            ai-api:
+              base-url: https://api.deepseek.com
+              api-key: ${DEEPSEEK_API_KEY:sk-REDACTED}
+              completions-path: /v1/chat/completions
+            chat-model:
+              model: deepseek-v4-pro
+              max-tokens: 16384
+              tool-mcp-list:
+                - local:
+                    name: ragToolCallbackProvider
+                - local:
+                    name: aiopsToolCallbackProvider
+                - sse:
+                    name: mcp-gateway-business
+                    base-uri: ${MCP_GATEWAY_BASE_URI:http://127.0.0.1:8099}
+                    sse-endpoint: /api-gateway/gateway_business/mcp/sse?api_key=gw-biz-key-2026-chyuan-ai-agent
+                    request-timeout: 30000
+            agents:
+              # ===== Step 1: Plan — 意图识别 + 路由决策 =====
+              - name: intentRouter
+                react-mode: false
+                max-steps: 1
+                description: 分析用户意图，输出结构化执行计划
+                instruction: |
+                  你是超级智能助手的意图路由器。分析用户问题，输出 JSON 格式的执行计划。
+                  意图分类：
+                  1. "knowledge" — 知识类 → queryInternalDocs / queryInternalDocsBatch
+                  2. "aiops" — 运维类 → AIOps 工具集
+                  3. "business" — 业务类 → MCP 网关工具
+                  4. "chat" — 闲聊 → 无需工具
+                  输出：{"intent":"knowledge|aiops|business|chat","tools":["tool1"],"plan":"步骤","batch_queries":["q1","q2"]}
+                  多个独立条目时列出所有查询在 batch_queries。只输出 JSON。
+                output-key: execution_plan
+              # ===== Step 2: Execute — 按计划执行 =====
+              - name: taskExecutor
+                react-mode: true
+                max-steps: 10
+                description: 按执行计划调用相应工具完成任务
+                instruction: |
+                  根据 {execution_plan} 完成用户任务。
+                  intent=knowledge + batch_queries → queryInternalDocsBatch
+                  intent=knowledge 单条 → queryInternalDocs
+                  intent=aiops → 调用 AIOps 工具
+                  intent=business → 调用 MCP 业务工具
+                  intent=chat → 不调用工具
+                  严格按计划执行，不要重复调用。
+                output-key: task_result
+              # ===== Step 3a: Reflect =====
+              - name: taskCritic
+                react-mode: false
+                max-steps: 1
+                description: 评估任务完成度
+                instruction: |
+                  评估 {task_result} 的完整性。
+                  输出：{"verdict":"SUFFICIENT","summary":"..."} 或
+                  {"verdict":"INSUFFICIENT","gap":"...","supplement_plan":"..."}
+                  只输出 JSON。
+                output-key: quality_verdict
+              # ===== Step 3b: Replan =====
+              - name: exitOrReplan
+                react-mode: false
+                max-steps: 1
+                exit-loop-enabled: true
+                description: 决定退出循环或补充执行
+                instruction: |
+                  根据 {quality_verdict}：SUFFICIENT → 调用 exitLoop 工具退出循环；INSUFFICIENT → 输出补充计划 JSON。
+                  SUFFICIENT 时必须调用 exitLoop 工具，不要输出文本。
+                output-key: replan_action
+              # ===== Step 3c: Supplement — 执行补充任务 =====
+              - name: supplementExecutor
+                react-mode: true
+                max-steps: 5
+                description: 执行补充任务并更新结果
+                instruction: |
+                  根据补充计划 {replan_action} 执行补充操作并合并到 {task_result}。
+                  按计划调用相应工具（知识检索、AIOps 工具、MCP 业务工具）。
+                  输出合并后的完整结果，覆盖 task_result。
+                output-key: task_result
+              # ===== Step 4: Respond =====
+              - name: responseSynthesizer
+                react-mode: false
+                max-steps: 1
+                description: 整合结果生成最终回答
+                instruction: |
+                  基于 {task_result} 生成中文回答。基于数据回答，不编造。
+                  知识类注明来源，运维类结构化报告，业务类简洁呈现。
+                  回答完毕立即停止，不要自问自答。
+                output-key: final_response
+            # 工作流（展平结构）
+            agent-workflows:
+              - type: loop
+                name: task_reflexion
+                max-iterations: 2
+                sub-agents:
+                  - taskCritic
+                  - exitOrReplan
+                  - supplementExecutor
+              - type: sequential
+                name: super_pipeline
+                sub-agents:
+                  - intentRouter
+                  - taskExecutor
+                  - task_reflexion
+                  - responseSynthesizer
+            runner:
+              agent-name: super_pipeline
+              plugin-name-list:
+                - myLogPlugin

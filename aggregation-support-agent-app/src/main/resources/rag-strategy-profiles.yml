@@ -1,0 +1,106 @@
+# RAG 检索策略模板 — 按场景定义不同的检索参数组合
+# 通过 speed 字段（由 queryPlanner 输出）选择对应的策略模板
+# 使用方式：在 EnhancedRagService 中根据 speed 加载对应的 profile 配置
+
+rag:
+  profiles:
+    # ===== 精简档：简单事实查询 =====
+    # 适用场景：单实体价格查询、规格查询、单一参数查询
+    # 预期收益：跳过 Multi-Query 和 LiTM，减少 2-3 次 LLM 调用
+    fast:
+      query:
+        rewrite:
+          enabled: false      # 简单查询无需改写
+        multi-query:
+          enabled: false      # 简单查询无需扩展
+      retrieval:
+        vector:
+          top-k: 10           # 减少向量检索返回数
+        bm25:
+          enabled: true
+          top-k: 10
+        fusion:
+          top-k: 5            # 融合后候选数减少
+        timeout-ms: 8000      # 更紧的超时
+      rerank:
+        enabled: true
+        top-k: 3              # 最终返回更少结果
+        timeout: 5
+      reorder:
+        enabled: false        # 简单查询无需 LiTM
+
+    # ===== 标准档：普通查询 =====
+    # 适用场景：常规问答、单实体多维度查询
+    standard:
+      query:
+        rewrite:
+          enabled: true
+        multi-query:
+          enabled: true
+          count: 2            # 标准档扩展 2 条
+      retrieval:
+        vector:
+          top-k: 15
+        bm25:
+          enabled: true
+          top-k: 15
+        fusion:
+          top-k: 8
+        timeout-ms: 12000
+      rerank:
+        enabled: true
+        top-k: 5
+        timeout: 8
+      reorder:
+        enabled: true
+
+    # ===== 深度档：复杂分析查询 =====
+    # 适用场景：对比分析、故障排查、多条件组合、跨领域关联
+    deep:
+      query:
+        rewrite:
+          enabled: true
+        multi-query:
+          enabled: true
+          count: 3            # 深度档扩展 3 条
+      retrieval:
+        vector:
+          top-k: 20           # 更多候选
+        bm25:
+          enabled: true
+          top-k: 20
+        knowledge-graph:
+          enabled: true       # 深度档启用知识图谱
+        fusion:
+          top-k: 12
+        timeout-ms: 15000     # 更宽的超时
+      rerank:
+        enabled: true
+        top-k: 5
+        timeout: 10
+      reorder:
+        enabled: true
+
+    # ===== 批量档：多实体批量查询 =====
+    # 适用场景：同时查询多个商品价格、多个配件规格
+    batch:
+      query:
+        rewrite:
+          enabled: false      # 批量查询无需改写（Planner 已拆分）
+        multi-query:
+          enabled: false      # 批量查询无需扩展
+      retrieval:
+        vector:
+          top-k: 10
+        bm25:
+          enabled: true
+          top-k: 10
+        fusion:
+          top-k: 8
+        timeout-ms: 15000     # 批量查询允许更宽超时
+      rerank:
+        enabled: true
+        top-k: 5
+        timeout: 8
+      reorder:
+        enabled: false        # 批量查询无需 LiTM

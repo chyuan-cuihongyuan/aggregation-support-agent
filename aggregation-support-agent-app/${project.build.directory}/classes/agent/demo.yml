@@ -1,0 +1,119 @@
+# 智能体配置模板 — 通用 Agentic Workflow 示例
+# 本模板展示所有可用的配置项，包括统一 Agentic Workflow 的四阶段模式
+# 参考 docs/01-aggregation-support-agent/Agentic-Workflow场景模式手册.md 了解各场景的最佳配置
+ai:
+  agent:
+    config:
+      tables:
+        demoAgent:
+          app-name: demoAgent
+          agent:
+            agent-id: 100000
+            agent-name: demoAgent
+            agent-desc: 智能体配置模板，展示所有可用字段
+          module:
+            ai-api:
+              base-url: https://apis.itedus.cn
+              api-key: sk-REDACTED
+              completions-path: v1/chat/completions
+              embeddings-path: v1/embeddings
+            chat-model:
+              model: gpt-4.1
+              max-tokens: 8192
+              tool-mcp-list:
+                # SSE 方式：连接远程 MCP 服务（如百度搜索）
+                - sse:
+                    name: baidu-search
+                    base-uri: http://appbuilder.baidu.com/v2/ai_search/mcp/
+                    sse-endpoint: sse?api_key=bce-v3/ALTAK-WjK8NIh3txZo7rXXEjhri/e2f09d53de961bcaf2609b76c7c7a7e6d0f05da3
+                    request-timeout: 500000
+                # Local 方式：本地 Java Bean 工具（实现类在 cn.chyuan.ai.domain.agent.service.armory.matter.mcp.server）
+                - local:
+                    name: myToolCallbackProvider
+              # Skills 技能书：放到 resource 提供
+              tool-skills-list:
+                - type: resource
+                  path: agent/skills
+            agents:
+              # ===== Step 1: Plan — 规划阶段 =====
+              - name: plannerAgent
+                description: 分析用户意图，输出结构化执行计划
+                instruction: |
+                  你是规划器。分析用户请求，输出 JSON 格式的执行计划。
+                output-key: plan_result
+                react-mode: false        # 纯推理，不调用工具
+                max-steps: 1             # 单步输出，防止自问自答
+
+              # ===== Step 2: Execute — 执行阶段 =====
+              - name: executorAgent
+                description: 按计划执行操作（检索/API调用）
+                instruction: |
+                  根据执行计划 {plan_result} 调用相应工具完成任务。
+                  将结果原样输出，不做总结。
+                output-key: execution_result
+                react-mode: true         # ReAct 模式，可调用工具
+                max-steps: 5             # 允许多轮 Thought→Action→Observation
+
+              # ===== Step 3a: Reflect — 质量评估 =====
+              - name: criticAgent
+                description: 评估执行结果质量
+                instruction: |
+                  评估 {execution_result} 的完整性。
+                  输出：{"verdict":"SUFFICIENT"} 或 {"verdict":"INSUFFICIENT","gap":"..."}
+                output-key: quality_verdict
+                react-mode: false
+                max-steps: 1
+
+              # ===== Step 3b: Replan — 退出或补充 =====
+              - name: exitOrReplanAgent
+                description: 决定退出 Reflexion 循环或补充执行
+                instruction: |
+                  根据 {quality_verdict}：
+                  SUFFICIENT → 调用 exitLoop 工具退出循环
+                  INSUFFICIENT → 输出补充计划 JSON
+                output-key: replan_action
+                react-mode: false
+                max-steps: 1
+                exit-loop-enabled: true   # 注入 exitLoop 工具，支持语义级退出
+
+              # ===== Step 3c: Supplement — 执行补充任务 =====
+              - name: supplementAgent
+                description: 执行补充任务并更新结果
+                instruction: |
+                  根据补充计划 {replan_action} 执行补充操作。
+                  将结果合并到 {execution_result}，输出完整结果。
+                output-key: execution_result
+                react-mode: true
+                max-steps: 3
+
+              # ===== Step 4: Respond — 生成最终回答 =====
+              - name: responderAgent
+                description: 基于执行结果生成最终回答
+                instruction: |
+                  基于 {execution_result} 生成友好的中文回答。
+                output-key: final_answer
+                react-mode: false
+                max-steps: 1
+
+            # 工作流定义（展平结构：先定义内部组件，再组装主流程）
+            agent-workflows:
+              # Reflexion 循环：Critic 评估 + ExitOrReplan 决策 + Supplement 执行
+              - type: loop
+                name: reflexion_loop
+                description: Reflexion 质量评估循环
+                max-iterations: 2         # 最大迭代次数，exitLoop 可提前退出
+                sub-agents:
+                  - criticAgent
+                  - exitOrReplanAgent
+                  - supplementAgent
+              # 主流程：Plan → Execute → Reflect → Respond
+              - type: sequential
+                name: main_pipeline
+                description: 统一 Agentic Workflow 四阶段流水线
+                sub-agents:
+                  - plannerAgent
+                  - executorAgent
+                  - reflexion_loop        # 引用上面定义的 LoopAgent
+                  - responderAgent
+            runner:
+              agent-name: main_pipeline   # 指定运行的工作流入口

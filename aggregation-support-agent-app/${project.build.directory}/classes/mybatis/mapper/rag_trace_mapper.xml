@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.chyuan.ai.infrastructure.persistent.mapper.RagTraceMapper">
+
+    <resultMap id="BaseResultMap" type="cn.chyuan.ai.infrastructure.dao.po.RagTracePO">
+        <id column="id" property="id"/>
+        <result column="trace_id" property="traceId"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="owner_user_id" property="ownerUserId"/>
+        <result column="session_id" property="sessionId"/>
+        <result column="agent_id" property="agentId"/>
+        <result column="query_text" property="queryText"/>
+        <result column="rewrite_text" property="rewriteText"/>
+        <result column="retrieval_topk" property="retrievalTopk"/>
+        <result column="source_docs" property="sourceDocs"/>
+        <result column="answer_score" property="answerScore"/>
+        <result column="hallucination_score" property="hallucinationScore"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <!-- 聚合统计结果映射 -->
+    <resultMap id="StatResultMap" type="cn.chyuan.ai.domain.rag.model.valobj.RagTraceStatVO">
+        <result column="group_key" property="groupKey"/>
+        <result column="total" property="total"/>
+        <result column="avg_topk" property="avgTopk"/>
+    </resultMap>
+
+    <!-- 管理员视角通用 where 片段 -->
+    <sql id="adminConditionWhere">
+        <where>
+            <if test="q.tenantId != null and q.tenantId != ''">AND tenant_id = #{q.tenantId}</if>
+            <if test="q.ownerUserId != null and q.ownerUserId != ''">AND owner_user_id = #{q.ownerUserId}</if>
+            <if test="q.agentId != null and q.agentId != ''">AND agent_id = #{q.agentId}</if>
+            <if test="q.startTime != null">AND create_time &gt;= #{q.startTime}</if>
+            <if test="q.endTime != null">AND create_time &lt;= #{q.endTime}</if>
+        </where>
+    </sql>
+
+    <insert id="insert" parameterType="cn.chyuan.ai.infrastructure.dao.po.RagTracePO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO rag_trace (trace_id, tenant_id, owner_user_id, session_id, agent_id, query_text, rewrite_text,
+                               retrieval_topk, source_docs, answer_score, hallucination_score, create_time)
+        VALUES (#{traceId}, #{tenantId}, #{ownerUserId}, #{sessionId}, #{agentId}, #{queryText}, #{rewriteText},
+                #{retrievalTopk}, #{sourceDocs}, #{answerScore}, #{hallucinationScore}, #{createTime})
+    </insert>
+
+    <select id="selectByTraceId" resultMap="BaseResultMap">
+        SELECT id, trace_id, tenant_id, owner_user_id, session_id, agent_id, query_text, rewrite_text,
+               retrieval_topk, source_docs, answer_score, hallucination_score, create_time
+        FROM rag_trace
+        WHERE trace_id = #{traceId}
+          AND tenant_id = #{tenantId}
+          AND owner_user_id = #{ownerUserId}
+        LIMIT 1
+    </select>
+
+    <select id="selectBySessionId" resultMap="BaseResultMap">
+        SELECT id, trace_id, tenant_id, owner_user_id, session_id, agent_id, query_text, rewrite_text,
+               retrieval_topk, source_docs, answer_score, hallucination_score, create_time
+        FROM rag_trace
+        WHERE session_id = #{sessionId}
+          AND tenant_id = #{tenantId}
+          AND owner_user_id = #{ownerUserId}
+        ORDER BY create_time ASC
+    </select>
+
+    <!-- 管理员视角分页查询，不带租户作用域 -->
+    <select id="selectForAdmin" resultMap="BaseResultMap">
+        SELECT id, trace_id, tenant_id, owner_user_id, session_id, agent_id, query_text, rewrite_text,
+               retrieval_topk, source_docs, answer_score, hallucination_score, create_time
+        FROM rag_trace
+        <include refid="adminConditionWhere"/>
+        ORDER BY create_time DESC, id DESC
+        <if test="q.pageSize != null and q.pageSize > 0">
+            LIMIT #{q.pageSize}
+            <if test="q.page != null and q.page > 0">
+                OFFSET ${(q.page - 1) * q.pageSize}
+            </if>
+        </if>
+    </select>
+
+    <select id="countForAdmin" resultType="long">
+        SELECT COUNT(1) FROM rag_trace
+        <include refid="adminConditionWhere"/>
+    </select>
+
+    <!-- 按 agentId 聚合 -->
+    <select id="statByAgent" resultMap="StatResultMap">
+        SELECT agent_id AS group_key,
+               COUNT(1) AS total,
+               AVG(retrieval_topk) AS avg_topk
+        FROM rag_trace
+        <include refid="adminConditionWhere"/>
+        GROUP BY agent_id
+        ORDER BY total DESC
+    </select>
+
+    <!-- 按 ownerUserId 聚合 -->
+    <select id="statByUser" resultMap="StatResultMap">
+        SELECT owner_user_id AS group_key,
+               COUNT(1) AS total,
+               AVG(retrieval_topk) AS avg_topk
+        FROM rag_trace
+        <include refid="adminConditionWhere"/>
+        GROUP BY owner_user_id
+        ORDER BY total DESC
+    </select>
+
+    <!-- 按日期（yyyy-MM-dd）聚合 -->
+    <select id="statByDay" resultMap="StatResultMap">
+        SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS group_key,
+               COUNT(1) AS total,
+               AVG(retrieval_topk) AS avg_topk
+        FROM rag_trace
+        <include refid="adminConditionWhere"/>
+        GROUP BY DATE_FORMAT(create_time, '%Y-%m-%d')
+        ORDER BY group_key ASC
+    </select>
+
+</mapper>

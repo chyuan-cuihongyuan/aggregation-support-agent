@@ -97,18 +97,29 @@ public class LLMEntityExtractionService implements IEntityExtractionService {
     @Override
     public List<EntityExtractionResultVO> batchExtract(List<String> texts, List<String> contexts) {
         List<EntityExtractionResultVO> results = new ArrayList<>();
+        int emptyCount = 0;
+        int failCount = 0;
         for (int i = 0; i < texts.size(); i++) {
             try {
                 String context = i < contexts.size() ? contexts.get(i) : null;
-                results.add(extractEntities(texts.get(i), context));
+                EntityExtractionResultVO result = extractEntities(texts.get(i), context);
+                results.add(result);
+                if (result.getEntities().isEmpty()) {
+                    emptyCount++;
+                }
             } catch (Exception e) {
-                log.warn("批量抽取第{}个chunk失败: {}", i, e.getMessage());
+                failCount++;
+                log.error("批量抽取第{}个chunk失败: {}", i, e.getMessage(), e);
                 results.add(EntityExtractionResultVO.builder()
                         .entities(Collections.emptyList())
                         .relations(Collections.emptyList())
                         .chunkIndex(i)
                         .build());
             }
+        }
+        if (emptyCount > 0 || failCount > 0) {
+            log.warn("批量抽取完成: 总chunk={}, 空结果={}, 失败={}, 成功={}",
+                    texts.size(), emptyCount, failCount, texts.size() - emptyCount - failCount);
         }
         return results;
     }
@@ -168,9 +179,15 @@ public class LLMEntityExtractionService implements IEntityExtractionService {
             List<GraphEntity> entities = new ArrayList<>();
             if (entityMaps != null) {
                 for (Map<String, Object> em : entityMaps) {
+                    String name = (String) em.get("name");
+                    String type = (String) em.get("type");
+                    if (name == null || name.isBlank() || type == null || type.isBlank()) {
+                        log.warn("chunk[{}] LLM 返回的实体缺少 name 或 type，跳过: {}", chunkIndex, em);
+                        continue;
+                    }
                     entities.add(GraphEntity.builder()
-                            .entityName((String) em.get("name"))
-                            .entityType((String) em.get("type"))
+                            .entityName(name)
+                            .entityType(type)
                             .description((String) em.get("description"))
                             .properties((Map<String, Object>) em.get("properties"))
                             .build());
@@ -189,14 +206,24 @@ public class LLMEntityExtractionService implements IEntityExtractionService {
                 }
             }
 
-            return EntityExtractionResultVO.builder()
+            EntityExtractionResultVO result = EntityExtractionResultVO.builder()
                     .entities(entities)
                     .relations(relations)
                     .rawLlmResponse(llmResponse)
                     .chunkIndex(chunkIndex)
                     .build();
+
+            // 记录空抽取结果，便于排查
+            if (entities.isEmpty() && relations.isEmpty()) {
+                log.warn("chunk[{}] LLM 抽取结果为空，原始返回（前500字符）: {}", chunkIndex,
+                        llmResponse != null ? llmResponse.substring(0, Math.min(500, llmResponse.length())) : "null");
+            }
+
+            return result;
         } catch (Exception e) {
-            log.warn("解析 LLM 抽取结果失败: {}", e.getMessage());
+            log.error("解析 LLM 抽取结果失败: chunkIndex={}, error={}, 原始返回（前300字符）: {}",
+                    chunkIndex, e.getMessage(),
+                    llmResponse != null ? llmResponse.substring(0, Math.min(300, llmResponse.length())) : "null");
             return EntityExtractionResultVO.builder()
                     .entities(Collections.emptyList())
                     .relations(Collections.emptyList())

@@ -143,6 +143,30 @@ public class KnowledgeGraphController {
         }
     }
 
+    /** 重试失败的图谱构建任务 */
+    @PostMapping("/retry/{documentId}")
+    public Response<String> retryGraphBuild(@PathVariable String documentId) {
+        try {
+            knowledgeGraphService.retryTask(documentId);
+            return Response.<String>builder()
+                    .code(ResponseCode.SUCCESS.getCode())
+                    .info("已标记任务待重试，请重新上传文档或调用 build 接口触发")
+                    .data(documentId)
+                    .build();
+        } catch (IllegalStateException e) {
+            return Response.<String>builder()
+                    .code(ResponseCode.UN_ERROR.getCode())
+                    .info(e.getMessage())
+                    .build();
+        } catch (Exception e) {
+            log.error("重试图谱构建失败", e);
+            return Response.<String>builder()
+                    .code(ResponseCode.UN_ERROR.getCode())
+                    .info("重试失败: " + e.getMessage())
+                    .build();
+        }
+    }
+
     /** 健康检查 */
     @GetMapping("/health")
     public Response<Boolean> healthCheck() {

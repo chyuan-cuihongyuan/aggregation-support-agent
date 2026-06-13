@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.chyuan.ai.infrastructure.persistent.mapper.UserMapper">
+
+    <resultMap id="UserMap" type="cn.chyuan.ai.infrastructure.dao.po.UserPO">
+        <id column="id" property="id"/>
+        <result column="username" property="username"/>
+        <result column="password" property="password"/>
+        <result column="phone" property="phone"/>
+        <result column="email" property="email"/>
+        <result column="nickname" property="nickname"/>
+        <result column="avatar" property="avatar"/>
+        <result column="role" property="role"/>
+        <result column="status" property="status"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="cn.chyuan.ai.infrastructure.dao.po.UserPO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO user (username, password, phone, email, nickname, avatar, role, status, create_time, update_time)
+        VALUES (#{username}, #{password}, #{phone}, #{email}, #{nickname}, #{avatar}, #{role}, #{status}, #{createTime}, #{updateTime})
+    </insert>
+
+    <select id="queryByUsername" parameterType="java.lang.String" resultMap="UserMap">
+        SELECT id, username, password, phone, email, nickname, avatar, role, status, create_time, update_time
+        FROM user
+        WHERE username = #{username}
+    </select>
+
+    <select id="queryById" parameterType="java.lang.Long" resultMap="UserMap">
+        SELECT id, username, password, phone, email, nickname, avatar, role, status, create_time, update_time
+        FROM user
+        WHERE id = #{id}
+    </select>
+
+    <select id="queryList" resultMap="UserMap">
+        SELECT id, username, password, phone, email, nickname, avatar, role, status, create_time, update_time
+        FROM user
+        ORDER BY create_time DESC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+
+    <select id="countAll" resultType="int">
+        SELECT COUNT(*) FROM user
+    </select>
+
+    <update id="updateStatus">
+        UPDATE user SET status = #{status}, update_time = NOW() WHERE id = #{id}
+    </update>
+
+    <update id="updateRole">
+        UPDATE user SET role = #{role}, update_time = NOW() WHERE id = #{id}
+    </update>
+
+    <update id="updateUser" parameterType="cn.chyuan.ai.infrastructure.dao.po.UserPO">
+        UPDATE user
+        SET username = #{username},
+            password = #{password},
+            phone = #{phone},
+            email = #{email},
+            nickname = #{nickname},
+            avatar = #{avatar},
+            role = #{role},
+            status = #{status},
+            update_time = #{updateTime}
+        WHERE id = #{id}
+    </update>
+
+</mapper>

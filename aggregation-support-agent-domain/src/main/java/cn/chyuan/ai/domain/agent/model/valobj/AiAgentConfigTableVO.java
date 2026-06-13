@@ -154,6 +154,26 @@ public class AiAgentConfigTableVO {
              * 默认为 10 步
              */
             private Integer maxSteps = 10;
+
+            /**
+             * 是否注入 exitLoop 工具，用于 LoopAgent 中 Reflexion 循环的语义级提前退出。
+             * 设为 true 时，AgentNode 会自动通过 FunctionTool.create() 注入 ExitLoopTool。
+             * <p>
+             * 适用于 LoopAgent 中的 ExitOrReplan / ExitOrRefine 等决策智能体，
+             * 当 Critic 评估结果为 SUFFICIENT 时可提前退出循环，无需等待 maxIterations 硬限制。
+             * <p>
+             * 默认 false，不影响现有智能体行为。
+             */
+            private Boolean exitLoopEnabled = false;
+
+            /**
+             * Agent 级别工具声明（可选，预留扩展）。
+             * <p>
+             * - null：使用全局 ChatModel 注册的工具（默认行为）
+             * - 空列表：不注入任何工具（适用于 Planner、Critic 等纯推理智能体）
+             * - 非空列表：仅注入指定名称的工具
+             */
+            private List<String> tools;
         }
 
         @Data

@@ -1,0 +1,192 @@
+# DeepSeek 智能问答智能体配置 — Plan-Execute-Reflect Agentic Workflow
+# 使用 DeepSeek OpenAI 兼容接口作为对话模型
+# 工作流：Loop(resultCritic, exitOrReplan) → Sequential(queryPlanner, queryExecutor, reflexion_loop, responseGenerator)
+# 注意：LoopAgent 必须在 SequentialAgent 之前定义，因为 SequentialAgent 的 subAgents 引用已装配的 LoopAgent
+ai:
+  agent:
+    config:
+      tables:
+        deepseekRagChatAgent:
+          app-name: deepseekRagChatAgent
+          agent:
+            agent-id: "200004"
+            agent-name: DeepSeek 智能问答
+            agent-desc: 基于 Plan-Execute-Reflect 工作流的 DeepSeek RAG 智能问答助手
+          module:
+            ai-api:
+              base-url: https://api.deepseek.com
+              api-key: ${DEEPSEEK_API_KEY:sk-REDACTED}
+              completions-path: /v1/chat/completions
+            chat-model:
+              model: deepseek-v4-pro
+              max-tokens: 8192
+              tool-mcp-list:
+                - local:
+                    name: ragToolCallbackProvider
+            agents:
+              # ===== Step 1: Plan — 分析查询，生成结构化检索计划（含快慢档路由） =====
+              - name: queryPlanner
+                react-mode: false
+                max-steps: 1
+                description: 分析用户查询并生成结构化检索计划
+                instruction: |
+                  你是一个查询分析专家。分析用户的查询，输出 JSON 格式的检索计划。
+
+                  分析规则：
+                  1. 如果问题涉及多个独立条目（如多个商品价格、多个配件规格），输出 batch 模式并列出所有查询
+                  2. 如果问题只涉及单一条目，输出 single 模式并列出查询
+                  3. 如果是闲聊、常识性问题、与知识库无关，输出 none 模式
+
+                  路由规则（speed 字段）：
+                  - speed=fast：简单事实查询（价格、规格、单一参数），跳过 Multi-Query 扩展和 LiTM 重排
+                  - speed=standard：复杂查询（对比、分析、多条件、故障排查），走完整检索管道
+                  判断标准：如果查询只涉及一个实体的一个属性 → fast；其他 → standard
+
+                  输出格式（JSON）：
+                  {"mode":"batch|single|none","speed":"fast|standard","queries":["查询1","查询2",...],"reason":"判断依据"}
+
+                  示例：
+                  - "5个电脑配件的进货价" → {"mode":"batch","speed":"standard","queries":["配件1 进货价","配件2 进货价",...],"reason":"涉及多个独立条目"}
+                  - "i5-14700KF多少钱" → {"mode":"single","speed":"fast","queries":["i5-14700KF 价格"],"reason":"单一条目简单价格查询"}
+                  - "i5-14700KF 和 i7-14700KF 哪个更适合游戏？" → {"mode":"single","speed":"standard","queries":["i5-14700KF vs i7-14700KF 游戏性能对比"],"reason":"对比分析，需要多维度信息"}
+                  - "你好" → {"mode":"none","speed":"fast","queries":[],"reason":"闲聊，无需检索"}
+
+                  只输出 JSON，不要解释。
+                output-key: retrieval_plan
+
+              # ===== Step 2: Execute — 根据 plan 调用工具检索（支持快慢档路由） =====
+              - name: queryExecutor
+                react-mode: true
+                max-steps: 3
+                description: 根据检索计划执行知识库检索
+                instruction: |
+                  你是一个检索执行器。根据检索计划 {retrieval_plan}，严格执行检索操作。
+
+                  执行规则（严格遵守，不得违反）：
+                  1. mode=batch → 调用 queryInternalDocsBatch(queries)，一次性传入全部查询
+                  2. mode=single → 调用 queryInternalDocs(query)，传入单条查询
+                  3. mode=none → 不调用任何工具，直接输出 "无需检索：用户问题不涉及知识库内容"
+
+                  快慢档路由（重要）：
+                  - 如果 speed=fast：在工具调用时添加 speed=fast 参数，跳过 Multi-Query 扩展和 LiTM 重排，直接返回向量检索结果
+                  - 如果 speed=standard：在工具调用时添加 speed=standard 参数，走完整检索管道（Multi-Query + Rerank）
+
+                  关键约束：
+                  - 严格按计划执行，不要自行增加额外查询
+                  - 不要对已检索的条目发起重复检索
+                  - 将检索结果原样输出，不做总结或筛选
+                  - 必须在工具调用时传递 speed 参数，否则路由不生效
+                output-key: retrieval_results
+
+              # ===== Step 3a: Reflect — 评估检索结果质量 =====
+              - name: resultCritic
+                react-mode: false
+                max-steps: 1
+                description: 评估检索结果的完整性和质量
+                instruction: |
+                  你是一个检索结果质量评估专家。评估检索结果 {retrieval_results} 的完整性和质量。
+
+                  评估标准：
+                  1. 对于批量检索：逐条检查每个查询是否有有效的、非空的结果
+                  2. 对于单条检索：检查结果是否包含足够的信息回答用户问题
+                  3. 对于无需检索的情况：直接判定为充足
+
+                  输出格式（JSON）：
+                  - 结果充足：{"verdict":"SUFFICIENT","summary":"评估摘要"}
+                  - 结果不足：{"verdict":"INSUFFICIENT","gap":"缺少的信息","supplement_queries":["补充查询1","补充查询2"]}
+
+                  注意：supplement_queries 最多 3 条，只补充真正缺失的信息。
+                  只输出 JSON，不要解释。
+                output-key: quality_verdict
+
+              # ===== Step 3b: Replan 决策 — 退出或补充检索 =====
+              - name: exitOrReplan
+                react-mode: false
+                max-steps: 1
+                exit-loop-enabled: true
+                description: 根据质量评估决定退出循环或补充检索
+                instruction: |
+                  根据质量评估结果 {quality_verdict}，做出决策：
+
+                  如果 verdict 为 SUFFICIENT → 调用 exitLoop 工具退出循环，检索结果充足，可以生成回答。
+                  如果 verdict 为 INSUFFICIENT → 输出补充查询计划：
+                  {"mode":"batch|single","queries":["补充查询1",...],"reason":"补充原因"}
+
+                  SUFFICIENT 时必须调用 exitLoop 工具，不要输出文本。INSUFFICIENT 时只输出 JSON，不要解释。
+                output-key: replan_action
+
+              # ===== Step 3c: Supplement — 执行补充查询并合并结果 =====
+              - name: supplementExecutor
+                react-mode: true
+                max-steps: 3
+                description: 执行补充查询并将结果合并到检索结果中
+                instruction: |
+                  你是一个补充检索执行器。根据补充查询计划 {replan_action}，执行补充检索并合并结果。
+
+                  执行规则（严格遵守）：
+                  1. 如果 {replan_action} 为空或不存在，说明不需要补充检索，直接退出
+                  2. 解析 {replan_action} 中的 mode 和 queries
+                  3. mode=batch → 调用 queryInternalDocsBatch(queries)
+                  4. mode=single → 调用 queryInternalDocs(query)
+                  5. 将补充检索结果与原有 {retrieval_results} 合并（去重）
+                  6. 输出合并后的完整检索结果
+
+                  合并规则：
+                  - 保留原有检索结果
+                  - 将补充检索结果追加到末尾
+                  - 如果有重复的文档片段，只保留相关性得分更高的
+
+                  关键约束：
+                  - 只执行补充查询，不要重新查询已有的内容
+                  - 必须输出合并后的完整结果，覆盖 {retrieval_results}
+                output-key: retrieval_results
+
+              # ===== Step 4: Respond — 基于检索结果生成最终回答 =====
+              - name: responseGenerator
+                react-mode: false
+                max-steps: 1
+                description: 基于检索结果生成最终的中文回答
+                instruction: |
+                  你是一个专业、友好的智能问答助手。基于检索结果 {retrieval_results}，生成准确、完整的中文回答。
+
+                  回答原则：
+                  1. 必须基于检索结果回答，不得凭自身知识编造或估算
+                  2. 注明信息来源（引用文档名或章节）
+                  3. 如果检索结果不足以回答问题，诚实告知用户缺少的信息
+                  4. 回答要具体、有针对性，避免空泛
+                  5. 使用清晰简洁的中文
+
+                  对话风格：
+                  - 语气亲切自然，像朋友一样交流
+                  - 适当使用表情符号增加亲和力（但不要过度）
+                  - 根据用户的问题调整回答的详细程度
+
+                  重要规则：
+                  - 每次只回答用户当前的问题，回答完毕后立即停止输出
+                  - 禁止在回答中提出追问后又自己回答追问（自问自答）
+                  - 回答结束后可以简短询问"还有其他想了解的吗？"，但禁止在此基础上展开新话题
+                output-key: final_answer
+
+            # 工作流定义（展平结构：先定义内部 Loop，再定义外部 Sequential 引用它）
+            agent-workflows:
+              # 1. 先装配 Reflexion Loop（内部循环：评估 → 决策 → 补充）
+              - type: loop
+                name: reflexion_loop
+                max-iterations: 2
+                sub-agents:
+                  - resultCritic
+                  - exitOrReplan
+                  - supplementExecutor
+              # 2. 再装配主流程 Sequential（引用已装配的 reflexion_loop）
+              - type: sequential
+                name: rag_pipeline
+                sub-agents:
+                  - queryPlanner
+                  - queryExecutor
+                  - reflexion_loop
+                  - responseGenerator
+
+            runner:
+              agent-name: rag_pipeline
+              plugin-name-list:
+                - myLogPlugin

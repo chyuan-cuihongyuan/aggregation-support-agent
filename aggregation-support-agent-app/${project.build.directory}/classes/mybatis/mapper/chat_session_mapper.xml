@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.chyuan.ai.infrastructure.persistent.mapper.ChatSessionMapper">
+
+    <resultMap id="ChatSessionMap" type="cn.chyuan.ai.infrastructure.dao.po.ChatSessionPO">
+        <id column="id" property="id"/>
+        <result column="session_id" property="sessionId"/>
+        <result column="agent_id" property="agentId"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="owner_user_id" property="ownerUserId"/>
+        <result column="trace_id" property="traceId"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="cn.chyuan.ai.infrastructure.dao.po.ChatSessionPO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO chat_session (session_id, agent_id, tenant_id, owner_user_id, trace_id, create_time, update_time)
+        VALUES (#{sessionId}, #{agentId}, #{tenantId}, #{ownerUserId}, #{traceId}, #{createTime}, #{updateTime})
+    </insert>
+
+    <select id="queryBySessionId" resultMap="ChatSessionMap">
+        SELECT id, session_id, agent_id, tenant_id, owner_user_id, trace_id, create_time, update_time
+        FROM chat_session
+        WHERE session_id = #{sessionId}
+    </select>
+
+    <select id="queryBySessionIdAndScope" resultMap="ChatSessionMap">
+        SELECT id, session_id, agent_id, tenant_id, owner_user_id, trace_id, create_time, update_time
+        FROM chat_session
+        WHERE session_id = #{sessionId}
+          AND tenant_id = #{scope.tenantId}
+          AND owner_user_id = #{scope.ownerUserId}
+    </select>
+
+</mapper>

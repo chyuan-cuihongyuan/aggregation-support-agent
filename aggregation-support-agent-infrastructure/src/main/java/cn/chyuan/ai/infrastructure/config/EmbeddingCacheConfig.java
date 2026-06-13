@@ -14,8 +14,9 @@ import org.springframework.context.annotation.Primary;
 /**
  * 嵌入缓存配置 — 启用/禁用嵌入向量缓存
  * <p>
- * 仅在降级策略未启用（embedding.fallback.enabled != true）时作为 @Primary。
+ * 仅在降级策略未启用（embedding.fallback.enabled != true）且二级缓存未启用时作为 @Primary。
  * 降级策略启用时，缓存层由 EmbeddingFallbackConfig 内部构建，此处不再创建 Bean。
+ * 二级缓存启用时，由 TwoLevelEmbeddingCacheConfig 覆盖此 Bean。
  */
 @Slf4j
 @Configuration(proxyBeanMethods = false)

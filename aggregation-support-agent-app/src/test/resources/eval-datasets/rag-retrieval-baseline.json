@@ -1,0 +1,107 @@
+[
+  {
+    "query": "i9-14900K 用什么接口的主板？",
+    "standardAnswer": "i9-14900K 使用 LGA 1700 接口，兼容 Intel 700 系列（Z790/B760）和 600 系列（Z690/B660）主板。",
+    "standardChunks": ["i9-14900K 是 Intel 第 14 代酷睿处理器，采用 LGA 1700 接口，支持 DDR4/DDR5 内存，兼容 Intel 700/600 系列芯片组主板。"],
+    "category": "产品规格精确查询",
+    "difficulty": "easy"
+  },
+  {
+    "query": "RTX 4070 Ti 的功耗是多少？需要多大电源？",
+    "standardAnswer": "RTX 4070 Ti 的 TDP 为 285W，建议搭配 700W 及以上电源。",
+    "standardChunks": ["NVIDIA GeForce RTX 4070 Ti 显卡，TDP 285W，推荐系统电源 700W，采用 16pin 供电接口。"],
+    "category": "产品规格精确查询",
+    "difficulty": "easy"
+  },
+  {
+    "query": "DDR5 和 DDR4 内存有什么区别？",
+    "standardAnswer": "DDR5 相比 DDR4 主要提升：频率更高（4800MHz 起步 vs 2133MHz 起步）、电压更低（1.1V vs 1.2V）、单条容量更大（最大 64GB vs 32GB）、支持 ECC 纠错。",
+    "standardChunks": ["DDR5 内存起步频率 4800MHz，工作电压 1.1V，单条最大容量 64GB，支持片上 ECC 纠错。DDR4 内存起步频率 2133MHz，工作电压 1.2V，单条最大容量 32GB。"],
+    "category": "产品规格对比查询",
+    "difficulty": "medium"
+  },
+  {
+    "query": "iPhone 15 Pro Max 618 到手价是多少？",
+    "standardAnswer": "iPhone 15 Pro Max 256GB 版本 618 大促到手价约 8999 元，原价 9999 元，优惠 1000 元。",
+    "standardChunks": ["iPhone 15 Pro Max 256GB，原价 9999 元，618 大促活动价 8999 元，支持 12 期免息，京东自营配送。"],
+    "category": "价格查询",
+    "difficulty": "easy"
+  },
+  {
+    "query": "网购被骗可以要求退一赔三吗？",
+    "standardAnswer": "可以。根据《消费者权益保护法》第五十五条，经营者提供商品或服务有欺诈行为的，应当按照消费者的要求增加赔偿其受到的损失，增加赔偿的金额为消费者购买商品的价款或者接受服务的费用的三倍。",
+    "standardChunks": ["消费者权益保护法第五十五条：经营者提供商品或者服务有欺诈行为的，应当按照消费者的要求增加赔偿其受到的损失，增加赔偿的金额为消费者购买商品的价款或者接受服务的费用的三倍；增加赔偿的金额不足五百元的，为五百元。"],
+    "category": "法律条文查询",
+    "difficulty": "medium"
+  },
+  {
+    "query": "Kafka 消费延迟怎么排查？",
+    "standardAnswer": "排查步骤：1. 检查 Consumer Lag 指标（kafka-consumer-groups.sh --describe）；2. 检查消费者实例数量是否等于分区数；3. 检查消费者处理逻辑是否有阻塞；4. 检查网络带宽和 Broker 负载；5. 必要时增加分区数或消费者实例。",
+    "standardChunks": ["Kafka 消费延迟排查：使用 kafka-consumer-groups.sh --describe --group 查看 Lag，Lag 持续增长说明消费能力不足。解决方案：增加消费者实例数（不超过分区数）、优化消费逻辑、增加分区数、调整 fetch.max.wait.ms 和 max.poll.records 参数。"],
+    "category": "运维故障排查",
+    "difficulty": "medium"
+  },
+  {
+    "query": "Redis 缓存穿透怎么解决？",
+    "standardAnswer": "解决方案：1. 布隆过滤器拦截不存在的 key；2. 缓存空值（设置较短 TTL）；3. 接口层参数校验。推荐布隆过滤器 + 缓存空值组合方案。",
+    "standardChunks": ["缓存穿透是指查询一个一定不存在的数据，由于缓存不命中，每次都要查数据库。解决方案：布隆过滤器（推荐）、缓存空值（TTL 2-5 分钟）、接口层参数校验。布隆过滤器可以拦截 99% 以上的非法请求。"],
+    "category": "运维故障排查",
+    "difficulty": "medium"
+  },
+  {
+    "query": "组装一台 4K 游戏主机需要哪些配件？预算 2 万",
+    "standardAnswer": "推荐配置：CPU i7-14700KF（约 2500 元）+ GPU RTX 4070 Ti Super（约 5500 元）+ 主板 Z790（约 1500 元）+ 内存 DDR5 32GB（约 600 元）+ SSD 1TB（约 400 元）+ 电源 750W（约 500 元）+ 机箱（约 300 元）+ 散热器（约 200 元），总计约 11500 元，预算充足可升级 RTX 4080。",
+    "standardChunks": ["4K 游戏主机推荐配置：CPU Intel i7-14700KF（20 核 28 线程，LGA1700），GPU NVIDIA RTX 4070 Ti Super（16GB GDDR6X），主板 Z790 芯片组，内存 DDR5 32GB（6000MHz），存储 PCIe 4.0 NVMe SSD 1TB，电源 750W 80Plus 金牌。"],
+    "category": "跨领域关联查询",
+    "difficulty": "hard"
+  },
+  {
+    "query": "同时查一下 i5-14700KF 和 RTX 4070 Ti 的进货价",
+    "standardAnswer": "i5-14700KF 进货价约 1800 元，RTX 4070 Ti 进货价约 4800 元。",
+    "standardChunks": ["i5-14700KF 进货价 1800 元，零售价 2200 元。RTX 4070 Ti 进货价 4800 元，零售价 5500 元。"],
+    "category": "多主题批量查询",
+    "difficulty": "medium"
+  },
+  {
+    "query": "量子计算机的最新进展",
+    "standardAnswer": "抱歉，我的知识库中没有关于量子计算机的信息。建议您查阅科技新闻网站或学术论文获取最新进展。",
+    "standardChunks": [],
+    "category": "空结果与兜底处理",
+    "difficulty": "easy"
+  },
+  {
+    "query": "劳动合同法规定试用期最长多久？",
+    "standardAnswer": "根据《劳动合同法》第十九条：劳动合同期限三个月以上不满一年的，试用期不得超过一个月；一年以上不满三年的，不得超过二个月；三年以上固定期限和无固定期限的，不得超过六个月。",
+    "standardChunks": ["劳动合同法第十九条：劳动合同期限三个月以上不满一年的，试用期不得超过一个月；劳动合同期限一年以上不满三年的，试用期不得超过二个月；三年以上固定期限和无固定期限的劳动合同，试用期不得超过六个月。同一用人单位与同一劳动者只能约定一次试用期。"],
+    "category": "法律条文查询",
+    "difficulty": "easy"
+  },
+  {
+    "query": "OOMKilled 错误怎么排查和解决？",
+    "standardAnswer": "排查步骤：1. kubectl describe pod 查看 OOM 原因；2. 检查容器内存 limits 是否合理；3. 分析 JVM 堆内存使用（jmap -heap）；4. 检查是否有内存泄漏（jmap -histo）；5. 解决方案：调整 limits/requests、优化 JVM 参数（-Xmx）、修复内存泄漏。",
+    "standardChunks": ["OOMKilled 排查：kubectl describe pod 查看 LastState，确认 OOMKilled。检查 resources.limits.memory 是否过小。JVM 应用检查 -Xmx 设置，建议 limits 的 70-80%。常见原因：堆内存过大、内存泄漏、Native 内存溢出。解决方案：调整 limits、优化 JVM 参数、使用 jprofiler 分析内存泄漏。"],
+    "category": "运维故障排查",
+    "difficulty": "hard"
+  },
+  {
+    "query": "小米 14 和华为 Mate 60 哪个更值得买？",
+    "standardAnswer": "小米 14 搭载骁龙 8 Gen 3，性能更强，适合游戏用户；华为 Mate 60 搭载麒麟 9000S，支持卫星通话，适合商务用户。价格方面小米 14 更有优势。",
+    "standardChunks": ["小米 14：骁龙 8 Gen 3，6.36 英寸直屏，5000 万像素，4610mAh，起售价 3999 元。华为 Mate 60：麒麟 9000S，6.69 英寸曲面屏，5000 万像素，4750mAh，支持卫星通话，起售价 4999 元。"],
+    "category": "产品对比查询",
+    "difficulty": "medium"
+  },
+  {
+    "query": "MySQL 慢查询怎么优化？",
+    "standardAnswer": "优化步骤：1. 开启慢查询日志（slow_query_log=ON）；2. 使用 EXPLAIN 分析执行计划；3. 添加合适索引（联合索引遵循最左前缀）；4. 避免 SELECT *；5. 优化 JOIN 查询；6. 分页查询使用延迟关联。",
+    "standardChunks": ["MySQL 慢查询优化：1. 开启慢查询日志 set global slow_query_log=ON；2. EXPLAIN 分析 type 列，避免 ALL（全表扫描）；3. 索引优化：联合索引遵循最左前缀原则，覆盖索引减少回表；4. 避免 SELECT *，只查需要的列；5. 大分页使用延迟关联或游标分页。"],
+    "category": "运维故障排查",
+    "difficulty": "medium"
+  },
+  {
+    "query": "消费者权益保护法规定的七天无理由退货适用于哪些商品？",
+    "standardAnswer": "七天无理由退货适用于网购、电视、电话、邮购等方式销售的商品，但以下除外：1. 定作商品；2. 鲜活易腐商品；3. 在线下载或拆封的数字化商品；4. 交付的报纸、期刊。",
+    "standardChunks": ["消费者权益保护法第二十五条：经营者采用网络、电视、电话、邮购等方式销售商品，消费者有权自收到商品之日起七日内退货，且无需说明理由，但下列商品除外：（一）消费者定作的；（二）鲜活易腐的；（三）在线下载或者消费者拆封的音像制品、计算机软件等数字化商品；（四）交付的报纸、期刊。"],
+    "category": "法律条文查询",
+    "difficulty": "medium"
+  }
+]

@@ -168,20 +168,24 @@ public class CachedEmbeddingService implements IEmbeddingService {
     }
 
     /**
-     * 生成缓存key（文本的MD5 hash）
+     * 生成缓存key（文本归一化后的 MD5 hash）
+     * <p>
+     * 归一化处理：trim + 小写 + 统一空白，使仅有大小写/空白差异的相同 query 能命中同一缓存条目。
      */
     private String generateCacheKey(String text) {
+        // 归一化：去除首尾空白、转小写、合并连续空白为单个空格
+        String normalized = text.trim().toLowerCase().replaceAll("\\s+", " ");
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
-            byte[] hash = md.digest(text.getBytes(StandardCharsets.UTF_8));
+            byte[] hash = md.digest(normalized.getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) {
                 sb.append(String.format("%02x", b));
             }
             return "embedding:" + modelName + ":" + sb;
         } catch (NoSuchAlgorithmException e) {
-            // 降级：使用文本hashcode
-            return "embedding:" + modelName + ":" + text.hashCode();
+            // 降级：使用归一化文本的 hashcode
+            return "embedding:" + modelName + ":" + normalized.hashCode();
         }
     }
 

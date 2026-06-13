@@ -6,8 +6,10 @@ import cn.chyuan.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import cn.chyuan.ai.domain.agent.service.armory.AbstractArmorySupport;
 import cn.chyuan.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
 import cn.chyuan.ai.domain.agent.service.armory.matter.patch.MySpringAI;
+import cn.chyuan.ai.domain.agent.service.armory.matter.tools.ExitLoopTool;
 import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
 import com.google.adk.agents.LlmAgent;
+import com.google.adk.tools.FunctionTool;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Service;
@@ -42,12 +44,17 @@ public class AgentNode extends AbstractArmorySupport {
             Action: Call the appropriate tool
             Observation: (The system will return the tool execution result)
 
-            You can perform multiple rounds of Thought→Action→Observation until you have enough information.
+            Trust your tool results — they are already optimized and reranked.
+            Do not re-query for items you have already retrieved.
 
             ## Rules:
             - When in doubt about whether to use a tool, prefer using it
             - Always use tools for factual queries about data in the knowledge base
             - Do not substitute your own knowledge for tool results on factual questions
+            - NEVER re-query the same or similar items after a successful tool call.
+              If batch query results are incomplete for some items, note it in your response instead of re-querying.
+            - Each user question should trigger at most ONE round of tool calling (one batch or one single).
+              Do NOT make follow-up tool calls for the same items in the same conversation turn.
             - Your final response should contain only the substantive content, do not include labels like "Final Answer:" or "Thought:"
             """;
 
@@ -88,6 +95,14 @@ public class AgentNode extends AbstractArmorySupport {
                 agentBuilder.maxSteps(1);
             } else if (agentConfig.getMaxSteps() != null && agentConfig.getMaxSteps() > 0) {
                 agentBuilder.maxSteps(agentConfig.getMaxSteps());
+            }
+
+            // 注入 exitLoop 工具：用于 LoopAgent 中 Reflexion 循环的语义级提前退出
+            // 当 exit-loop-enabled: true 时，AgentNode 自动注入 ExitLoopTool
+            // 该工具通过 toolContext.actions().setEscalate(true) 触发 LoopAgent 退出
+            if (Boolean.TRUE.equals(agentConfig.getExitLoopEnabled())) {
+                agentBuilder.tools(FunctionTool.create(ExitLoopTool.class, "exitLoop"));
+                log.info("Agent [{}] 已注入 exitLoop 工具，支持 Reflexion 循环语义级退出", agentConfig.getName());
             }
 
             LlmAgent llmAgent = agentBuilder.build();
