@@ -47,6 +47,8 @@ public class EmbeddingException extends RuntimeException {
         NETWORK_ERROR(true),
         /** 提供商内部错误 — 可重试 */
         PROVIDER_ERROR(true),
+        /** 请求参数错误（400，如输入超长/空 input） — 不可重试，不降级（备用提供商维度/格式同样无法处理） */
+        INVALID_REQUEST(false),
         /** 未知错误 — 不可重试 */
         UNKNOWN(false);
 
@@ -73,6 +75,10 @@ public class EmbeddingException extends RuntimeException {
             }
             if (statusCode == 401 || statusCode == 403) {
                 return AUTH_FAILED;
+            }
+            if (statusCode == 400) {
+                // 参数错误（输入超长、空 input、维度非法等）：重试与降级均无意义，快速失败
+                return INVALID_REQUEST;
             }
             if (statusCode >= 500) {
                 return PROVIDER_ERROR;

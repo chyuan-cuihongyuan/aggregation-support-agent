@@ -5,6 +5,7 @@ import cn.chyuan.ai.domain.auth.support.RequestScopeContext;
 import cn.chyuan.ai.domain.knowledgegraph.service.IKnowledgeGraphService;
 import cn.chyuan.ai.domain.knowledgegraph.model.valobj.GraphSearchResultVO;
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
+import cn.chyuan.ai.domain.rag.adapter.port.IQueryResultCache;
 import cn.chyuan.ai.domain.rag.adapter.port.IDocumentParserFactory;
 import cn.chyuan.ai.domain.rag.adapter.repository.IDocumentMetadataRepository;
 import cn.chyuan.ai.domain.rag.adapter.repository.IRagTraceRepository;
@@ -45,6 +46,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.LinkedHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -75,6 +77,10 @@ public class EnhancedRagService implements IRagService {
     /** BM25检索返回数量 */
     @Value("${rag.retrieval.bm25.top-k}")
     private int bm25TopK;
+
+    /** 查询结果缓存（port 解耦，由 infrastructure 层 GuavaQueryResultCache 实现，原子 getOrCompute） */
+    @Resource
+    private IQueryResultCache queryResultCache;
 
     /** 是否启用Query优化 */
     @Value("${rag.query.rewrite.enabled}")
@@ -175,6 +181,8 @@ public class EnhancedRagService implements IRagService {
 
     @Override
     public void uploadDocument(DocumentUploadCommand command) {
+        // 文档上传前清空查询结果缓存，确保新文档可被检索（避免返回上传前的过期结果）
+        queryResultCache.invalidateAll();
         String documentId = command.getDocumentId() != null && !command.getDocumentId().isBlank()
                 ? command.getDocumentId()
                 : UUID.randomUUID().toString().replace("-", "").substring(0, 16);
@@ -298,6 +306,8 @@ public class EnhancedRagService implements IRagService {
             bm25SearchService.removeDocument(documentId, scope);
         }
         documentMetadataRepository.markDeletedByDocumentId(documentId, scope);
+        // 文档删除后清空查询结果缓存，避免返回已删除文档的过期结果
+        queryResultCache.invalidateAll();
     }
 
     private String resolveExtension(String fileName) {
@@ -350,11 +360,23 @@ public class EnhancedRagService implements IRagService {
     private InternalSearchOutput doSearchInternal(String query, int topK, TenantScopeVO scope) {
         log.info("开始检索: query={}, topK={}", query, topK);
 
-        // 记录各阶段耗时，用于可观测性上报
+        // M5-3: 查询结果缓存（port 解耦；Guava get(key,loader) 原子 computeIfAbsent，解决并发竞态 #3）
+        // key 用 query 本身而非 hashCode()，HashMap 内部 hashCode 碰撞时由 equals 兜底，避免错误命中（#2）
+        String cacheKey = scope.getTenantId() + ":" + query + ":" + topK;
+        List<VectorSearchResultVO> results = queryResultCache.getOrCompute(cacheKey,
+                key -> executeRetrievalPipeline(query, topK, scope));
+        return new InternalSearchOutput(null, results, false);
+    }
+
+    /**
+     * 执行完整检索流水线（缓存未命中时调用）：rewrite+expand 并行 → 多路召回 → rerank → LiTM 重排。
+     * <p>
+     * 各阶段耗时记录到 RagSourceCollector Holder 供可观测性上报。
+     */
+    private List<VectorSearchResultVO> executeRetrievalPipeline(String query, int topK, TenantScopeVO scope) {
         List<Map<String, Object>> stages = new ArrayList<>();
 
-        // 第二层：查询优化 + Multi-Query 扩展并行执行（两者无数据依赖）
-        // expandQuery 使用原始 query 而非改写后的 query，因此可以并行
+        // 查询优化 + Multi-Query 扩展并行执行（两者无数据依赖；expand 用原始 query）
         long stepStart = System.currentTimeMillis();
 
         java.util.concurrent.CompletableFuture<String> rewriteFuture = java.util.concurrent.CompletableFuture.completedFuture(query);
@@ -400,46 +422,40 @@ public class EnhancedRagService implements IRagService {
         }
 
         long rewriteExpandCost = System.currentTimeMillis() - stepStart;
-        String rewriteQuery = (queryRewriteEnabled && optimizedQuery != null && !optimizedQuery.equals(query))
-                ? optimizedQuery : null;
         stages.add(Map.of("stage", "query_rewrite_and_expand", "count", 1, "costTimeMs", (int) rewriteExpandCost));
-
         log.info("Query优化并行完成: rewrite={}ms, expandedQueries={}", rewriteExpandCost,
                 preExpandedQueries != null ? preExpandedQueries.size() : 0);
 
-        // 第三层：多路召回（传入预扩展的 queries，跳过内部 expand 调用）
+        // 多路召回（传入预扩展 queries，跳过内部 expand 调用）
         stepStart = System.currentTimeMillis();
         List<VectorSearchResultVO> results = multiPathRetrieval(optimizedQuery, topK, scope, preExpandedQueries);
         long retrievalCost = System.currentTimeMillis() - stepStart;
         stages.add(Map.of("stage", "multi_path_retrieval", "count", results.size(), "costTimeMs", (int) retrievalCost));
 
-        // 第四层：Rerank 精排
-        boolean rerankApplied = false;
+        // Rerank 精排
         if (rerankEnabled && rerankService != null && rerankService.isAvailable()) {
             stepStart = System.currentTimeMillis();
             results = rerankService.rerank(optimizedQuery, results, topK);
             long rerankCost = System.currentTimeMillis() - stepStart;
             stages.add(Map.of("stage", "rerank", "count", results.size(), "costTimeMs", (int) rerankCost));
-            rerankApplied = true;
         }
 
-        // Lost in the Middle 重排：优化 chunk 排列顺序，提升 LLM 对关键内容的关注度
+        // Lost in the Middle 重排
         if (reorderEnabled) {
             stepStart = System.currentTimeMillis();
             results = lostInTheMiddleReorderer.reorder(results);
             long reorderCost = System.currentTimeMillis() - stepStart;
             stages.add(Map.of("stage", "litm_reorder", "count", results.size(), "costTimeMs", (int) reorderCost));
-            log.debug("Lost in the Middle 重排完成");
         }
 
-        // 写入各阶段耗时到 RagSourceCollector Holder
+        // 写入各阶段耗时到 Holder（供可观测性上报）
         RagSourceCollector.Holder holder = RagSourceCollector.currentHolder();
         if (holder != null && !stages.isEmpty()) {
             holder.setRetrievalStages(com.alibaba.fastjson.JSON.toJSONString(stages));
         }
 
-        log.info("检索完成: resultCount={}, rerankApplied={}, stages={}", results.size(), rerankApplied, stages.size());
-        return new InternalSearchOutput(rewriteQuery, results, rerankApplied);
+        log.info("检索完成: resultCount={}, stages={}", results.size(), stages.size());
+        return results;
     }
 
     /** 内部检索输出 — 仅在 service 内部使用 */

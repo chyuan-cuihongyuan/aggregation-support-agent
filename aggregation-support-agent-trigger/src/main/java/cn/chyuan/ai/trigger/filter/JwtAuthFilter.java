@@ -83,12 +83,20 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     }
 
     private String extractToken(HttpServletRequest request) {
+        // 优先从 Cookie 读取（浏览器前端场景）
         Cookie[] cookies = request.getCookies();
-        if (cookies == null) return null;
-        for (Cookie cookie : cookies) {
-            if ("auth_token".equals(cookie.getName())) {
-                return cookie.getValue();
+        if (cookies != null) {
+            for (Cookie cookie : cookies) {
+                if ("auth_token".equals(cookie.getName())) {
+                    return cookie.getValue();
+                }
             }
+        }
+        // 兜底从 Authorization 头读取（服务间调用/MCP 场景，如 mcp-gateway 经 SSE 调用本服务）。
+        // 原先只读 Cookie 导致所有经 Authorization: Bearer 传 JWT 的调用一律 401（A0004 Token无效或已过期）。
+        String authorization = request.getHeader("Authorization");
+        if (authorization != null && authorization.startsWith("Bearer ")) {
+            return authorization.substring("Bearer ".length()).trim();
         }
         return null;
     }

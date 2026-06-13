@@ -9,6 +9,9 @@ import cn.chyuan.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
 import cn.chyuan.ai.domain.agent.service.armory.node.workflow.LoopAgentNode;
 import cn.chyuan.ai.domain.agent.service.armory.node.workflow.ParallelAgentNode;
 import cn.chyuan.ai.domain.agent.service.armory.node.workflow.SequentialAgentNode;
+import cn.chyuan.ai.domain.agent.service.armory.node.workflow.ReflectionAgentNode;
+import cn.chyuan.ai.domain.agent.service.armory.node.workflow.ReflexionAgentNode;
+import cn.chyuan.ai.domain.agent.service.armory.node.workflow.ReplanAgentNode;
 import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -26,6 +29,12 @@ public class AgentWorkflowNode extends AbstractArmorySupport {
     private ParallelAgentNode parallelAgentNode;
     @Resource
     private SequentialAgentNode sequentialAgentNode;
+    @Resource
+    private ReflectionAgentNode reflectionAgentNode;
+    @Resource
+    private ReflexionAgentNode reflexionAgentNode;
+    @Resource
+    private ReplanAgentNode replanAgentNode;
     @Resource
     private RunnerNode runnerNode;
 
@@ -73,6 +82,10 @@ public class AgentWorkflowNode extends AbstractArmorySupport {
             case "loopAgentNode" -> loopAgentNode;
             case "parallelAgentNode" -> parallelAgentNode;
             case "sequentialAgentNode" -> sequentialAgentNode;
+            // 【Phase 2-4 新增】高级 Agentic Workflow 路由
+            case "reflectionAgentNode" -> reflectionAgentNode;
+            case "reflexionAgentNode" -> reflexionAgentNode;
+            case "replanAgentNode" -> replanAgentNode;
             default -> runnerNode;
         };
     }

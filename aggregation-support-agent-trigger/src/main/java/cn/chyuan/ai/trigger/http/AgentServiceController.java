@@ -371,6 +371,10 @@ public class AgentServiceController implements IAgentService {
             // SSE 发送失败标志，用于在 emitter 已关闭时取消 RxJava 订阅
             AtomicBoolean emitterClosed = new AtomicBoolean(false);
 
+            // 跟踪当前 event 的 author（agent 名）。author 变化时通知前端 reset，
+            // 确保前端只显示最终 agent（如 responseSynthesizer）的 markdown，而非中间 agent 的 JSON 计划
+            java.util.concurrent.atomic.AtomicReference<String> lastAuthorRef = new java.util.concurrent.atomic.AtomicReference<>("");
+
             // 注册 emitter 超时/错误回调，标记已关闭
             emitter.onTimeout(() -> emitterClosed.set(true));
             emitter.onError(e -> emitterClosed.set(true));
@@ -398,6 +402,17 @@ public class AgentServiceController implements IAgentService {
                                     return;
                                 }
                                 try {
+                                    // author 变化时发 reset 事件，让前端清空之前 agent 的输出，只保留最终 agent 的 markdown
+                                    // 注意：Event.author() 返回 String（非 Optional），需 null 检查
+                                    String eventAuthor = event.author();
+                                    if (eventAuthor != null && !eventAuthor.isEmpty() && !eventAuthor.equals(lastAuthorRef.get())) {
+                                        lastAuthorRef.set(eventAuthor);
+                                        try {
+                                            emitter.send(SseEmitter.event().name("reset").data(""));
+                                        } catch (Exception resetEx) {
+                                            // reset 发送失败不阻断主流程
+                                        }
+                                    }
                                     StringBuilder sb = new StringBuilder();
                                     event.content().ifPresent(c ->
                                         c.parts().ifPresent(parts ->

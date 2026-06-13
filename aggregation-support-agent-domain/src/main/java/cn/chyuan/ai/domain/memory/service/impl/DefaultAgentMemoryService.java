@@ -10,8 +10,8 @@ import cn.chyuan.ai.domain.memory.model.valobj.*;
 import cn.chyuan.ai.domain.memory.service.AgentMemoryService;
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import com.google.common.hash.Hashing;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
 @ConditionalOnProperty(name = "agent.memory.enabled", havingValue = "true", matchIfMissing = false)
 @RequiredArgsConstructor
 public class DefaultAgentMemoryService implements AgentMemoryService {
-    
+
     private final IMemoryExtractionGateway extractionGateway;
     private final IMemoryConsolidationGateway consolidationGateway;
     private final IEmbeddingService embeddingService;
@@ -438,7 +438,6 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
             }
 
             String memoryId = UUID.randomUUID().toString();
-            float[] embedding = embeddingService.embed(content);
 
             AgentMemoryEntity entity = AgentMemoryEntity.builder()
                 .memoryId(memoryId)
@@ -457,8 +456,16 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
                 .updatedAt(Instant.now())
                 .build();
 
+            // 先落 MySQL，保证记忆文本不丢（降级存储首要目标是保数据）。
+            // 主路径 storeNewMemory 因嵌入失败才会走到这里，降级时嵌入大概率仍会失败，
+            // 因此向量索引写入单独兜底：嵌入失败则跳过 Milvus（该条暂不可被语义检索，但文本已持久化）。
             memoryRepository.save(entity);
-            memoryRepository.insertWithEmbedding(entity, embedding);
+            try {
+                float[] embedding = embeddingService.embed(content);
+                memoryRepository.insertWithEmbedding(entity, embedding);
+            } catch (Exception embedEx) {
+                log.warn("降级存储：嵌入失败，记忆文本已写入 MySQL 但跳过向量索引: {}", embedEx.getMessage());
+            }
         } catch (Exception e) {
             log.error("降级存储也失败", e);
         }

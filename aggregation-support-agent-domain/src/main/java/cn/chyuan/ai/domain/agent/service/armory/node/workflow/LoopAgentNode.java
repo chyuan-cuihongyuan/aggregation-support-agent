@@ -24,6 +24,21 @@ public class LoopAgentNode extends AbstractArmorySupport {
 
         AiAgentConfigTableVO.Module.AgentWorkflow currentAgentWorkflow = dynamicContext.getCurrentAgentWorkflow();
 
+        // 【新增】可选强门控：配置了 exitAgent + passPattern 时增强 Critic
+        String exitAgent = currentAgentWorkflow.getExitAgent();
+        String passPattern = currentAgentWorkflow.getPassPattern();
+        boolean gateEnabled = exitAgent != null && !exitAgent.isBlank()
+                && passPattern != null && !passPattern.isBlank();
+        if (gateEnabled) {
+            boolean enhanced = dynamicContext.enhanceAgent(exitAgent,
+                    ctx -> AgenticWorkflowEnhancer.attachExitLoopGate(ctx, passPattern, currentAgentWorkflow.getFailKeywords()));
+            if (!enhanced) {
+                log.warn("LoopAgent[{}] exitAgent[{}] 无 Builder 缓存，强门控未生效", currentAgentWorkflow.getName(), exitAgent);
+            } else {
+                log.info("LoopAgent[{}] 已为 Critic[{}] 挂强门控 passPattern={}", currentAgentWorkflow.getName(), exitAgent, passPattern);
+            }
+        }
+
         List<String> subAgentNames = currentAgentWorkflow.getSubAgents();
         List<BaseAgent> subAgents = dynamicContext.queryAgentList(subAgentNames);
 

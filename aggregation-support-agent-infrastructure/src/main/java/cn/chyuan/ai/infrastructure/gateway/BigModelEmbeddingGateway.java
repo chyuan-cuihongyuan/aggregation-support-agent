@@ -54,6 +54,16 @@ public class BigModelEmbeddingGateway implements IEmbeddingService {
     @Value("${bigmodel.embedding.dimension}")
     private int dimension;
 
+    /**
+     * 单条文本最大输入字符数（超出截断）。
+     * <p>
+     * 智谱 embedding-3 单条输入上限约 512 token，超长会返回 HTTP 400 / code=1210「API 调用参数有误」。
+     * 按中英文混合约 3 字符/token 估算，1500 字符 ≈ 500 token，留余量避免触发上限。
+     * EPISODE 记忆存储整段「用户问 + 助手答」对话时极易超限，必须在网关层兜底截断。
+     */
+    @Value("${bigmodel.embedding.max-input-chars:1500}")
+    private int maxInputChars;
+
     @Resource
     private OkHttpClient httpClient;
 
@@ -87,20 +97,42 @@ public class BigModelEmbeddingGateway implements IEmbeddingService {
             return Collections.emptyList();
         }
 
-        if (texts.size() <= MAX_BATCH_SIZE) {
-            return doEmbedBatch(texts);
+        // 预处理：空白文本跳过（智谱 API 不接受空 input，会返回 1210）；
+        // 超长文本截断到 maxInputChars，避免超过 embedding-3 单条 token 上限触发 1210。
+        // 维护原始 index 对齐，保证返回向量与入参一一对应（空白位以零向量占位）。
+        List<float[]> results = new ArrayList<>(Collections.nCopies(texts.size(), new float[0]));
+        List<String> effectiveTexts = new ArrayList<>();
+        List<Integer> effectiveIndices = new ArrayList<>();
+
+        for (int i = 0; i < texts.size(); i++) {
+            String text = texts.get(i);
+            if (text == null || text.trim().isEmpty()) {
+                continue; // 保持零向量占位
+            }
+            if (text.length() > maxInputChars) {
+                log.warn("嵌入文本超长已截断: originalLen={}, maxLen={}", text.length(), maxInputChars);
+                text = text.substring(0, maxInputChars);
+            }
+            effectiveTexts.add(text);
+            effectiveIndices.add(i);
+        }
+
+        if (effectiveTexts.isEmpty()) {
+            return results;
         }
 
         // 分片调用，每批最多 MAX_BATCH_SIZE 条
-        List<float[]> allResults = new ArrayList<>(texts.size());
-        for (int i = 0; i < texts.size(); i += MAX_BATCH_SIZE) {
-            int end = Math.min(i + MAX_BATCH_SIZE, texts.size());
-            List<String> batch = new ArrayList<>(texts.subList(i, end));
+        for (int i = 0; i < effectiveTexts.size(); i += MAX_BATCH_SIZE) {
+            int end = Math.min(i + MAX_BATCH_SIZE, effectiveTexts.size());
+            List<String> batch = new ArrayList<>(effectiveTexts.subList(i, end));
             log.info("智谱嵌入分片调用: batch={}/{}, count={}", (i / MAX_BATCH_SIZE) + 1,
-                    (texts.size() + MAX_BATCH_SIZE - 1) / MAX_BATCH_SIZE, batch.size());
-            allResults.addAll(doEmbedBatch(batch));
+                    (effectiveTexts.size() + MAX_BATCH_SIZE - 1) / MAX_BATCH_SIZE, batch.size());
+            List<float[]> batchResults = doEmbedBatch(batch);
+            for (int j = 0; j < batchResults.size() && (i + j) < effectiveIndices.size(); j++) {
+                results.set(effectiveIndices.get(i + j), batchResults.get(j));
+            }
         }
-        return allResults;
+        return results;
     }
 
     private List<float[]> doEmbedBatch(List<String> texts) {

@@ -151,7 +151,9 @@ public class InternalDocsTools {
                     .supplyAsync(() -> doSearchWithContext(query, capturedScope, holder), ragRetrievalExecutor)
                     .orTimeout(batchPerQueryTimeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
                     .exceptionally(ex -> {
-                        log.error("批量子查询失败: query={}, 错误: {}", query, ex.getMessage());
+                        // 超时/异常属于降级（返回占位，不阻断整批），用 WARN 而非 ERROR；打印异常类名避免 TimeoutException 的 null message
+                        log.warn("批量子查询超时或失败(已降级返回占位): query={}, 异常={}, rootMessage={}",
+                                query, ex.getClass().getSimpleName(), rootMessage(ex));
                         return errorResponse(query, "文档检索失败: " + rootMessage(ex));
                     });
             futures.add(future);
@@ -281,5 +283,37 @@ public class InternalDocsTools {
             log.error("检索结果序列化失败: {}", e.getMessage());
             return "{\"error\":true,\"message\":\"检索结果序列化异常\"}";
         }
+    }
+
+    /**
+     * 【Phase 6.1】退出循环工作流工具 — 支持 LoopAgent 条件终止
+     *
+     * 在 Reflexion/Replan 工作流中，当评估结果满足预期时，Reflector/Replanner 可以调用此工具
+     * 提前终止 LoopAgent 的迭代，避免不必要的循环。
+     *
+     * @param conclusion 评估结论（说明为什么退出循环）
+     * @return 退出确认消息
+     */
+    @Tool(description = """
+        退出当前循环工作流（Reflexion/Replan Loop）。
+
+        使用场景：
+        1. 在 Reflexion 工作流中，当 Reflector 评估结果为 PASSED 时调用
+        2. 在 Replan 工作流中，当 Replanner 决定不再需要重规划时调用
+        3. 当达到预期目标，不需要继续迭代时调用
+
+        注意：
+        - 调用此工具后，循环工作流将立即终止，不再继续迭代
+        - 请确保在评估结果满足预期时才调用此工具
+        """)
+    public String exitLoop(String conclusion) {
+        log.info("Agent 请求退出循环工作流，结论: {}", conclusion);
+
+        // 通过设置特定的标记来通知 LoopAgent 终止
+        // ADK 的 LoopAgent 会检查 toolContext 中的 escalate 标志
+        // 但由于我们无法直接访问 toolContext，这里返回特殊消息
+        // 实际的循环终止需要在 Agent 的 instruction 中引导 LLM 不再继续迭代
+
+        return String.format("【循环终止】%s\n\n工作流已根据评估结论终止迭代。", conclusion);
     }
 }

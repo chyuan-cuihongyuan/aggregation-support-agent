@@ -35,6 +35,15 @@ public class ExitLoopTool {
     )
     public static Map<String, Object> exitLoop(
             @Annotations.Schema(name = "toolContext") ToolContext toolContext) {
+        // ADK 0.5.0 经 Spring AI ToolConverter 转换静态工具时，ToolContext 可能注入为 null。
+        // 缺失上下文时无法安全触发 escalate 退出信号：记录告警并返回，
+        // 避免反射调用抛 InvocationTargetException(NPE) 中断整个工作流（循环将按 maxIterations 兜底退出）。
+        if (toolContext == null) {
+            log.warn("[ExitLoop] ToolContext 为空，无法触发 escalate 退出信号（ADK ToolContext 注入缺失），"
+                    + "循环将按 maxIterations 兜底退出");
+            return Map.of();
+        }
+
         String agentName = toolContext.agentName();
         log.info("[ExitLoop] Agent [{}] 触发退出循环 — 质量评估已通过", agentName);
 

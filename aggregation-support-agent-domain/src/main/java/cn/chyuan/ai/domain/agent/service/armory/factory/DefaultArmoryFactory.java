@@ -6,6 +6,7 @@ import cn.chyuan.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import cn.chyuan.ai.domain.agent.service.armory.node.RootNode;
 import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
 import com.google.adk.agents.BaseAgent;
+import com.google.adk.agents.LlmAgent;
 import com.google.adk.agents.SequentialAgent;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -63,6 +64,13 @@ public class DefaultArmoryFactory {
         private ChatModel chatModel;
 
         /**
+         * 无工具的 ChatModel 变体（同 openAiApi/model，defaultOptions 无 toolCallbacks）。
+         * 供 tools: [] 声明的纯推理 agent（Planner/Critic）使用，避免规划阶段误调检索工具。
+         * 仅当主 ChatModel 注册了工具时才构建，否则为 null（退化为主 ChatModel）。
+         */
+        private ChatModel noToolChatModel;
+
+        /**
          * 是否注册了工具
          */
         private boolean hasTools;
@@ -70,12 +78,45 @@ public class DefaultArmoryFactory {
         /**
          * 智能体配置组
          */
+        @Builder.Default
         private Map<String, BaseAgent> agentGroup = new HashMap<>();
 
+        /**
+         * 智能体 Builder 组
+         * <p>
+         * 保留装配阶段的 LlmAgent.Builder，供后续高级工作流节点（Replan/Reflexion/Reflection）
+         * 增强子 agent —— 追加 ExitLoopTool（触发 LoopAgent 条件退出）、beforeModel/afterAgent
+         * Callback（Reflexion 跨迭代记忆注入、Critic/Evaluator 强门控）。增强后重新 build 覆盖
+         * agentGroup 中的成品。
+         * <p>
+         * 说明：LlmAgent.Builder 可变可重复 build，未被增强的 agent 仍使用 agentGroup 中的默认成品。
+         */
+        @Builder.Default
+        private Map<String, LlmAgent.Builder> agentBuilderGroup = new HashMap<>();
+
+        /**
+         * 增强子 agent：从 agentBuilderGroup 取出 Builder，应用增强逻辑后重新 build，覆盖 agentGroup 成品
+         *
+         * @param agentName 子 agent 名称
+         * @param enhancer  增强函数（对 Builder 追加 tools / callbacks 等）
+         * @return true 表示增强并覆盖成功；false 表示该 agent 无 Builder 缓存（按原成品使用）
+         */
+        public boolean enhanceAgent(String agentName, java.util.function.Consumer<AgentEnhancementContext> enhancer) {
+            LlmAgent.Builder builder = agentBuilderGroup.get(agentName);
+            if (builder == null) {
+                return false;
+            }
+            enhancer.accept(new AgentEnhancementContext(builder));
+            agentGroup.put(agentName, builder.build());
+            return true;
+        }
+
+        @Builder.Default
         private AtomicInteger currentStepIndex = new AtomicInteger(0);
 
         private AiAgentConfigTableVO.Module.AgentWorkflow currentAgentWorkflow;
 
+        @Builder.Default
         private Map<String, Object> dataObjects = new HashMap<>();
 
         public <T> void setValue(String key, T value) {

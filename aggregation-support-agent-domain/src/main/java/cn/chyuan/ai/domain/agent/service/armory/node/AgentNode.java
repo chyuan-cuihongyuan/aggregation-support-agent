@@ -65,8 +65,9 @@ public class AgentNode extends AbstractArmorySupport {
     protected AiAgentRegisterVO doApply(ArmoryCommandEntity requestParameter, DefaultArmoryFactory.DynamicContext dynamicContext) throws Exception {
         log.info("Ai Agent 装配操作 - AgentNode");
 
-        ChatModel chatModel = dynamicContext.getChatModel();
-        boolean hasTools = dynamicContext.isHasTools();
+        ChatModel defaultChatModel = dynamicContext.getChatModel();
+        ChatModel noToolChatModel = dynamicContext.getNoToolChatModel();
+        boolean globalHasTools = dynamicContext.isHasTools();
 
         AiAgentConfigTableVO aiAgentConfigTableVO = requestParameter.getAiAgentConfigTableVO();
         List<AiAgentConfigTableVO.Module.Agent> agents = aiAgentConfigTableVO.getModule().getAgents();
@@ -74,7 +75,29 @@ public class AgentNode extends AbstractArmorySupport {
         for (AiAgentConfigTableVO.Module.Agent agentConfig : agents) {
             String instruction = agentConfig.getInstruction();
 
-            if (Boolean.TRUE.equals(agentConfig.getReactMode()) && hasTools) {
+            // 【新增】按 agent.tools 声明选择 ChatModel：
+            // - tools == null：使用主 ChatModel（默认行为，带全部工具）
+            // - tools == []（空列表）：使用无工具变体（Planner/Critic 等纯推理 agent）
+            // - tools == 非空白名单：本期暂不支持，降级为主 ChatModel（后续扩展按名过滤）
+            ChatModel effectiveChatModel;
+            boolean effectiveHasTools;
+            if (agentConfig.getTools() != null && agentConfig.getTools().isEmpty()) {
+                // 显式空列表 → 无工具变体
+                effectiveChatModel = (noToolChatModel != null) ? noToolChatModel : defaultChatModel;
+                effectiveHasTools = false;
+                log.info("Agent [{}] 声明 tools:[] → 使用无工具 ChatModel 变体", agentConfig.getName());
+            } else if (agentConfig.getTools() != null && !agentConfig.getTools().isEmpty()) {
+                // 非空白名单 → 本期暂不支持，降级为主 ChatModel
+                effectiveChatModel = defaultChatModel;
+                effectiveHasTools = globalHasTools;
+                log.warn("Agent [{}] 声明 tools 白名单暂不支持本期实现，降级为主 ChatModel", agentConfig.getName());
+            } else {
+                // tools == null → 默认行为
+                effectiveChatModel = defaultChatModel;
+                effectiveHasTools = globalHasTools;
+            }
+
+            if (Boolean.TRUE.equals(agentConfig.getReactMode()) && effectiveHasTools) {
                 log.info("Agent [{}] ReAct mode enabled, injecting ReAct prompt prefix. Original instruction length: {}",
                         agentConfig.getName(), instruction != null ? instruction.length() : 0);
                 instruction = REACT_PROMPT_PREFIX + "\n\n---\n\n" + instruction;
@@ -83,14 +106,14 @@ public class AgentNode extends AbstractArmorySupport {
             LlmAgent.Builder agentBuilder = LlmAgent.builder()
                     .name(agentConfig.getName())
                     .description(agentConfig.getDescription())
-                    .model(new MySpringAI(chatModel, hasTools))
+                    .model(new MySpringAI(effectiveChatModel, effectiveHasTools))
                     .instruction(instruction)
                     .outputKey(agentConfig.getOutputKey());
 
             // 设置 ReAct 循环最大步数
             // 无工具的纯对话智能体：强制 maxSteps=1，不允许 ADK 多轮调用 LLM
             // 有工具的智能体：使用配置的 maxSteps（需要多轮 Thought→Action→Observation）
-            if (!hasTools) {
+            if (!effectiveHasTools) {
                 log.info("Agent [{}] 无工具，强制 maxSteps=1，防止多轮自问自答", agentConfig.getName());
                 agentBuilder.maxSteps(1);
             } else if (agentConfig.getMaxSteps() != null && agentConfig.getMaxSteps() > 0) {
@@ -99,8 +122,8 @@ public class AgentNode extends AbstractArmorySupport {
 
             // 注入 exitLoop 工具：用于 LoopAgent 中 Reflexion 循环的语义级提前退出
             // 当 exit-loop-enabled: true 时，AgentNode 自动注入 ExitLoopTool
-            // 该工具通过 toolContext.actions().setEscalate(true) 触发 LoopAgent 退出
-            if (Boolean.TRUE.equals(agentConfig.getExitLoopEnabled())) {
+            // 【变更】tools:[] 时不注入 ExitLoopTool（强门控已在 Critic 层处理）
+            if (Boolean.TRUE.equals(agentConfig.getExitLoopEnabled()) && effectiveHasTools) {
                 agentBuilder.tools(FunctionTool.create(ExitLoopTool.class, "exitLoop"));
                 log.info("Agent [{}] 已注入 exitLoop 工具，支持 Reflexion 循环语义级退出", agentConfig.getName());
             }
@@ -108,6 +131,9 @@ public class AgentNode extends AbstractArmorySupport {
             LlmAgent llmAgent = agentBuilder.build();
 
             dynamicContext.getAgentGroup().put(agentConfig.getName(), llmAgent);
+            // 双写 Builder 缓存：供 AgentWorkflowNode 中的高级工作流节点（Replan/Reflexion/Reflection）
+            // 增强子 agent（追加 ExitLoopTool / Callback）后重新 build，覆盖上面的成品
+            dynamicContext.getAgentBuilderGroup().put(agentConfig.getName(), agentBuilder);
         }
 
         return router(requestParameter, dynamicContext);

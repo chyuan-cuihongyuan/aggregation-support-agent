@@ -267,7 +267,8 @@ public class KnowledgeGraphService implements IKnowledgeGraphService {
                             : CompletableFuture.supplyAsync(
                                 () -> graphDatabaseService.getSubgraph(entity.getEntityId(), subgraphDepth));
                     return future.orTimeout(5, TimeUnit.SECONDS).exceptionally(ex -> {
-                        log.warn("子图遍历失败或超时: entityId={}, 错误: {}", entity.getEntityId(), ex.getMessage());
+                        // 打印异常类名避免 TimeoutException 的 null message；降级跳过该子图，不阻断检索
+                        log.warn("子图遍历超时或失败(已降级跳过): entityId={}, 异常={}", entity.getEntityId(), ex.getClass().getSimpleName());
                         return null;
                     });
                 })

@@ -36,7 +36,7 @@ class EnhancedRagServiceRetrievalTest {
         ReflectionTestUtils.setField(service, "bm25Enabled", true);
 
         List<VectorSearchResultVO> results = ReflectionTestUtils.invokeMethod(
-                service, "multiPathRetrieval", "query", 5, TenantScopeVO.singleUser("u1"));
+                service, "multiPathRetrieval", "query", 5, TenantScopeVO.singleUser("u1"), null);
 
         assertThat(results).extracting(VectorSearchResultVO::getContent).containsExactly("bm25");
     }
@@ -57,7 +57,7 @@ class EnhancedRagServiceRetrievalTest {
         ReflectionTestUtils.setField(service, "bm25Enabled", true);
 
         List<VectorSearchResultVO> results = ReflectionTestUtils.invokeMethod(
-                service, "multiPathRetrieval", "query", 5, TenantScopeVO.singleUser("u1"));
+                service, "multiPathRetrieval", "query", 5, TenantScopeVO.singleUser("u1"), null);
 
         assertThat(results).extracting(VectorSearchResultVO::getContent).containsExactly("vector");
     }
@@ -81,7 +81,7 @@ class EnhancedRagServiceRetrievalTest {
         ReflectionTestUtils.setField(service, "multiQueryCount", 2);
 
         List<VectorSearchResultVO> results = ReflectionTestUtils.invokeMethod(
-                service, "multiPathRetrieval", "query", 5, TenantScopeVO.singleUser("u1"));
+                service, "multiPathRetrieval", "query", 5, TenantScopeVO.singleUser("u1"), null);
 
         assertThat(results).isNotEmpty();
     }

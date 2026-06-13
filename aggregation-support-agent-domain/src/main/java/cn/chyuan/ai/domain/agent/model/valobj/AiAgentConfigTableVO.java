@@ -179,13 +179,53 @@ public class AiAgentConfigTableVO {
         @Data
         public static class AgentWorkflow {
             /**
-             * 类型；loop、parallel、sequential
+             * 类型；loop、parallel、sequential、reflection、reflexion、replan、plan_execute
              */
             private String type;
             private String name;
             private List<String> subAgents;
             private String description;
             private Integer maxIterations = 3;
+
+            /**
+             * 强门控阈值 — Critic/Evaluator 评分达到此值才视为通过（触发 escalate 退出循环）。
+             * 默认 7.0（满分 10）
+             */
+            private Double gateThreshold = 7.0;
+
+            /**
+             * 负责"评估通过则退出循环"的子 agent 名称（挂 ExitLoopTool + 强门控 Callback）。
+             * <ul>
+             *   <li>reflexion 工作流：默认 Critic（subAgents[1]）</li>
+             *   <li>replan 工作流：默认 Evaluator（subAgents[2]）</li>
+             * </ul>
+             * 为空时按工作流类型取默认位置。
+             */
+            private String exitAgent;
+
+            /**
+             * 强门控正则 — Critic/Evaluator 输出命中此模式即触发 escalate 退出循环。
+             * <p>
+             * 为空时不启用强门控，循环仅靠 ExitLoopTool/maxIterations 退出。
+             * 例：{@code "verdict"\s*:\s*"SUFFICIENT"} 精确匹配 JSON 字段值，避免 {@code INSUFFICIENT} 子串误命中。
+             * <p>
+             * 默认为空，保持向后兼容。需配合 {@code exitAgent} 使用。
+             */
+            private String passPattern;
+
+            /**
+             * 强门控失败关键字 — Critic/Evaluator 输出含这些关键字时不触发退出（逗号分隔）。
+             * <p>
+             * 默认 "INSUFFICIENT,NEEDS_REPLAN,NEEDS_IMPROVEMENT"。
+             * 用途：当 Critic 输出同时包含通过/失败信号时（罕见），失败关键字优先。
+             */
+            private String failKeywords = "INSUFFICIENT,NEEDS_REPLAN,NEEDS_IMPROVEMENT";
+
+            /**
+             * Reflexion 跨迭代记忆的 session state key。
+             * 为空时默认 "reflections:{workflowName}"。
+             */
+            private String reflectionStateKey;
 
         }
 
