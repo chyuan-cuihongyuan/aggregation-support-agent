@@ -103,6 +103,63 @@ public class ReflexionAgentNode extends AbstractArmorySupport {
                 ctx -> AgenticWorkflowEnhancer.attachReflectionWriter(ctx, reflectorOutputKey, stateKey));
         boolean actorEnhanced = dynamicContext.enhanceAgent(actorName,
                 ctx -> AgenticWorkflowEnhancer.attachReflectionReader(ctx, stateKey));
+
+        // A6: Conditional 谓词短路 —— 简单 query 直接跳过 LLM 调用，等效于不走 Reflexion
+        if (currentAgentWorkflow.getQueryPredicate() != null && !currentAgentWorkflow.getQueryPredicate().isBlank()) {
+            String predicateRegex = currentAgentWorkflow.getQueryPredicate();
+            boolean shortCircuitAttached = dynamicContext.enhanceAgent(actorName,
+                    ctx -> AgenticWorkflowEnhancer.attachQueryPredicateShortCircuit(
+                            ctx, predicateRegex, "您好，已收到您的简单咨询，已为您快速响应。"));
+            if (shortCircuitAttached) {
+                log.info("【A6 短路】Reflexion[{}] Actor 已挂载谓词短路（regex={}）",
+                        currentAgentWorkflow.getName(), predicateRegex);
+            } else {
+                log.warn("【A6 短路】Reflexion[{}] Actor[{}] 无 Builder 缓存，无法挂载谓词短路",
+                        currentAgentWorkflow.getName(), actorName);
+            }
+        }
+
+        // A2: 阶段级 OTel span 上报 —— 让 Reflexion 每轮迭代在 observability-server 可见
+        // 三个子 agent 各挂一个 span，attributeProvider 把反思列表/分数历史写入 span 属性
+        String otelWorkflowName = currentAgentWorkflow.getName();
+        dynamicContext.enhanceAgent(actorName,
+                ctx -> AgenticWorkflowEnhancer.attachSpanEmitter(ctx,
+                        "reflexion.actor.iteration", "ACTOR",
+                        AgenticWorkflowEnhancer.stateListSizeAttributes("reflections")));
+        dynamicContext.enhanceAgent(criticName,
+                ctx -> AgenticWorkflowEnhancer.attachSpanEmitter(ctx,
+                        "reflexion.critic.iteration", "CRITIC",
+                        AgenticWorkflowEnhancer.stateListSizeAttributes("reflections")));
+        dynamicContext.enhanceAgent(reflectorName,
+                ctx -> AgenticWorkflowEnhancer.attachSpanEmitter(ctx,
+                        "reflexion.reflector.iteration", "REFLECTOR",
+                        AgenticWorkflowEnhancer.stateListSizeAttributes("reflections")));
+        log.info("【A2 OTel】Reflexion[{}] 三个子 agent 阶段 span 已挂载", otelWorkflowName);
+
+        // A3: Reflexion 自动降级 —— 连续 N 轮无提升/低于阈值时强制退出循环
+        // 挂在 Reflector 上（循环最后一个子 agent），读取 Critic 输出的分数进行降级判定
+        boolean degradeEnabled = false;
+        if (Boolean.TRUE.equals(currentAgentWorkflow.getDegradationEnabled())) {
+            String criticOutputKey = resolveOutputKey(requestParameter, criticName, "rag_evaluation");
+            String scoreRegex = currentAgentWorkflow.getScoreRegex();
+            int patience = (currentAgentWorkflow.getDegradationPatience() != null && currentAgentWorkflow.getDegradationPatience() > 0)
+                    ? currentAgentWorkflow.getDegradationPatience() : 2;
+            int minIter = (currentAgentWorkflow.getDegradationMinIterations() != null && currentAgentWorkflow.getDegradationMinIterations() > 0)
+                    ? currentAgentWorkflow.getDegradationMinIterations() : 2;
+            double threshold = (currentAgentWorkflow.getGateThreshold() != null) ? currentAgentWorkflow.getGateThreshold() : 0.0;
+            String historyKey = stateKey + ":scores";
+
+            degradeEnabled = dynamicContext.enhanceAgent(reflectorName,
+                    ctx -> AgenticWorkflowEnhancer.attachReflexionDegradeDetector(
+                            ctx, criticOutputKey, scoreRegex, historyKey, patience, minIter, threshold));
+            if (!degradeEnabled) {
+                log.warn("Reflector[{}] 无 Builder 缓存，无法挂降级检测", reflectorName);
+            } else {
+                log.info("Reflexion 降级检测已挂载到 Reflector[{}]：criticOutputKey={}, patience={}, minIter={}, threshold={}",
+                        reflectorName, criticOutputKey, patience, minIter, threshold);
+            }
+        }
+
         // enhance 覆盖后重新取实例
         actor = dynamicContext.getAgentGroup().get(actorName);
         critic = dynamicContext.getAgentGroup().get(criticName);
@@ -120,9 +177,9 @@ public class ReflexionAgentNode extends AbstractArmorySupport {
         dynamicContext.getAgentGroup().put(currentAgentWorkflow.getName(), reflexionLoop);
 
         log.info("Reflexion 反思迭代工作流装配完成: name={}, actor={}, critic={}, reflector={}, stateKey={}, maxIterations={}, " +
-                        "增强状态: actor={}, critic={}, reflector={}",
+                        "增强状态: actor={}, critic={}, reflector={}, degrade={}",
                 currentAgentWorkflow.getName(), actorName, criticName, reflectorName, stateKey, maxIterations,
-                actorEnhanced, criticEnhanced, reflectorEnhanced);
+                actorEnhanced, criticEnhanced, reflectorEnhanced, degradeEnabled);
 
         return router(requestParameter, dynamicContext);
     }

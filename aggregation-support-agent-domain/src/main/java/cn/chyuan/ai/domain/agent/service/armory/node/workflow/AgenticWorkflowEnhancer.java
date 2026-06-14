@@ -8,11 +8,16 @@ import com.google.adk.models.LlmResponse;
 import com.google.adk.tools.FunctionTool;
 import com.google.genai.types.Content;
 import com.google.genai.types.Part;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.Tracer;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BiConsumer;
 
 /**
  * Agentic Workflow 增强器 —— 为工作流中的子 agent 注入"条件退出"与"跨迭代记忆"能力。
@@ -118,7 +123,7 @@ public final class AgenticWorkflowEnhancer {
      */
     public static void attachExitLoopGate(AgentEnhancementContext ctx, String passKeyword) {
         String pattern = (passKeyword != null && !passKeyword.isBlank())
-                ? "\\Q" + java.util.regex.Pattern.quote(passKeyword) + "\\E"
+                ? java.util.regex.Pattern.quote(passKeyword)
                 : null;
         attachExitLoopGate(ctx, pattern, null);
     }
@@ -171,6 +176,100 @@ public final class AgenticWorkflowEnhancer {
         });
     }
 
+    /**
+     * 给反思改进者（Reflector）挂"降级检测"能力 —— 每轮结束后读取 Critic 输出，提取分数；
+     * 连续 {@code patience} 轮无提升（或低于 {@code gateThreshold}）时强制 escalate 退出循环。
+     *
+     * <p>降级机制（A3）：避免 Reflexion 循环在质量已收敛/已饱和时仍空转，节省 token。
+     *
+     * <h3>判定逻辑</h3>
+     * <ol>
+     *   <li>从 state[{@code criticOutputKey}] 读取 Critic 文本，按 {@code scoreRegex} 提取分数</li>
+     *   <li>分数追加到 state[{@code historyStateKey}]（CopyOnWriteArrayList&lt;Double&gt;）</li>
+     *   <li>当迭代数 ≥ {@code minIterations} 且最近 {@code patience} 轮均无提升 → escalate(true)</li>
+     *   <li>当配置了 {@code gateThreshold}（&gt; 0）且最近 {@code patience} 轮均低于阈值 → escalate(true)</li>
+     * </ol>
+     *
+     * @param ctx              Reflector 的增强上下文
+     * @param criticOutputKey  Critic 的 outputKey（其输出已写入 state[criticOutputKey]）
+     * @param scoreRegex       提取分数的正则，第一捕获组为 double
+     * @param historyStateKey  分数历史存储 key（如 "reflections:rag:scores"）
+     * @param patience         容忍连续未提升轮数
+     * @param minIterations    至少迭代次数（小于此值不触发降级）
+     * @param gateThreshold    质量阈值（≤0 表示不启用阈值降级，仅用"无提升"判定）
+     */
+    public static void attachReflexionDegradeDetector(AgentEnhancementContext ctx,
+                                                     String criticOutputKey,
+                                                     String scoreRegex,
+                                                     String historyStateKey,
+                                                     int patience,
+                                                     int minIterations,
+                                                     double gateThreshold) {
+        final java.util.regex.Pattern compiledScoreRegex;
+        try {
+            compiledScoreRegex = java.util.regex.Pattern.compile(
+                    (scoreRegex == null || scoreRegex.isBlank()) ? "\"score\"\\s*:\\s*([\\d.]+)" : scoreRegex);
+        } catch (Exception e) {
+            log.error("【Reflexion 降级】scoreRegex 编译失败，降级检测未挂载: {}", scoreRegex, e);
+            return;
+        }
+
+        ctx.afterAgentCallbackSync(callbackContext -> {
+            Object output = callbackContext.state().get(criticOutputKey);
+            if (!(output instanceof String criticText) || criticText.isBlank()) {
+                log.debug("【Reflexion 降级】Critic 输出为空[outputKey={}]，跳过本轮降级检测", criticOutputKey);
+                return Optional.empty();
+            }
+
+            Double currentScore = extractScore(criticText, compiledScoreRegex);
+            if (currentScore == null) {
+                log.debug("【Reflexion 降级】Critic 输出未匹配到分数[regex={}]", compiledScoreRegex.pattern());
+                return Optional.empty();
+            }
+
+            List<Double> history = getOrCreateScoreHistory(callbackContext, historyStateKey);
+            history.add(currentScore);
+            callbackContext.state().put(historyStateKey, history);
+
+            int iterCount = history.size();
+            log.info("【Reflexion 降级】记录第 {} 轮分数 {}（history={}, threshold={}, patience={}）",
+                    iterCount, currentScore, history, gateThreshold, patience);
+
+            if (iterCount < minIterations || history.size() < patience + 1) {
+                return Optional.empty();
+            }
+
+            boolean noImprove = true;
+            boolean belowThreshold = gateThreshold > 0;
+            int n = history.size();
+            for (int i = n - 1; i >= n - patience; i--) {
+                if (history.get(i) > history.get(i - 1)) {
+                    noImprove = false;
+                }
+                if (gateThreshold > 0 && history.get(i) >= gateThreshold) {
+                    belowThreshold = false;
+                }
+            }
+
+            if (noImprove || belowThreshold) {
+                EventActions actions = callbackContext.eventActions();
+                if (actions != null) {
+                    actions.setEscalate(true);
+                    log.warn("【Reflexion 降级】触发强制退出（iter={}, score={}, history={}, 原因={}, 阈值={}）",
+                            iterCount, currentScore, history,
+                            noImprove ? "连续 " + patience + " 轮无提升" : "连续 " + patience + " 轮低于阈值",
+                            gateThreshold);
+                } else {
+                    log.warn("【Reflexion 降级失效】eventActions 为 null，无法触发 escalate（agent 可能不在 LoopAgent 中）");
+                }
+            }
+            return Optional.empty();
+        });
+
+        log.info("已为 Reflector 追加 Reflexion 降级检测（criticOutputKey={}, regex={}, patience={}, minIter={}, threshold={}）",
+                criticOutputKey, compiledScoreRegex.pattern(), patience, minIterations, gateThreshold);
+    }
+
     /** 从 session state 取或创建反思列表（CopyOnWriteArrayList 保证并发安全） */
     @SuppressWarnings("unchecked")
     private static List<String> getOrCreateReflectionList(CallbackContext callbackContext, String stateKey) {
@@ -180,6 +279,33 @@ public final class AgenticWorkflowEnhancer {
             return (List<String>) list;
         }
         return new CopyOnWriteArrayList<>();
+    }
+
+    /** 从 session state 取或创建分数历史列表（CopyOnWriteArrayList 保证并发安全） */
+    @SuppressWarnings("unchecked")
+    private static List<Double> getOrCreateScoreHistory(CallbackContext callbackContext, String stateKey) {
+        Object existing = callbackContext.state().get(stateKey);
+        if (existing instanceof List<?> list) {
+            return (List<Double>) list;
+        }
+        return new CopyOnWriteArrayList<>();
+    }
+
+    /** 用正则从 Critic 文本中提取分数（第一个捕获组） */
+    private static Double extractScore(String text, java.util.regex.Pattern scoreRegex) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        try {
+            java.util.regex.Matcher m = scoreRegex.matcher(text);
+            if (m.find() && m.groupCount() >= 1) {
+                return Double.parseDouble(m.group(1));
+            }
+        } catch (Exception e) {
+            log.debug("【Reflexion 降级】分数提取失败[regex={}, text={}]", scoreRegex.pattern(),
+                    text.substring(0, Math.min(80, text.length())));
+        }
+        return null;
     }
 
     /** 从 LlmResponse 提取纯文本（合并所有 Part 的 text） */
@@ -195,6 +321,157 @@ public final class AgenticWorkflowEnhancer {
                         .map(Optional::get)
                         .reduce("", String::concat))
                 .orElse(null);
+    }
+
+    // ============================== A2: 阶段级 OTel Span 上报 ==============================
+
+    /**
+     * OTel Tracer 单例（懒加载，未注册 SDK 时 GlobalOpenTelemetry 自动返回 noop）。
+     */
+    private static volatile Tracer WORKFLOW_TRACER;
+    private static final String TRACER_NAME = "agentic-workflow";
+    private static final String TRACER_VERSION = "1.0";
+
+    private static Tracer getWorkflowTracer() {
+        Tracer t = WORKFLOW_TRACER;
+        if (t == null) {
+            synchronized (AgenticWorkflowEnhancer.class) {
+                t = WORKFLOW_TRACER;
+                if (t == null) {
+                    try {
+                        t = GlobalOpenTelemetry.getTracer(TRACER_NAME, TRACER_VERSION);
+                    } catch (Throwable ignored) {
+                        t = null;
+                    }
+                    WORKFLOW_TRACER = t;
+                }
+            }
+        }
+        return t;
+    }
+
+    /**
+     * 给指定子 agent 挂"阶段 span 上报"能力 —— afterAgentCallback 中创建独立 span，
+     * 通过 {@code attributeProvider} 让调用者把 state 中的关键信息（如反思轮数、分数历史）写入 span 属性。
+     *
+     * <p>A2 设计目标：让 Reflexion 每轮迭代 / Dynamic Replan 每次重规划在 observability-server 可见。
+     *
+     * <h3>OTel 容错</h3>
+     * <ul>
+     *   <li>未注册 OTel SDK（如单元测试）→ {@link GlobalOpenTelemetry} 返回 noop Tracer，不会抛异常</li>
+     *   <li>attributeProvider 抛异常 → 仅记录 debug 日志，不影响工作流执行</li>
+     * </ul>
+     *
+     * @param ctx                 子 agent 的增强上下文
+     * @param spanName            span 名称（如 "reflexion.iteration" / "replan.cycle"）
+     * @param agentRole           agent 角色（如 "REFLECTOR" / "REPLANNER"）
+     * @param attributeProvider   span 属性写入器（callbackContext, span）-> void，可写多属性
+     */
+    public static void attachSpanEmitter(AgentEnhancementContext ctx,
+                                         String spanName,
+                                         String agentRole,
+                                         BiConsumer<CallbackContext, Span> attributeProvider) {
+        ctx.afterAgentCallbackSync(callbackContext -> {
+            Tracer tracer = getWorkflowTracer();
+            if (tracer == null) {
+                return Optional.empty();
+            }
+            Span span = tracer.spanBuilder(spanName).startSpan();
+            try (var scope = span.makeCurrent()) {
+                span.setAttribute("agent.role", agentRole);
+                span.setAttribute("agent.name", ctx.getAgentName() == null ? "?" : ctx.getAgentName());
+                if (attributeProvider != null) {
+                    try {
+                        attributeProvider.accept(callbackContext, span);
+                    } catch (Throwable t) {
+                        span.setAttribute("attribute.provider.error", t.getClass().getSimpleName() + ": " + t.getMessage());
+                        log.debug("【OTel】span 属性写入失败[span={}]: {}", spanName, t.getMessage());
+                    }
+                }
+            } catch (Throwable t) {
+                log.debug("【OTel】span 创建失败[span={}]: {}", spanName, t.getMessage());
+            } finally {
+                span.end();
+            }
+            return Optional.empty();
+        });
+
+        log.info("已为 agent[{}] 追加阶段 span 上报（spanName={}, role={}）", ctx.getAgentName(), spanName, agentRole);
+    }
+
+    /**
+     * 便捷版：把 state 中所有以 {@code keyPrefix} 开头的 List 类型属性写入 span（记录 size）。
+     *
+     * <p>典型用法：{@code attachSpanEmitter(ctx, "reflexion.iteration", "REFLECTOR",
+     * stateListSizeAttributes("reflections"))} —— 自动记录反思列表大小。
+     */
+    public static BiConsumer<CallbackContext, Span> stateListSizeAttributes(String keyPrefix) {
+        return (callbackContext, span) -> {
+            for (Map.Entry<String, Object> e : callbackContext.state().entrySet()) {
+                if (e.getKey().startsWith(keyPrefix) && e.getValue() instanceof List<?> list) {
+                    span.setAttribute("state." + e.getKey() + ".size", list.size());
+                }
+            }
+        };
+    }
+
+    // ============================== A6: Conditional 谓词短路 ==============================
+
+    /**
+     * 给指定 agent 挂"简单 query 短路"能力 —— beforeModelCallback 检查 user query，
+     * 匹配 {@code queryPredicateRegex} 时返回固定简短响应跳过 LLM 调用。
+     *
+     * <p>A6 设计目标：避免对简单 query（如打招呼、确认类）启动昂贵的多轮 Reflexion/ReAct。
+     *
+     * <h3>短路机制（ADK 0.5.0 标准模式）</h3>
+     * <p>beforeModelCallbackSync 返回非空 {@code Optional<LlmResponse>} → ADK 跳过模型调用，
+     * 直接使用返回值作为 LlmResponse。后续 Critic 评估"无需返工"→ PASSED → Reflexion loop 退出。
+     *
+     * <h3>user query 来源</h3>
+     * <p>从 {@link CallbackContext#state()} 的 {@code user_query} key 读取（由上层 ChatService 写入）；
+     * 找不到时跳过短路（保守策略）。
+     *
+     * @param ctx                   agent 的增强上下文（通常是 Reflexion 的 Actor）
+     * @param queryPredicateRegex   匹配简单 query 的正则（如 {@code ^(你好|hi|hello|在吗|谢谢)}）
+     * @param shortCircuitResponse  短路时的固定响应文本（如 "你好，有什么可以帮助您的？"）
+     */
+    public static void attachQueryPredicateShortCircuit(AgentEnhancementContext ctx,
+                                                       String queryPredicateRegex,
+                                                       String shortCircuitResponse) {
+        final java.util.regex.Pattern compiledPredicate;
+        try {
+            compiledPredicate = java.util.regex.Pattern.compile(queryPredicateRegex);
+        } catch (Exception e) {
+            log.error("【A6 短路】queryPredicateRegex 编译失败，短路能力未挂载: {}", queryPredicateRegex, e);
+            return;
+        }
+        final String responseText = (shortCircuitResponse == null || shortCircuitResponse.isBlank())
+                ? "好的，已为您处理。" : shortCircuitResponse;
+
+        ctx.beforeModelCallbackSync((callbackContext, llmRequestBuilder) -> {
+            Object queryObj = callbackContext.state().get("user_query");
+            if (!(queryObj instanceof String queryText) || queryText.isBlank()) {
+                return Optional.empty();
+            }
+            try {
+                if (compiledPredicate.matcher(queryText.trim()).find()) {
+                    LlmResponse shortCircuit = LlmResponse.builder()
+                            .content(Content.fromParts(Part.fromText(responseText)))
+                            .build();
+                    log.info("【A6 短路】query 命中谓词[regex={}, query={}]，返回短路响应跳过 LLM 调用",
+                            compiledPredicate.pattern(),
+                            queryText.substring(0, Math.min(50, queryText.length())));
+                    return Optional.of(shortCircuit);
+                }
+            } catch (Throwable t) {
+                log.debug("【A6 短路】谓词匹配异常[regex={}]: {}", compiledPredicate.pattern(), t.getMessage());
+            }
+            return Optional.empty();
+        });
+
+        log.info("已为 agent[{}] 追加 A6 谓词短路（regex={}, response={}）",
+                ctx.getAgentName(), compiledPredicate.pattern(),
+                responseText.substring(0, Math.min(30, responseText.length())));
     }
 
 }

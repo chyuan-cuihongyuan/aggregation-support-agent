@@ -14,6 +14,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 
@@ -76,6 +77,22 @@ public class DefaultArmoryFactory {
         private boolean hasTools;
 
         /**
+         * 全局工具池：ChatModelNode 装配出的全部 ToolCallback（来自 tool-mcp-list + tool-skills-list）。
+         * 供 AgentNode 按子 agent 的 tools 声明做白名单过滤，构建工具受限的 ChatModel 变体。
+         */
+        private List<ToolCallback> globalToolCallbacks;
+
+        /**
+         * ChatModel 模型名（用于按白名单构建受限 ChatModel 变体时复用同一模型）
+         */
+        private String chatModelName;
+
+        /**
+         * ChatModel 最大输出 token 数（用于按白名单构建受限 ChatModel 变体时复用同一限制）
+         */
+        private Integer chatModelMaxTokens;
+
+        /**
          * 智能体配置组
          */
         @Builder.Default
@@ -95,6 +112,13 @@ public class DefaultArmoryFactory {
         private Map<String, LlmAgent.Builder> agentBuilderGroup = new HashMap<>();
 
         /**
+         * AgentEnhancementContext 缓存：按 agentName 累积回调（避免 *CallbackSync 单元素 setter 覆盖）。
+         * 同一 agent 多次 enhance 时复用同一 context，累积的回调由 flush() 一次性注入 Builder。
+         */
+        @Builder.Default
+        private Map<String, AgentEnhancementContext> agentEnhancementContextGroup = new HashMap<>();
+
+        /**
          * 增强子 agent：从 agentBuilderGroup 取出 Builder，应用增强逻辑后重新 build，覆盖 agentGroup 成品
          *
          * @param agentName 子 agent 名称
@@ -106,7 +130,10 @@ public class DefaultArmoryFactory {
             if (builder == null) {
                 return false;
             }
-            enhancer.accept(new AgentEnhancementContext(builder));
+            AgentEnhancementContext ctx = agentEnhancementContextGroup
+                    .computeIfAbsent(agentName, k -> new AgentEnhancementContext(builder));
+            enhancer.accept(ctx);
+            ctx.flush();
             agentGroup.put(agentName, builder.build());
             return true;
         }

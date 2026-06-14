@@ -94,6 +94,14 @@ public class AiAgentConfigTableVO {
 
                 private LocalParameters local;
 
+                /**
+                 * M3: StreamableHttp 传输参数 —— 支持 MCP 协议 2025-03-26 版本的 StreamableHttp 传输。
+                 * <p>
+                 * 与 SSE 的区别：SSE 使用 GET 建立 long-lived 事件流；StreamableHttp 使用 POST 到单一端点（如 /mcp），
+                 * 服务端可选择以 JSON 或 SSE-stream 响应，是 MCP 推荐的新传输方式。
+                 */
+                private StreamableHttpServerParameters streamableHttp;
+
                 @Data
                 public static class SSEServerParameters {
                     private String name;
@@ -121,6 +129,24 @@ public class AiAgentConfigTableVO {
                 @Data
                 public static class LocalParameters {
                     private String name;
+                }
+
+                /**
+                 * StreamableHttp 传输参数（MCP 2025-03-26 规范）。
+                 */
+                @Data
+                public static class StreamableHttpServerParameters {
+                    private String name;
+                    /** 服务端基础地址，如 https://api.example.com */
+                    private String baseUri;
+                    /**
+                     * MCP 端点子路径（StreamableHttp 服务端通常为 /mcp）。
+                     * 为空时默认 "/mcp"。支持子路径前缀，如 /api/v1/mcp。
+                     */
+                    private String mcpEndpoint = "/mcp";
+                    /** 可选 Bearer Token，通过 Authorization 请求头传递 */
+                    private String apiKey;
+                    private Integer requestTimeout = 3000;
                 }
 
             }
@@ -226,6 +252,53 @@ public class AiAgentConfigTableVO {
              * 为空时默认 "reflections:{workflowName}"。
              */
             private String reflectionStateKey;
+
+            /**
+             * 是否启用 Reflexion 自动降级 —— 连续多轮反思无提升（或分数持续低于 gateThreshold）时
+             * 自动退出循环，避免无效反思消耗 token。
+             * <p>
+             * 默认 false（向后兼容）。
+             */
+            private Boolean degradationEnabled = false;
+
+            /**
+             * Reflexion 降级容忍轮数 —— 连续 N 轮无提升即触发降级退出。
+             * <p>
+             * 默认 2。"无提升"指本轮分数 ≤ 上一轮分数。
+             */
+            private Integer degradationPatience = 2;
+
+            /**
+             * Reflexion 降级最小迭代数 —— 至少迭代 N 次后才考虑降级，
+             * 避免第一轮就误降级（首轮分数本身可能较低）。
+             * <p>
+             * 默认 2。
+             */
+            private Integer degradationMinIterations = 2;
+
+            /**
+             * Reflexion 降级评分提取正则 —— 从 Critic/Evaluator 输出文本中提取分数的正则，
+             * 第一个捕获组解析为 double 分数。
+             * <p>
+             * 默认 {@code "score"\s*:\s*([\d.]+)}，匹配 JSON 风格的 score 字段。
+             * 自定义示例：{@code 评分[::]\s*([\d.]+)} 匹配中文前缀。
+             */
+            private String scoreRegex = "\"score\"\\s*:\\s*([\\d.]+)";
+
+            /**
+             * A6 Conditional 谓词 —— 简单 query 短路正则。
+             * <p>
+             * 配置后，Reflexion 工作流的 Actor 在 beforeModelCallback 中检查 user query：
+             * <ul>
+             *   <li>匹配此正则 → 视为"简单 query"，直接返回简短响应跳过 LLM 调用，
+             *       Critic 第一轮就会 PASSED，Reflexion loop 立即退出（等效于不走 Reflexion）</li>
+             *   <li>不匹配 → 正常进入 Reflexion 多轮迭代</li>
+             * </ul>
+             * <p>
+             * 示例：{@code ^(你好|hi|hello|在吗|谢谢)} 匹配打招呼类简单 query。
+             * 为空（默认）表示不启用短路，所有 query 都走完整 Reflexion。
+             */
+            private String queryPredicate;
 
         }
 

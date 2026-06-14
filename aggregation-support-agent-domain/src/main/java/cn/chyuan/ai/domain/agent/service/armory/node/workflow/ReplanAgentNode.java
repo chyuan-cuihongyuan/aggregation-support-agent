@@ -90,6 +90,18 @@ public class ReplanAgentNode extends AbstractArmorySupport {
         if (!enhanced) {
             log.warn("Evaluator[{}] 无 Builder 缓存，无法挂 ExitLoopTool，退化为普通顺序节点", evaluatorName);
         }
+
+        // A2: 阶段级 OTel span 上报 —— Planner/Executor/Evaluator/Replanner 各一个 span
+        dynamicContext.enhanceAgent(plannerName,
+                ctx -> AgenticWorkflowEnhancer.attachSpanEmitter(ctx, "replan.planner", "PLANNER", null));
+        dynamicContext.enhanceAgent(executorName,
+                ctx -> AgenticWorkflowEnhancer.attachSpanEmitter(ctx, "replan.executor.cycle", "EXECUTOR", null));
+        dynamicContext.enhanceAgent(evaluatorName,
+                ctx -> AgenticWorkflowEnhancer.attachSpanEmitter(ctx, "replan.evaluator.cycle", "EVALUATOR", null));
+        dynamicContext.enhanceAgent(replannerName,
+                ctx -> AgenticWorkflowEnhancer.attachSpanEmitter(ctx, "replan.replanner.cycle", "REPLANNER", null));
+        log.info("【A2 OTel】Replan[{}] 四个子 agent 阶段 span 已挂载", currentAgentWorkflow.getName());
+
         evaluator = dynamicContext.getAgentGroup().get(evaluatorName);  // enhance 覆盖后重新取
 
         int maxIterations = currentAgentWorkflow.getMaxIterations() != null ? currentAgentWorkflow.getMaxIterations() : 2;

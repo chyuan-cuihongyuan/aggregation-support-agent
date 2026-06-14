@@ -81,6 +81,13 @@
             <groupId>org.springframework</groupId>
             <artifactId>spring-tx</artifactId>
         </dependency>
+        <!-- OpenTelemetry API —— 用于 Agentic Workflow 阶段级 span 上报（A2）。
+             实际 SDK 实现由应用启动模块（trigger/app）通过 observability-client 间接引入，
+             domain 层只依赖 API，符合 DDD 不依赖基础设施的原则。未注册 SDK 时自动 noop。 -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-api</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

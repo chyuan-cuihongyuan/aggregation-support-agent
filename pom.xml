@@ -25,11 +25,13 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <google.adk.version>0.5.0</google.adk.version>
+        <google.adk.version>1.4.0</google.adk.version>
         <!-- Milvus 向量数据库 SDK 版本 -->
         <milvus-sdk.version>2.6.10</milvus-sdk.version>
         <!-- 阿里云 DashScope SDK 版本（用于文本向量化） -->
         <dashscope-sdk.version>2.17.0</dashscope-sdk.version>
+        <!-- OpenTelemetry 版本（与 agent-rag-observability-server 对齐，用于 Agentic Workflow 阶段级 span 上报） -->
+        <opentelemetry.version>1.39.0</opentelemetry.version>
     </properties>
 
     <developers>
@@ -55,6 +57,14 @@
     </parent>
     <dependencyManagement>
         <dependencies>
+            <!-- OpenTelemetry BOM —— Agentic Workflow 阶段级 span 上报（A2） -->
+            <dependency>
+                <groupId>io.opentelemetry</groupId>
+                <artifactId>opentelemetry-bom</artifactId>
+                <version>${opentelemetry.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <!-- Milvus 向量数据库 Java SDK -->
             <dependency>
                 <groupId>io.milvus</groupId>

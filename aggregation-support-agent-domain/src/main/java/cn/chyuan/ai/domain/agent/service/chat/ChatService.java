@@ -677,7 +677,7 @@ public class ChatService implements IChatService {
                 .build();
         Event event = Event.builder()
                 .author(author)
-                .content(Optional.of(content))
+                .content(content)
                 .build();
         runner.sessionService().appendEvent(session, event).blockingGet();
     }

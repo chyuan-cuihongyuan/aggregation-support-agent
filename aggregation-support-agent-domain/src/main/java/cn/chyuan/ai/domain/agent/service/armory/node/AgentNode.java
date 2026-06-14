@@ -12,10 +12,19 @@ import com.google.adk.agents.LlmAgent;
 import com.google.adk.tools.FunctionTool;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.Resource;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -58,6 +67,8 @@ public class AgentNode extends AbstractArmorySupport {
             - Your final response should contain only the substantive content, do not include labels like "Final Answer:" or "Thought:"
             """;
 
+    private static final String WILDCARD_TOOL = "*";
+
     @Resource
     private AgentWorkflowNode agentWorkflowNode;
 
@@ -68,6 +79,7 @@ public class AgentNode extends AbstractArmorySupport {
         ChatModel defaultChatModel = dynamicContext.getChatModel();
         ChatModel noToolChatModel = dynamicContext.getNoToolChatModel();
         boolean globalHasTools = dynamicContext.isHasTools();
+        List<ToolCallback> globalToolCallbacks = dynamicContext.getGlobalToolCallbacks();
 
         AiAgentConfigTableVO aiAgentConfigTableVO = requestParameter.getAiAgentConfigTableVO();
         List<AiAgentConfigTableVO.Module.Agent> agents = aiAgentConfigTableVO.getModule().getAgents();
@@ -75,26 +87,44 @@ public class AgentNode extends AbstractArmorySupport {
         for (AiAgentConfigTableVO.Module.Agent agentConfig : agents) {
             String instruction = agentConfig.getInstruction();
 
-            // 【新增】按 agent.tools 声明选择 ChatModel：
-            // - tools == null：使用主 ChatModel（默认行为，带全部工具）
-            // - tools == []（空列表）：使用无工具变体（Planner/Critic 等纯推理 agent）
-            // - tools == 非空白名单：本期暂不支持，降级为主 ChatModel（后续扩展按名过滤）
+            // 【安全策略】子 agent 工具调用必须显式声明（配置即权限，未配置不允许调用）：
+            // - tools == null：未配置 → 按安全策略不注入任何工具（禁止调用任何工具）
+            // - tools == []：显式空列表 → 无工具变体（Planner/Critic 等纯推理 agent）
+            // - tools == ["*"]：通配符 → 注入工具池全部工具（显式声明使用全部）
+            // - tools == ["t1","t2"]：白名单 → 仅注入工具池中匹配的工具（按名过滤）
             ChatModel effectiveChatModel;
             boolean effectiveHasTools;
-            if (agentConfig.getTools() != null && agentConfig.getTools().isEmpty()) {
+            List<String> declaredTools = agentConfig.getTools();
+
+            if (declaredTools == null) {
+                // 未配置 tools → 安全策略：禁止任何工具调用
+                effectiveChatModel = (noToolChatModel != null) ? noToolChatModel : defaultChatModel;
+                effectiveHasTools = false;
+                log.warn("Agent [{}] 未声明 tools 字段，按安全策略不注入任何工具（未配置不允许调用）", agentConfig.getName());
+            } else if (declaredTools.isEmpty()) {
                 // 显式空列表 → 无工具变体
                 effectiveChatModel = (noToolChatModel != null) ? noToolChatModel : defaultChatModel;
                 effectiveHasTools = false;
                 log.info("Agent [{}] 声明 tools:[] → 使用无工具 ChatModel 变体", agentConfig.getName());
-            } else if (agentConfig.getTools() != null && !agentConfig.getTools().isEmpty()) {
-                // 非空白名单 → 本期暂不支持，降级为主 ChatModel
+            } else if (declaredTools.contains(WILDCARD_TOOL)) {
+                // 通配符 "*" → 注入工具池全部工具
                 effectiveChatModel = defaultChatModel;
                 effectiveHasTools = globalHasTools;
-                log.warn("Agent [{}] 声明 tools 白名单暂不支持本期实现，降级为主 ChatModel", agentConfig.getName());
+                log.info("Agent [{}] 声明 tools:[*] → 使用全部工具 ChatModel", agentConfig.getName());
             } else {
-                // tools == null → 默认行为
-                effectiveChatModel = defaultChatModel;
-                effectiveHasTools = globalHasTools;
+                // 白名单 → 仅注入声明的工具
+                List<ToolCallback> filteredTools = filterToolCallbacks(globalToolCallbacks, declaredTools);
+                if (filteredTools.isEmpty()) {
+                    log.warn("Agent [{}] 声明工具 {} 在工具池中未匹配到任何工具，按安全策略不注入工具", agentConfig.getName(), declaredTools);
+                    effectiveChatModel = (noToolChatModel != null) ? noToolChatModel : defaultChatModel;
+                    effectiveHasTools = false;
+                } else {
+                    effectiveChatModel = buildFilteredChatModel(dynamicContext, filteredTools);
+                    effectiveHasTools = true;
+                    log.info("Agent [{}] 声明白名单 tools:{} → 注入 {} 个匹配工具: {}",
+                            agentConfig.getName(), declaredTools, filteredTools.size(),
+                            filteredTools.stream().map(t -> t.getToolDefinition().name()).collect(Collectors.toList()));
+                }
             }
 
             if (Boolean.TRUE.equals(agentConfig.getReactMode()) && effectiveHasTools) {
@@ -122,8 +152,10 @@ public class AgentNode extends AbstractArmorySupport {
 
             // 注入 exitLoop 工具：用于 LoopAgent 中 Reflexion 循环的语义级提前退出
             // 当 exit-loop-enabled: true 时，AgentNode 自动注入 ExitLoopTool
-            // 【变更】tools:[] 时不注入 ExitLoopTool（强门控已在 Critic 层处理）
-            if (Boolean.TRUE.equals(agentConfig.getExitLoopEnabled()) && effectiveHasTools) {
+            // 【解耦】exitLoop 是工作流控制工具，与业务工具池(tools)正交：
+            //   - 即使 tools:[]（无业务工具），exit-loop-enabled:true 仍注入 ExitLoopTool
+            //   - 这样退出决策 agent 可以声明 tools:[] 而不影响循环退出能力
+            if (Boolean.TRUE.equals(agentConfig.getExitLoopEnabled())) {
                 agentBuilder.tools(FunctionTool.create(ExitLoopTool.class, "exitLoop"));
                 log.info("Agent [{}] 已注入 exitLoop 工具，支持 Reflexion 循环语义级退出", agentConfig.getName());
             }
@@ -142,6 +174,40 @@ public class AgentNode extends AbstractArmorySupport {
     @Override
     public StrategyHandler<ArmoryCommandEntity, DefaultArmoryFactory.DynamicContext, AiAgentRegisterVO> get(ArmoryCommandEntity requestParameter, DefaultArmoryFactory.DynamicContext dynamicContext) throws Exception {
         return agentWorkflowNode;
+    }
+
+    /**
+     * 从全局工具池中按声明的工具名过滤出匹配的 ToolCallback（配置即权限，未声明的工具一律不可调用）
+     */
+    private List<ToolCallback> filterToolCallbacks(List<ToolCallback> pool, List<String> declared) {
+        if (pool == null || pool.isEmpty() || declared == null || declared.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Set<String> declaredSet = new HashSet<>(declared);
+        List<ToolCallback> filtered = new ArrayList<>();
+        for (ToolCallback tc : pool) {
+            if (declaredSet.contains(tc.getToolDefinition().name())) {
+                filtered.add(tc);
+            }
+        }
+        return filtered;
+    }
+
+    /**
+     * 基于全局工具池中的指定子集构建工具受限的 ChatModel 变体（复用同一 openAiApi/model/maxTokens）
+     */
+    private ChatModel buildFilteredChatModel(DefaultArmoryFactory.DynamicContext dynamicContext, List<ToolCallback> filteredTools) {
+        OpenAiApi openAiApi = dynamicContext.getOpenAiApi();
+        OpenAiChatOptions.Builder optionsBuilder = OpenAiChatOptions.builder()
+                .model(dynamicContext.getChatModelName())
+                .toolCallbacks(filteredTools);
+        if (dynamicContext.getChatModelMaxTokens() != null && dynamicContext.getChatModelMaxTokens() > 0) {
+            optionsBuilder.maxTokens(dynamicContext.getChatModelMaxTokens());
+        }
+        return OpenAiChatModel.builder()
+                .openAiApi(openAiApi)
+                .defaultOptions(optionsBuilder.build())
+                .build();
     }
 
 }
