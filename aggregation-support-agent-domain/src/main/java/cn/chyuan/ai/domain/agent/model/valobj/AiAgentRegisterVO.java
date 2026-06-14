@@ -42,4 +42,10 @@ public class AiAgentRegisterVO {
      */
     private InMemoryRunner runner;
 
+    /**
+     * 终端可见 agent 的 author 名（用户最终看到的输出 agent）。
+     * 为 null/空时不过滤，保留全部 agent 输出（向后兼容）。
+     */
+    private String outputAuthor;
+
 }

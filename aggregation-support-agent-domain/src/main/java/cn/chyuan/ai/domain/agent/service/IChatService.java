@@ -41,4 +41,16 @@ public interface IChatService {
      */
     String ensureAdkSession(String agentId, String userId, String sessionId);
 
+    /**
+     * 判断事件是否对用户可见（终端 agent 的输出可见，中间 agent 的内部 JSON 不可见）。
+     * <p>
+     * 出口层（Controller）在 send 前调用，避免中间 agent 的思考 JSON 泄漏到前端。
+     * 未配置终端 author（output-agent）时返回 true（向后兼容，不过滤）。
+     *
+     * @param event   ADK 事件
+     * @param agentId 智能体ID（用于解析该 agent 的终端 author 配置）
+     * @return true 表示该事件输出对用户可见
+     */
+    boolean isUserVisible(Event event, String agentId);
+
 }

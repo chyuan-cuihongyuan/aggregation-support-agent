@@ -43,12 +43,17 @@ public class RunnerNode extends AbstractArmorySupport {
 
         InMemoryRunner runner = getRunner(dynamicContext, aiAgentConfigTableVO, appName);
 
+        // 终端可见 agent：用于过滤中间 agent 的内部思考 JSON，仅向用户展示终端 agent 输出
+        AiAgentConfigTableVO.Module.Runner runnerConfig = aiAgentConfigTableVO.getModule().getRunner();
+        String outputAuthor = runnerConfig != null ? runnerConfig.getOutputAgent() : null;
+
         AiAgentRegisterVO aiAgentRegisterVO = AiAgentRegisterVO.builder()
                 .appName(appName)
                 .agentId(agentId)
                 .agentName(agentName)
                 .agentDesc(agentDesc)
                 .runner(runner)
+                .outputAuthor(outputAuthor)
                 .build();
 
         // 注册到 Spring 容器

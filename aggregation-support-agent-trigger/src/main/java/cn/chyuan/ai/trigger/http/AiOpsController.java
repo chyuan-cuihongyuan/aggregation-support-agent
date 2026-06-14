@@ -91,6 +91,10 @@ public class AiOpsController {
                     .subscribe(
                             event -> {
                                 try {
+                                    // 出口过滤：仅转发终端 agent 的输出（aiops_executor 等），中间 agent 的工具调用 JSON 不发给前端
+                                    if (!chatService.isUserVisible(event, agentId)) {
+                                        return;
+                                    }
                                     String content = event.stringifyContent();
                                     if (content != null && !content.isEmpty()) {
                                         emitter.send(SseEmitter.event().data(content));

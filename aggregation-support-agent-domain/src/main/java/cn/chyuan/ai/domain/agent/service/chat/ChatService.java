@@ -190,10 +190,8 @@ public class ChatService implements IChatService {
             try {
                 RequestScopeContext.attach(scopeSnapshot);
                 events.blockingForEach(event -> {
-                    String content = event.stringifyContent();
-                    outputs.add(content);
-
-                    // 捕获 Agent Thought：提取事件中的纯文本内容（非函数调用/响应）
+                    // 捕获 Agent Thought：提取事件中的纯文本内容（非函数调用/响应）— 无条件收集
+                    // 所有 agent 的推理（含中间 agent），保留完整推理链用于可观测性，不影响前端防泄漏
                     event.content().ifPresent(c ->
                         c.parts().ifPresent(parts ->
                             parts.forEach(part ->
@@ -205,6 +203,13 @@ public class ChatService implements IChatService {
                             )
                         )
                     );
+
+                    // 出口过滤：仅保留终端 agent 的输出，过滤中间 agent 的内部思考 JSON
+                    if (!isUserVisible(event, agentId)) {
+                        return;
+                    }
+                    String content = event.stringifyContent();
+                    outputs.add(content);
                 });
             } finally {
                 RequestScopeContext.attach(previousScope);
@@ -267,6 +272,9 @@ public class ChatService implements IChatService {
 
         Flowable<Event> events = runner.runAsync(userId, sessionId, userMsg, runConfig);
 
+        // 过滤责任下放到出口层（Controller send 前）：这里返回原始事件流，
+        // 让出口层 thoughtParts 能收集所有 agent 的推理（含中间链，可观测性完整），
+        // 再用 isUserVisible 在 send 前过滤，前端不泄漏中间 JSON。
         // 包装 Flowable：确保在整个流的生命周期内租户作用域可用
         // Google ADK 的 InMemoryRunner 可能使用自己的线程调度器，
         // 导致 MySpringAI 中的 RequestScopeContext.snapshot() 读取到 null
@@ -299,6 +307,42 @@ public class ChatService implements IChatService {
             return;
         }
         storeConversationMemory(userId, agentId, sessionId, message, response);
+    }
+
+    /**
+     * 解析当前 agent 的终端可见 author；未配置时返回 null（向后兼容，不过滤）。
+     */
+    private String resolveOutputAuthor(String agentId) {
+        AiAgentRegisterVO register = defaultArmoryFactory.getAiAgentRegisterVO(agentId);
+        return register != null ? register.getOutputAuthor() : null;
+    }
+
+    /**
+     * 判断事件是否对用户可见（接口实现）— 出口层 Controller 在 send 前调用。
+     * 按 agentId 解析终端 author 配置后委托给私有重载方法。
+     */
+    /**
+     * 判断事件是否对用户可见（接口实现）— 出口层 Controller 在 send 前调用。
+     * 按 agentId 解析终端 author 配置：未配置则全保留（向后兼容），
+     * 否则仅终端 agent（支持逗号分隔多个，如 AIOps）的事件可见，过滤中间 agent 的内部思考 JSON。
+     */
+    @Override
+    public boolean isUserVisible(Event event, String agentId) {
+        String outputAuthor = resolveOutputAuthor(agentId);
+        if (outputAuthor == null || outputAuthor.isBlank()) {
+            return true;
+        }
+        String author = event.author();
+        if (author == null) {
+            return false;
+        }
+        // 支持逗号分隔的多个终端 agent（如 AIOps 的报告生成与补充分析均为可见输出）
+        for (String expect : outputAuthor.split(",")) {
+            if (author.equals(expect.trim())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -368,7 +412,13 @@ public class ChatService implements IChatService {
         TenantScopeVO previousScope = RequestScopeContext.snapshot();
         try {
             RequestScopeContext.attach(scopeSnapshot);
-            events.blockingForEach(event -> outputs.add(event.stringifyContent()));
+            events.blockingForEach(event -> {
+                // 仅保留终端 agent 的输出，过滤中间 agent 的内部思考 JSON
+                if (!isUserVisible(event, agentId)) {
+                    return;
+                }
+                outputs.add(event.stringifyContent());
+            });
         } finally {
             RequestScopeContext.attach(previousScope);
         }

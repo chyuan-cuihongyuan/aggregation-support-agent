@@ -306,6 +306,12 @@ public class AiAgentConfigTableVO {
         public static class Runner {
             private String agentName;
             private List<String> pluginNameList;
+
+            /**
+             * 终端可见 agent 名：仅该 agent 的输出对用户展示，其余中间 agent 的内部输出被过滤。
+             * 未配置（null/空）时保留全部输出（向后兼容）。对应 yml 的 output-agent。
+             */
+            private String outputAgent;
         }
     }
 

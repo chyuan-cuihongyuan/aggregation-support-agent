@@ -4,9 +4,11 @@ import cn.chyuan.ai.domain.agent.model.entity.ArmoryCommandEntity;
 import cn.chyuan.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.chyuan.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import cn.chyuan.ai.domain.agent.service.armory.AbstractArmorySupport;
+import cn.chyuan.ai.domain.agent.service.armory.factory.AgentEnhancementContext;
 import cn.chyuan.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
 import cn.chyuan.ai.domain.agent.service.armory.matter.patch.MySpringAI;
 import cn.chyuan.ai.domain.agent.service.armory.matter.tools.ExitLoopTool;
+import com.google.adk.agents.CallbackContext;
 import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
 import com.google.adk.agents.LlmAgent;
 import com.google.adk.tools.FunctionTool;
@@ -139,6 +141,31 @@ public class AgentNode extends AbstractArmorySupport {
                     .model(new MySpringAI(effectiveChatModel, effectiveHasTools))
                     .instruction(instruction)
                     .outputKey(agentConfig.getOutputKey());
+
+            // 添加 afterAgentCallback 来处理 outputKey：清理 markdown 代码块后重新存入 session state
+            // ADK 的 outputKey 已自动将 agent 输出写入 state，但可能包含 ```json ... ``` 包裹
+            // 此回调在 agent 执行后读取 state 中的值，去除 markdown 标记后重新写回
+            if (agentConfig.getOutputKey() != null && !agentConfig.getOutputKey().isEmpty()) {
+                final String outputKey = agentConfig.getOutputKey();
+                agentBuilder.afterAgentCallback(List.of((com.google.adk.agents.Callbacks.AfterAgentCallbackSync) callbackContext -> {
+                    try {
+                        Object raw = callbackContext.state().get(outputKey);
+                        if (raw instanceof String output && !output.isEmpty()) {
+                            // 去除 markdown 代码块标记（如 ```json 和 ```）
+                            String cleanedOutput = output.replaceAll("(?s)^```(?:json)?\\s*", "").replaceAll("(?s)```\\s*$", "").trim();
+                            if (!cleanedOutput.equals(output)) {
+                                callbackContext.state().put(outputKey, cleanedOutput);
+                                log.info("Agent [{}] outputKey [{}] 已清理 markdown 代码块，内容长度: {} -> {}",
+                                        agentConfig.getName(), outputKey, output.length(), cleanedOutput.length());
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.error("Agent [{}] 处理 outputKey [{}] 时发生错误: {}",
+                                agentConfig.getName(), outputKey, e.getMessage(), e);
+                    }
+                    return java.util.Optional.empty();
+                }));
+            }
 
             // 设置 ReAct 循环最大步数
             // 无工具的纯对话智能体：强制 maxSteps=1，不允许 ADK 多轮调用 LLM

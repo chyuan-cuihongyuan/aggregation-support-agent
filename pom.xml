@@ -223,6 +223,20 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- Jackson annotations 版本对齐修复：
+                 依赖链 google-adk 1.4.0 -> mcp 1.1.2 -> mcp-json-jackson3 1.1.2 引入 tools.jackson.databind:3.0.3，
+                 其 Jackson 3.x introspector (JacksonAnnotationIntrospector#hasRequiredMarker) 调用
+                 JsonProperty.isRequired()（返回值类型 com.fasterxml.jackson.annotation.OptBoolean）。
+                 该方法在 jackson-annotations 2.20 才新增，而 Spring Boot 3.4.3 BOM 默认管理 2.18.2
+                 （仅有 boolean required()，无 isRequired()），运行时触发 NoSuchMethodError。
+                 Jackson 3.x databind 编译期即依赖 annotations 2.20（pom 注释：3.x retains dep to annotations 2.x），
+                 在此强制对齐到 2.20 即可消除冲突；annotations 2.20 对 jackson2 databind 2.18.2 为纯增量
+                 （仅新增方法、OptBoolean 枚举不变），向后兼容。 -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-annotations</artifactId>
+                <version>2.20</version>
+            </dependency>
             <!-- 可升级配置使用 -->
             <!--<dependency>
                       <groupId>org.springframework.ai</groupId>
@@ -350,6 +364,21 @@
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>versions-maven-plugin</artifactId>
                 <version>2.7</version>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.11</version>
+                <executions>
+                    <execution>
+                        <goals><goal>prepare-agent</goal></goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals><goal>report</goal></goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

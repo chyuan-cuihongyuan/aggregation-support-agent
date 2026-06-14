@@ -55,3 +55,6 @@ docs/dev-ops/milvus/data/*
 docs/dev-ops/elasticsearch/data/*
 docs/dev-ops/elasticsearch/data-7.17.10/*
 docs/dev-ops/elasticsearch/plugins/*
+
+### 运行时日志（Spring Boot logback 输出，不应进版本控制）###
+aggregation-support-agent-app/data/log/

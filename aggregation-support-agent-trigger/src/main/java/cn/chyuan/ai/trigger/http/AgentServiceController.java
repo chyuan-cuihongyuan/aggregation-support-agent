@@ -429,6 +429,11 @@ public class AgentServiceController implements IAgentService {
                                         )
                                     );
                                     if (sb.length() > 0) {
+                                        // 出口过滤：仅转发终端 agent 的文本，中间 agent 的 JSON 不发给前端。
+                                        // thoughtParts 已在上方收集所有 agent 推理（含中间链），可观测性不受影响。
+                                        if (!chatService.isUserVisible(event, agentId)) {
+                                            return;
+                                        }
                                         // 累计响应字符数硬限制检查，超限强制关闭 SSE 流
                                         if (responseCollector.length() + sb.length() > maxResponseChars) {
                                             log.warn("流式响应超过字符数限制({} chars)，强制截断。agentId:{}", maxResponseChars, agentId);
