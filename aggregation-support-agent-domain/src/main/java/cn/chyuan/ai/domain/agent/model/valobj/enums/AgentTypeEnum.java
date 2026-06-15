@@ -18,6 +18,9 @@ public enum AgentTypeEnum {
     Reflexion("反思迭代工作流", "reflexion", "reflexionAgentNode"),
     Replan("动态重规划工作流", "replan", "replanAgentNode"),
 
+    // 【P0 新增】Human-in-the-Loop 人工审批机制
+    HITL("人工审批工作流", "hitl", "humanInTheLoopAgentNode"),
+
     ;
 
     private String name;

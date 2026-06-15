@@ -71,6 +71,33 @@ public class MemoryConsolidationService implements IMemoryConsolidationGateway {
         """;
     
     /**
+     * 结构化抽取 Prompt - 从对话中提取关键信息
+     */
+    private static final String STRUCTURED_EXTRACTION_PROMPT = """
+        你是一个信息抽取专家。从以下对话内容中提取结构化信息。
+        
+        对话内容：
+        {content}
+        
+        请提取以下类型的信息（如果存在），并严格按照 JSON 格式输出：
+        {
+            "userPreferences": ["用户偏好列表"],
+            "decisions": ["做出的决策列表"],
+            "actionItems": ["待办事项列表"],
+            "facts": ["事实性陈述列表"],
+            "entities": ["提到的实体（人名、地名、组织等）"],
+            "keyTopics": ["主要话题/主题"],
+            "sentiment": "整体情感倾向（positive/negative/neutral）",
+            "importance": "重要性评分（1-10）"
+        }
+        
+        要求：
+        - 只提取明确提到的信息，不要推断
+        - 保持简洁，每项不超过50字
+        - 如果某类信息不存在，返回空数组
+        """;
+    
+    /**
      * 决定如何处理相似记忆
      */
     public ConsolidationDecision decide(String existingContent, String newContent) {
@@ -88,6 +115,82 @@ public class MemoryConsolidationService implements IMemoryConsolidationGateway {
                 .reason("LLM决策失败，默认保留")
                 .build();
         }
+    }
+    
+    /**
+     * 结构化信息抽取 - 从对话内容中提取关键信息
+     * 
+     * @param content 对话内容
+     * @return 结构化信息
+     */
+    public StructuredMemory extractStructuredInfo(String content) {
+        try {
+            String prompt = STRUCTURED_EXTRACTION_PROMPT
+                .replace("{content}", content);
+            
+            String response = callLlm(prompt);
+            return parseStructuredMemory(response);
+        } catch (Exception e) {
+            log.warn("结构化抽取失败", e);
+            return StructuredMemory.empty();
+        }
+    }
+    
+    /**
+     * 解析结构化记忆
+     */
+    private StructuredMemory parseStructuredMemory(String llmResponse) {
+        try {
+            // 提取 JSON 部分
+            String json = llmResponse;
+            if (json.contains("```json")) {
+                json = json.substring(json.indexOf("```json") + 7);
+                json = json.substring(0, json.indexOf("```"));
+            } else if (json.contains("```")) {
+                json = json.substring(json.indexOf("```") + 3);
+                json = json.substring(0, json.indexOf("```"));
+            }
+            json = json.trim();
+
+            JsonNode rootNode = objectMapper.readTree(json);
+            
+            StructuredMemory memory = new StructuredMemory();
+            
+            // 解析数组字段
+            memory.setUserPreferences(parseStringArray(rootNode, "userPreferences"));
+            memory.setDecisions(parseStringArray(rootNode, "decisions"));
+            memory.setActionItems(parseStringArray(rootNode, "actionItems"));
+            memory.setFacts(parseStringArray(rootNode, "facts"));
+            memory.setEntities(parseStringArray(rootNode, "entities"));
+            memory.setKeyTopics(parseStringArray(rootNode, "keyTopics"));
+            
+            // 解析标量字段
+            if (rootNode.has("sentiment") && !rootNode.get("sentiment").isNull()) {
+                memory.setSentiment(rootNode.get("sentiment").asText());
+            }
+            if (rootNode.has("importance") && !rootNode.get("importance").isNull()) {
+                memory.setImportance(rootNode.get("importance").asInt(5));
+            }
+            
+            return memory;
+        } catch (Exception e) {
+            log.warn("解析结构化记忆失败: {}", e.getMessage());
+            return StructuredMemory.empty();
+        }
+    }
+    
+    /**
+     * 解析 JSON 数组为字符串列表
+     */
+    private List<String> parseStringArray(JsonNode rootNode, String fieldName) {
+        if (!rootNode.has(fieldName) || rootNode.get(fieldName).isNull()) {
+            return List.of();
+        }
+        JsonNode arrayNode = rootNode.get(fieldName);
+        if (!arrayNode.isArray()) {
+            return List.of();
+        }
+        return objectMapper.convertValue(arrayNode, new TypeReference<List<String>>() {});
     }
     
     /**

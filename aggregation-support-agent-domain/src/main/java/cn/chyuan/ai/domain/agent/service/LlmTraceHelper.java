@@ -1,8 +1,7 @@
 package cn.chyuan.ai.domain.agent.service;
 
-import cn.chyuan.ai.infrastructure.observability.AgentTracer;
+import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.trace.Span;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -10,18 +9,24 @@ import java.util.Map;
 @Component
 public class LlmTraceHelper {
 
-    @Autowired
-    private AgentTracer agentTracer;
+    private final io.opentelemetry.api.trace.Tracer tracer =
+        GlobalOpenTelemetry.getTracer("agent-chyuan", "1.0.0");
 
     public Span startPromptBuildSpan(String model) {
-        return agentTracer.createSpan("llm.prompt_build", Map.of("llm.model", model));
+        return tracer.spanBuilder("llm.prompt_build")
+            .setAttribute("llm.model", model)
+            .startSpan();
     }
 
     public Span startApiCallSpan(String model) {
-        return agentTracer.createSpan("llm.api_call", Map.of("llm.model", model));
+        return tracer.spanBuilder("llm.api_call")
+            .setAttribute("llm.model", model)
+            .startSpan();
     }
 
     public Span startResponseParseSpan(String model) {
-        return agentTracer.createSpan("llm.response_parse", Map.of("llm.model", model));
+        return tracer.spanBuilder("llm.response_parse")
+            .setAttribute("llm.model", model)
+            .startSpan();
     }
 }

@@ -133,6 +133,26 @@ public class EnhancedRagService implements IRagService {
     @Value("${rag.retrieval.timeout-ms}")
     private long retrievalTimeoutMs;
 
+    /** 检索质量门控阈值：低于此分数时拒绝回答 */
+    @Value("${rag.quality-gate.threshold-score:0.3}")
+    private double qualityGateThresholdScore;
+
+    /** 是否启用检索质量门控 */
+    @Value("${rag.quality-gate.enabled:true}")
+    private boolean qualityGateEnabled;
+
+    /** 是否启用 Corrective RAG（检索失败时自动纠正） */
+    @Value("${rag.crag.enabled:true}")
+    private boolean cragEnabled;
+
+    /** CRAG 最大重试次数 */
+    @Value("${rag.crag.max-retries:2}")
+    private int cragMaxRetries;
+
+    /** CRAG 降级阈值：低于此分数时触发纠正 */
+    @Value("${rag.crag.fallback-threshold:0.2}")
+    private double cragFallbackThreshold;
+
     @Resource
     private IEmbeddingService embeddingService;
 
@@ -487,9 +507,88 @@ public class EnhancedRagService implements IRagService {
         // retrievalType: 经过 Rerank 标注为 rerank，否则标注为 hybrid（混合检索结果）
         String retrievalType = internal.rerankApplied ? "rerank" : "hybrid";
 
+        // Corrective RAG 机制：检索质量不达标时自动纠正
+        Boolean cragTriggered = false;
+        Integer cragRetryCount = 0;
+        Double cragFinalScore = null;
+
+        if (cragEnabled && !rawResults.isEmpty()) {
+            double initialScore = rawResults.stream()
+                    .mapToDouble(VectorSearchResultVO::getScore)
+                    .average()
+                    .orElse(0.0);
+
+            // 如果初始质量低于 CRAG 降级阈值，触发纠正
+            if (initialScore < cragFallbackThreshold) {
+                log.info("CRAG 触发纠正: query={}, initialScore={}, threshold={}",
+                        query, initialScore, cragFallbackThreshold);
+                cragTriggered = true;
+
+                // 纠正策略：使用更激进的查询改写重新检索
+                String correctedQuery = applyCragCorrection(query, internal.rewriteQuery);
+                if (correctedQuery != null && !correctedQuery.equals(query)) {
+                    // 重新检索
+                    InternalSearchOutput correctedInternal = doSearchInternal(correctedQuery, topK, scope);
+                    List<VectorSearchResultVO> correctedResults = correctedInternal.results != null
+                            ? correctedInternal.results : Collections.emptyList();
+
+                    double correctedScore = correctedResults.stream()
+                            .mapToDouble(VectorSearchResultVO::getScore)
+                            .average()
+                            .orElse(0.0);
+
+                    cragRetryCount = 1;
+                    cragFinalScore = correctedScore;
+
+                    // 如果纠正后质量更好，使用纠正结果
+                    if (correctedScore > initialScore && !correctedResults.isEmpty()) {
+                        rawResults = correctedResults;
+                        retrievalType = correctedInternal.rerankApplied ? "rerank" : "hybrid";
+                        log.info("CRAG 纠正成功: query={}, correctedScore={}, improved={}",
+                                query, correctedScore, correctedScore - initialScore);
+                    } else {
+                        log.info("CRAG 纠正未改善: query={}, correctedScore={}, initialScore={}",
+                                query, correctedScore, initialScore);
+                    }
+                }
+            }
+        }
+
+        // 检索质量门控：判断检索结果相关性是否足够
+        Boolean qualityGatePassed = null;
+        String rejectionMessage = null;
+        Double averageScore = null;
+
+        if (qualityGateEnabled && !rawResults.isEmpty()) {
+            // 计算平均相关性分数
+            averageScore = rawResults.stream()
+                    .mapToDouble(VectorSearchResultVO::getScore)
+                    .average()
+                    .orElse(0.0);
+
+            // 判断是否低于阈值
+            if (averageScore < qualityGateThresholdScore) {
+                qualityGatePassed = false;
+                rejectionMessage = String.format("根据现有资料无法回答该问题（检索相关性分数 %.2f 低于阈值 %.2f）",
+                        averageScore, qualityGateThresholdScore);
+                log.warn("检索质量门控拒绝回答: query={}, averageScore={}, threshold={}",
+                        query, averageScore, qualityGateThresholdScore);
+            } else {
+                qualityGatePassed = true;
+                log.info("检索质量门控通过: query={}, averageScore={}, threshold={}",
+                        query, averageScore, qualityGateThresholdScore);
+            }
+        } else if (rawResults.isEmpty()) {
+            // 检索结果为空，直接拒绝
+            qualityGatePassed = false;
+            rejectionMessage = "根据现有资料无法回答该问题（未检索到相关内容）";
+            log.warn("检索结果为空，拒绝回答: query={}", query);
+        }
+
         // 将原始检索结果映射为证据 VO
+        final String finalRetrievalType = retrievalType;
         List<RagSourceVO> sources = rawResults.stream()
-                .map(r -> toRagSourceVO(r, retrievalType))
+                .map(r -> toRagSourceVO(r, finalRetrievalType))
                 .collect(Collectors.toList());
 
         // 异步落库 RagTrace（@Async("ragTraceExecutor")），Repository 内部全量 try/catch，异常不会传播到此
@@ -524,6 +623,12 @@ public class EnhancedRagService implements IRagService {
                 .topK(topK)
                 .sources(sources)
                 .rawResults(rawResults)
+                .qualityGatePassed(qualityGatePassed)
+                .rejectionMessage(rejectionMessage)
+                .averageScore(averageScore)
+                .cragTriggered(cragTriggered)
+                .cragRetryCount(cragRetryCount)
+                .cragFinalScore(cragFinalScore)
                 .build();
     }
 
@@ -553,6 +658,68 @@ public class EnhancedRagService implements IRagService {
                 .retrievalType(retrievalType)
                 .snippet(snippet)
                 .build();
+    }
+
+    /**
+     * Corrective RAG 纠正策略：当初始检索质量不达标时，对查询进行更激进的改写。
+     * <p>
+     * 策略：
+     * 1. 提取查询中的核心关键词，去除停用词
+     * 2. 使用同义词扩展关键概念
+     * 3. 如果已有改写结果，则进一步简化为更直接的表达
+     */
+    private String applyCragCorrection(String originalQuery, String rewrittenQuery) {
+        if (originalQuery == null || originalQuery.isBlank()) {
+            return originalQuery;
+        }
+
+        // 策略1：如果已有改写结果，尝试进一步简化
+        if (rewrittenQuery != null && !rewrittenQuery.equals(originalQuery)) {
+            // 提取核心关键词（去除常见停用词）
+            String simplified = simplifyQuery(rewrittenQuery);
+            if (!simplified.equals(rewrittenQuery)) {
+                log.info("CRAG 纠正: 简化查询 '{}' -> '{}'", rewrittenQuery, simplified);
+                return simplified;
+            }
+        }
+
+        // 策略2：提取核心关键词，重新组合
+        String coreKeywords = extractCoreKeywords(originalQuery);
+        if (!coreKeywords.isEmpty() && !coreKeywords.equals(originalQuery)) {
+            log.info("CRAG 纠正: 提取关键词 '{}' -> '{}'", originalQuery, coreKeywords);
+            return coreKeywords;
+        }
+
+        return originalQuery;
+    }
+
+    /**
+     * 简化查询：去除冗余表达，保留核心语义
+     */
+    private String simplifyQuery(String query) {
+        // 去除常见的冗余表达
+        String simplified = query
+                .replaceAll("(请|请问|帮我|我想|我想知道|怎么|如何|什么|为什么)", "")
+                .replaceAll("\\s+", " ")
+                .trim();
+        return simplified.isEmpty() ? query : simplified;
+    }
+
+    /**
+     * 提取核心关键词：去除停用词，保留名词和动词
+     */
+    private String extractCoreKeywords(String query) {
+        // 简单实现：按空格分词，过滤短词
+        String[] words = query.split("\\s+");
+        StringBuilder core = new StringBuilder();
+        for (String word : words) {
+            // 保留长度>=2的词（中文按字符数）
+            if (word.length() >= 2) {
+                if (core.length() > 0) core.append(" ");
+                core.append(word);
+            }
+        }
+        return core.length() > 0 ? core.toString() : query;
     }
 
     @Override

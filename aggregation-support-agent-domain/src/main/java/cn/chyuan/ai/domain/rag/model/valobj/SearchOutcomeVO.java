@@ -30,4 +30,22 @@ public class SearchOutcomeVO {
     private Integer topK;
     private List<RagSourceVO> sources;
     private List<VectorSearchResultVO> rawResults;
+
+    /** 检索质量门控是否通过（true=通过，false=拒绝回答） */
+    private Boolean qualityGatePassed;
+
+    /** 质量门控拒绝原因（当 qualityGatePassed=false 时设置） */
+    private String rejectionMessage;
+
+    /** 检索结果平均相关性分数 */
+    private Double averageScore;
+
+    /** 是否触发了 Corrective RAG 纠正 */
+    private Boolean cragTriggered;
+
+    /** CRAG 纠正次数 */
+    private Integer cragRetryCount;
+
+    /** CRAG 纠正后的最终平均分数 */
+    private Double cragFinalScore;
 }

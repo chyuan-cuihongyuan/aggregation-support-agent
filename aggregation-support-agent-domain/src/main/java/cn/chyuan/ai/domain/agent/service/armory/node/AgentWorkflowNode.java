@@ -12,6 +12,7 @@ import cn.chyuan.ai.domain.agent.service.armory.node.workflow.SequentialAgentNod
 import cn.chyuan.ai.domain.agent.service.armory.node.workflow.ReflectionAgentNode;
 import cn.chyuan.ai.domain.agent.service.armory.node.workflow.ReflexionAgentNode;
 import cn.chyuan.ai.domain.agent.service.armory.node.workflow.ReplanAgentNode;
+import cn.chyuan.ai.domain.agent.service.armory.node.workflow.HumanInTheLoopAgentNode;
 import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,8 @@ public class AgentWorkflowNode extends AbstractArmorySupport {
     private ReflexionAgentNode reflexionAgentNode;
     @Resource
     private ReplanAgentNode replanAgentNode;
+    @Resource
+    private HumanInTheLoopAgentNode humanInTheLoopAgentNode;
     @Resource
     private RunnerNode runnerNode;
 
@@ -86,6 +89,8 @@ public class AgentWorkflowNode extends AbstractArmorySupport {
             case "reflectionAgentNode" -> reflectionAgentNode;
             case "reflexionAgentNode" -> reflexionAgentNode;
             case "replanAgentNode" -> replanAgentNode;
+            // 【P0 新增】Human-in-the-Loop 人工审批机制
+            case "humanInTheLoopAgentNode" -> humanInTheLoopAgentNode;
             default -> runnerNode;
         };
     }

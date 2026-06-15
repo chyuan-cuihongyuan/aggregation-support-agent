@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: aggregation-support-agent
+  cloud:
+    nacos:
+      # 配置中心
+      config:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        group: ${NACOS_GROUP:DEFAULT_GROUP}
+        file-extension: yml
+        shared-configs:
+          - data-id: common.yml
+            group: ${NACOS_GROUP:DEFAULT_GROUP}
+            refresh: true
+        extension-configs:
+          - data-id: agent-config.yml
+            group: ${NACOS_GROUP:DEFAULT_GROUP}
+            refresh: true
+          - data-id: database.yml
+            group: ${NACOS_GROUP:DEFAULT_GROUP}
+            refresh: true
+          - data-id: redis.yml
+            group: ${NACOS_GROUP:DEFAULT_GROUP}
+            refresh: true
+      # 服务发现
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        group: ${NACOS_GROUP:DEFAULT_GROUP}
+  config:
+    import:
+      - optional:nacos:aggregation-support-agent.yml
+
+# 日志配置
+logging:
+  level:
+    root: INFO
+    cn.chyuan.ai: DEBUG
+    com.alibaba.nacos: INFO

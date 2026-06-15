@@ -35,33 +35,68 @@ public class QueryOptimizationService implements IQueryOptimizationService {
 
         String historyStr = chatHistory != null ? String.join("\n", chatHistory) : "无";
 
-        String prompt = """
-                你是一个查询改写专家。请将用户的问题改写为更正式、更精准的书面表达。
+        // 使用 CoT 思维链引导，让模型先分析再改写
+        String systemPrompt = """
+                你是一个查询改写专家。你的任务是分析用户的问题，并通过思维链推理，将其改写为更正式、更精准的书面表达。
+                
+                请按照以下步骤思考：
+                1. 分析原查询：识别口语化表达、模糊指代、缺失信息
+                2. 理解意图：结合对话历史，明确用户的真实需求
+                3. 改写策略：确定需要补充或修正的部分
+                4. 执行改写：生成正式、精准的书面表达
                 
                 改写规则：
-                1. 保持原意不变
-                2. 去除口语化表达
-                3. 补充缺失的指代信息（如"它"、"这个"等）
-                4. 将模糊表述具体化
-                5. 只返回改写后的查询，不要解释
-                
+                - 保持原意不变
+                - 去除口语化表达（如"咋"、"啥"、"整"等）
+                - 补充缺失的指代信息（如"它"、"这个"等）
+                - 将模糊表述具体化
+                - 最终只返回改写后的查询，不要包含思考过程
+                """;
+
+        String userPrompt = """
                 对话历史：
                 %s
                 
                 用户问题：%s
                 
-                改写后的查询：
+                请先分析原查询的问题，然后给出改写后的查询。
+                格式要求：
+                分析：[你的思考过程]
+                改写：[改写后的查询]
                 """.formatted(historyStr, originalQuery);
 
         try {
-            String rewritten = chatModel.call(new Prompt(new UserMessage(prompt)))
-                    .getResult().getOutput().getText();
+            String result = chatModel.call(new Prompt(List.of(
+                    new SystemMessage(systemPrompt),
+                    new UserMessage(userPrompt)
+            ))).getResult().getOutput().getText();
+            
+            // 提取"改写："后面的内容
+            String rewritten = extractAfterKeyword(result, "改写：");
+            if (rewritten == null || rewritten.isBlank()) {
+                rewritten = extractAfterKeyword(result, "改写:");
+            }
+            if (rewritten == null || rewritten.isBlank()) {
+                rewritten = result.trim();
+            }
+            
             log.info("Query改写完成: original={}, rewritten={}", originalQuery, rewritten);
             return rewritten.trim();
         } catch (Exception e) {
             log.warn("Query改写失败，返回原始查询: {}", e.getMessage());
             return originalQuery;
         }
+    }
+    
+    /**
+     * 从文本中提取指定关键字后面的内容
+     */
+    private String extractAfterKeyword(String text, String keyword) {
+        int index = text.indexOf(keyword);
+        if (index >= 0) {
+            return text.substring(index + keyword.length()).trim();
+        }
+        return null;
     }
 
     @Override
