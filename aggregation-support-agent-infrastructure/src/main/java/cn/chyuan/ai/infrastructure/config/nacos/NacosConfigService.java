@@ -85,9 +85,14 @@ public class NacosConfigService {
      * @param group    配置分组
      * @param listener 监听器
      */
-    public void removeListener(String dataId, String group, Listener listener) {
-        configService.removeListener(dataId, group, listener);
-        log.info("移除配置监听器: dataId={}, group={}", dataId, group);
+    public void addListener(String dataId, String group, Listener listener) {
+        try {
+            configService.addListener(dataId, group, listener);
+            log.info("添加配置监听器: dataId={}, group={}", dataId, group);
+        } catch (NacosException e) {
+            log.error("添加配置监听器失败: dataId={}, group={}", dataId, group, e);
+            throw new RuntimeException("添加配置监听器失败", e);
+        }
     }
 
     /**

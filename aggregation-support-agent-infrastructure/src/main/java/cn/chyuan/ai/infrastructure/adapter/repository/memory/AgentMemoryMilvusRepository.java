@@ -273,6 +273,15 @@ public class AgentMemoryMilvusRepository implements IAgentMemoryRepository {
     }
     
     @Override
+    public List<AgentMemoryEntity> findByIds(List<String> memoryIds) {
+        if (memoryIds == null || memoryIds.isEmpty()) {
+            return List.of();
+        }
+        List<AgentMemoryPO> poList = agentMemoryMapper.selectActiveByMemoryIds(memoryIds);
+        return poList.stream().map(this::convertToEntity).collect(Collectors.toList());
+    }
+    
+    @Override
     public boolean existsByContentHash(String contentHash, String tenantId, String userId, String scope) {
         return agentMemoryMapper.countByContentHash(contentHash, tenantId, userId, scope) > 0;
     }
@@ -492,6 +501,12 @@ public class AgentMemoryMilvusRepository implements IAgentMemoryRepository {
                 .userId((String) row.get("user_id"))
                 .build())
             .collect(Collectors.toList());
+    }
+    
+    @Override
+    public List<AgentMemoryEntity> findByUserIdAndAgentId(String userId, String agentId) {
+        List<AgentMemoryPO> poList = agentMemoryMapper.selectActiveByUserIdAndAgentId(userId, agentId);
+        return poList.stream().map(this::convertToEntity).collect(Collectors.toList());
     }
     
     /**

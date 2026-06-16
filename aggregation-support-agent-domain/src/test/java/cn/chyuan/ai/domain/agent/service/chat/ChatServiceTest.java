@@ -17,7 +17,6 @@ import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
 import com.google.adk.agents.RunConfig;
 import com.google.adk.runner.InMemoryRunner;
-import com.google.adk.sessions.SessionService;
 import com.google.adk.sessions.Session;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.core.Maybe;
@@ -55,9 +54,6 @@ class ChatServiceTest {
 
     @Mock
     private InMemoryRunner runner;
-
-    @Mock
-    private SessionService sessionService;
 
     @InjectMocks
     private ChatService chatService;

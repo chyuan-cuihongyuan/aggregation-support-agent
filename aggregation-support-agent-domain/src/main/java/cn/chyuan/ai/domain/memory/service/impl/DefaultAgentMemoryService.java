@@ -3,7 +3,9 @@ package cn.chyuan.ai.domain.memory.service.impl;
 import cn.chyuan.ai.domain.memory.adapter.port.IMemoryConsolidationGateway;
 import cn.chyuan.ai.domain.memory.adapter.port.IMemoryExtractionGateway;
 import cn.chyuan.ai.domain.memory.adapter.repository.IAgentMemoryRepository;
+import cn.chyuan.ai.domain.memory.adapter.repository.IMemoryGraphRepository;
 import cn.chyuan.ai.domain.memory.model.entity.AgentMemoryEntity;
+import cn.chyuan.ai.domain.memory.model.entity.MemoryRelation;
 import cn.chyuan.ai.domain.memory.model.enums.ConsolidationAction;
 import cn.chyuan.ai.domain.memory.model.enums.MemoryType;
 import cn.chyuan.ai.domain.memory.model.valobj.*;
@@ -12,12 +14,14 @@ import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import com.google.common.hash.Hashing;
 import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -35,6 +39,7 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
     private final IMemoryConsolidationGateway consolidationGateway;
     private final IEmbeddingService embeddingService;
     private final IAgentMemoryRepository memoryRepository;
+    private final ObjectProvider<IMemoryGraphRepository> memoryGraphRepositoryProvider;
     
     @Override
     @Async("memoryTaskExecutor")
@@ -173,7 +178,79 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
         // Step 9: 存储到 MySQL (持久化)
         memoryRepository.save(entity);
         
+        // Step 10: 在 Neo4j 中创建记忆节点并建立关联
+        createMemoryGraphRelations(entity, options);
+        
         log.info("存储记忆成功: {} for user: {}", memoryId, options.getUserId());
+    }
+    
+    /**
+     * 创建记忆图谱关联
+     * 将新记忆与相关记忆建立关联关系
+     */
+    private void createMemoryGraphRelations(AgentMemoryEntity newMemory, MemoryOptions options) {
+        IMemoryGraphRepository graphRepo = memoryGraphRepositoryProvider.getIfAvailable();
+        if (graphRepo == null) {
+            log.debug("记忆图谱仓储不可用，跳过图谱关联创建");
+            return;
+        }
+        
+        try {
+            // 查找相似记忆（基于向量检索）
+            List<MemoryEntry> similarMemories = memoryRepository.searchSimilar(
+                newMemory.getContent(),
+                options.getTenantId(),
+                options.getUserId(),
+                options.getScope(),
+                5
+            );
+            
+            // 为相似度 > 0.7 的记忆创建关联
+            for (MemoryEntry similar : similarMemories) {
+                if (similar.getScore() > 0.7 && !similar.getEntry().getMemoryId().equals(newMemory.getMemoryId())) {
+                    MemoryRelation.RelationType relationType = determineRelationType(newMemory, similar.getEntry());
+                    
+                    MemoryRelation relation = MemoryRelation.builder()
+                        .relationId(UUID.randomUUID().toString())
+                        .sourceMemoryId(newMemory.getMemoryId())
+                        .targetMemoryId(similar.getEntry().getMemoryId())
+                        .relationType(relationType)
+                        .strength(similar.getScore())
+                        .description("基于语义相似度自动建立")
+                        .tenantId(options.getTenantId())
+                        .userId(options.getUserId())
+                        .createdAt(LocalDateTime.now())
+                        .build();
+                    
+                    graphRepo.saveRelation(relation);
+                    log.debug("创建记忆关联: {} -> {} [{}] 相似度: {}", 
+                        newMemory.getMemoryId(), similar.getEntry().getMemoryId(), 
+                        relationType, similar.getScore());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("创建记忆图谱关联失败，不影响主流程: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * 根据记忆类型和内容确定关联类型
+     */
+    private MemoryRelation.RelationType determineRelationType(AgentMemoryEntity source, AgentMemoryEntity target) {
+        // 相同类型的记忆通常是相似关系
+        if (source.getMemoryType() == target.getMemoryType()) {
+            return MemoryRelation.RelationType.SIMILAR;
+        }
+        
+        // 根据记忆类型组合确定关联类型
+        return switch (source.getMemoryType()) {
+            case FACT -> MemoryRelation.RelationType.THEMATIC;
+            case PREFERENCE -> MemoryRelation.RelationType.CONTEXTUAL;
+            case DECISION -> MemoryRelation.RelationType.CAUSAL;
+            case EPISODE -> MemoryRelation.RelationType.TEMPORAL;
+            case KNOWLEDGE -> MemoryRelation.RelationType.REFERENCE;
+            default -> MemoryRelation.RelationType.THEMATIC;
+        };
     }
     
     @Override
@@ -216,7 +293,80 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
             .limit(options.getLimit())
             .collect(Collectors.toList());
 
+        // 使用图谱增强检索结果
+        results = enhanceWithGraph(results, options);
+
         return results;
+    }
+
+    /**
+     * 使用记忆图谱增强检索结果
+     * 通过图谱关联关系补充相关记忆
+     */
+    private List<MemoryMatch> enhanceWithGraph(List<MemoryMatch> initialResults, RecallOptions options) {
+        IMemoryGraphRepository graphRepo = memoryGraphRepositoryProvider.getIfAvailable();
+        if (graphRepo == null) {
+            return initialResults;
+        }
+
+        try {
+            // 收集初始结果中的记忆ID
+            Set<String> initialMemoryIds = initialResults.stream()
+                .map(match -> match.getEntry().getMemoryId())
+                .collect(Collectors.toSet());
+
+            // 通过图谱查找关联记忆
+            Set<String> relatedMemoryIds = new HashSet<>();
+            for (String memoryId : initialMemoryIds) {
+                List<String> related = graphRepo.findRelatedMemoryIds(
+                    memoryId,
+                    options.getTenantId(),
+                    options.getUserId()
+                );
+                relatedMemoryIds.addAll(related);
+            }
+
+            // 移除已存在的记忆ID
+            relatedMemoryIds.removeAll(initialMemoryIds);
+
+            if (relatedMemoryIds.isEmpty()) {
+                return initialResults;
+            }
+
+            // 限制加载数量，避免加载过多关联记忆
+            int limit = Math.min(relatedMemoryIds.size(), options.getLimit() - initialResults.size());
+            if (limit <= 0) {
+                return initialResults;
+            }
+
+            // 批量加载关联记忆（避免全量加载）
+            List<AgentMemoryEntity> relatedMemories = memoryRepository.findByIds(
+                new ArrayList<>(relatedMemoryIds).subList(0, limit)
+            );
+
+            // 将关联记忆转换为 MemoryMatch（给予较低的分数）
+            List<MemoryMatch> graphEnhancedResults = new ArrayList<>(initialResults);
+            for (AgentMemoryEntity memory : relatedMemories) {
+                MemoryMatch match = MemoryMatch.builder()
+                    .entry(memory)
+                    .score(0.6)  // 图谱关联记忆的基础分数
+                    .semanticScore(0.6)
+                    .recencyScore(1.0)
+                    .importanceScore(memory.getImportance() != null ? memory.getImportance().doubleValue() : 0.5)
+                    .build();
+                graphEnhancedResults.add(match);
+            }
+
+            // 重新排序并限制数量
+            return graphEnhancedResults.stream()
+                .sorted(Comparator.comparingDouble(MemoryMatch::getScore).reversed())
+                .limit(options.getLimit())
+                .collect(Collectors.toList());
+
+        } catch (Exception e) {
+            log.warn("图谱增强检索失败，返回原始结果: {}", e.getMessage());
+            return initialResults;
+        }
     }
 
     /**
@@ -285,6 +435,22 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
     
     @Override
     public void forget(String memoryId) {
+        // 先获取记忆信息用于清理图谱
+        AgentMemoryEntity memory = memoryRepository.findByMemoryId(memoryId);
+        if (memory != null) {
+            // 清理 Neo4j 图谱关联
+            IMemoryGraphRepository graphRepo = memoryGraphRepositoryProvider.getIfAvailable();
+            if (graphRepo != null) {
+                try {
+                    graphRepo.deleteRelations(memoryId, memory.getTenantId(), memory.getUserId());
+                    log.debug("已清理记忆图谱关联: {}", memoryId);
+                } catch (Exception e) {
+                    log.warn("清理记忆图谱关联失败: {}", e.getMessage());
+                }
+            }
+        }
+        
+        // 软删除记忆
         memoryRepository.softDelete(memoryId);
         log.info("遗忘记忆: {}", memoryId);
     }
@@ -334,8 +500,15 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
         }
         
         // 向量相似度去重
-        for (AgentMemoryEntity memory : allMemories) {
-            if (memory.getStatus() == 0) {
+        // 先收集需要处理的记忆ID，避免边删边遍历
+        List<AgentMemoryEntity> activeMemories = allMemories.stream()
+            .filter(m -> m.getStatus() != null && m.getStatus() == 1)
+            .collect(Collectors.toList());
+        
+        Set<String> processedMemoryIds = new HashSet<>();
+        
+        for (AgentMemoryEntity memory : activeMemories) {
+            if (processedMemoryIds.contains(memory.getMemoryId())) {
                 continue;
             }
             
@@ -345,7 +518,8 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
             for (MemoryEntry similarEntry : similar) {
                 if (similarEntry.getScore() > 0.90 
                     && !similarEntry.getEntry().getMemoryId()
-                        .equals(memory.getMemoryId())) {
+                        .equals(memory.getMemoryId())
+                    && !processedMemoryIds.contains(similarEntry.getEntry().getMemoryId())) {
                     
                     ConsolidationDecision decision = consolidationGateway.decide(
                         memory.getContent(), 
@@ -355,6 +529,7 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
                     if (decision.getAction() == ConsolidationAction.MERGE) {
                         updateMemory(memory.getMemoryId(), decision.getMergedContent());
                         deleteMemory(similarEntry.getEntry().getMemoryId());
+                        processedMemoryIds.add(similarEntry.getEntry().getMemoryId());
                         report.incrementMerged();
                     }
                 }
@@ -406,6 +581,11 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
             dotProduct += a[i] * b[i];
             normA += a[i] * a[i];
             normB += b[i] * b[i];
+        }
+        
+        // 避免零向量导致的除零错误
+        if (normA == 0 || normB == 0) {
+            return 0.0;
         }
         
         return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
@@ -473,5 +653,19 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
 
     private String safeScope(String scope) {
         return scope == null ? "" : scope;
+    }
+
+    @Override
+    public List<AgentMemoryEntity> getOldMemories(String userId, String agentId, Instant cutoff) {
+        List<AgentMemoryEntity> allMemories = memoryRepository.findByUserIdAndAgentId(userId, agentId);
+        return allMemories.stream()
+            .filter(m -> m.getCreatedAt().isBefore(cutoff))
+            .sorted(Comparator.comparing(AgentMemoryEntity::getCreatedAt))
+            .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<AgentMemoryEntity> getAllMemories(String userId, String agentId) {
+        return memoryRepository.findByUserIdAndAgentId(userId, agentId);
     }
 }

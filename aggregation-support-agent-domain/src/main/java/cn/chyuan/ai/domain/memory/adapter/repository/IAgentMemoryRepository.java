@@ -27,6 +27,11 @@ public interface IAgentMemoryRepository {
     AgentMemoryEntity findByMemoryId(String memoryId);
     
     /**
+     * 根据记忆ID批量查询
+     */
+    List<AgentMemoryEntity> findByIds(List<String> memoryIds);
+    
+    /**
      * 根据内容哈希检查是否存在
      */
     boolean existsByContentHash(String contentHash, String tenantId, String userId, String scope);
@@ -93,4 +98,9 @@ public interface IAgentMemoryRepository {
      * 用于定时任务遍历所有需要整合记忆的租户和用户。
      */
     List<TenantUserPair> findAllTenantUserPairs();
+    
+    /**
+     * 根据用户ID和AgentID查询记忆
+     */
+    List<AgentMemoryEntity> findByUserIdAndAgentId(String userId, String agentId);
 }

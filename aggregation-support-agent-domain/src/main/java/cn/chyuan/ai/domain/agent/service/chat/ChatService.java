@@ -16,6 +16,10 @@ import cn.chyuan.ai.domain.memory.model.valobj.MemoryMatch;
 import cn.chyuan.ai.domain.memory.model.valobj.MemoryOptions;
 import cn.chyuan.ai.domain.memory.model.valobj.RecallOptions;
 import cn.chyuan.ai.domain.memory.service.AgentMemoryService;
+import cn.chyuan.ai.domain.memory.sensory.ISensoryMemoryService;
+import cn.chyuan.ai.domain.memory.shortterm.IShortTermMemoryService;
+import cn.chyuan.ai.domain.memory.shortterm.MemoryMessage;
+import cn.chyuan.ai.domain.memory.retrieval.IUnifiedMemoryService;
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import cn.chyuan.ai.domain.rag.support.RagSourceCollector;
 import cn.chyuan.ai.types.enums.ResponseCode;
@@ -70,6 +74,16 @@ public class ChatService implements IChatService {
 
     @Resource
     private IEmbeddingService embeddingService;
+
+    // 四层记忆架构服务
+    @Resource
+    private ISensoryMemoryService sensoryMemoryService;
+
+    @Resource
+    private IShortTermMemoryService shortTermMemoryService;
+
+    @Resource
+    private IUnifiedMemoryService unifiedMemoryService;
 
     /**
      * 会话 ID 缓存 — 按 tenantId:ownerUserId:agentId 复用同一 session，保持对话上下文连续
@@ -169,11 +183,23 @@ public class ChatService implements IChatService {
         // 在当前线程捕获租户作用域快照，防止异步执行链中 ThreadLocal 丢失
         final TenantScopeVO scopeSnapshot = currentScope(userId);
 
-        // Step 1: 检索相关记忆
-        String memoryContext = buildMemoryContext(userId, agentId, sessionId, message);
+        // ===== 四层记忆架构处理流程 =====
+        
+        // Step 1: 感知记忆层 - 预处理输入
+        String processedInput = sensoryMemoryService.processInput(message);
+        if (processedInput.isEmpty()) {
+            log.warn("输入被感知记忆层过滤: userId={}, sessionId={}", userId, sessionId);
+            return List.of("输入内容无效，请重新输入");
+        }
 
-        // Step 2: 增强消息（注入记忆上下文）
-        String enhancedMessage = enhanceMessageWithMemory(message, memoryContext);
+        // Step 2: 短期记忆层 - 添加用户消息到 Context Window
+        shortTermMemoryService.addMessage(MemoryMessage.user(processedInput), sessionId);
+
+        // Step 3: 长期记忆层 - 检索相关记忆（混合检索）
+        String memoryContext = buildMemoryContext(userId, agentId, sessionId, processedInput);
+
+        // Step 4: 增强消息（注入记忆上下文）
+        String enhancedMessage = enhanceMessageWithMemory(processedInput, memoryContext);
 
         // 开启 RAG 证据收集 — 收集器在 ThreadLocal 中，由调用方（Controller）在出口 drain 取走并清理
         RagSourceCollector.begin(scopeSnapshot);
@@ -226,9 +252,12 @@ public class ChatService implements IChatService {
                 holder.setAgentThought(thoughtParts.get(0));
             }
 
-            // Step 3: 异步存储对话记忆
+            // Step 5: 短期记忆层 - 添加助手响应到 Context Window
             String response = String.join("\n", outputs);
-            storeConversationMemory(userId, agentId, sessionId, message, response);
+            shortTermMemoryService.addMessage(MemoryMessage.assistant(response), sessionId);
+
+            // Step 6: 长期记忆层 - 异步存储对话记忆
+            storeConversationMemory(userId, agentId, sessionId, processedInput, response);
 
             return outputs;
         } catch (RuntimeException e) {

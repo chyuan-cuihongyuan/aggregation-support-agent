@@ -1,10 +1,12 @@
 package cn.chyuan.ai.domain.memory.service;
 
+import cn.chyuan.ai.domain.memory.model.entity.AgentMemoryEntity;
 import cn.chyuan.ai.domain.memory.model.valobj.ConsolidationReport;
 import cn.chyuan.ai.domain.memory.model.valobj.MemoryMatch;
 import cn.chyuan.ai.domain.memory.model.valobj.MemoryOptions;
 import cn.chyuan.ai.domain.memory.model.valobj.RecallOptions;
 
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -72,4 +74,23 @@ public interface AgentMemoryService {
      * @return 整合报告
      */
     ConsolidationReport consolidate(String tenantId, String userId);
+
+    /**
+     * 获取旧记忆
+     *
+     * @param userId  用户ID
+     * @param agentId AgentID
+     * @param cutoff  截止时间
+     * @return 旧记忆列表
+     */
+    List<AgentMemoryEntity> getOldMemories(String userId, String agentId, Instant cutoff);
+
+    /**
+     * 获取所有记忆
+     *
+     * @param userId  用户ID
+     * @param agentId AgentID
+     * @return 所有记忆列表
+     */
+    List<AgentMemoryEntity> getAllMemories(String userId, String agentId);
 }

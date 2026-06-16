@@ -77,6 +77,20 @@ public interface AgentMemoryMapper {
     AgentMemoryPO selectActiveByMemoryId(@Param("memoryId") String memoryId);
 
     @ResultMap("AgentMemoryResultMap")
+    @Select("""
+            <script>
+            SELECT """ + SELECT_COLUMNS + """
+            FROM agent_memory
+            WHERE memory_id IN
+            <foreach item="id" collection="memoryIds" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+            AND status = 1
+            </script>
+            """)
+    List<AgentMemoryPO> selectActiveByMemoryIds(@Param("memoryIds") List<String> memoryIds);
+
+    @ResultMap("AgentMemoryResultMap")
     @Select("SELECT " + SELECT_COLUMNS + " FROM agent_memory " +
             "WHERE tenant_id = #{tenantId} AND user_id = #{userId} AND status = 1 " +
             "ORDER BY created_at DESC")
@@ -166,4 +180,11 @@ public interface AgentMemoryMapper {
      */
     @Select("SELECT DISTINCT tenant_id, user_id FROM agent_memory WHERE status = 1")
     List<Map<String, Object>> selectDistinctTenantUserPairs();
+
+    @ResultMap("AgentMemoryResultMap")
+    @Select("SELECT " + SELECT_COLUMNS + " FROM agent_memory " +
+            "WHERE user_id = #{userId} AND agent_id = #{agentId} AND status = 1 " +
+            "ORDER BY created_at DESC")
+    List<AgentMemoryPO> selectActiveByUserIdAndAgentId(@Param("userId") String userId,
+                                                       @Param("agentId") String agentId);
 }

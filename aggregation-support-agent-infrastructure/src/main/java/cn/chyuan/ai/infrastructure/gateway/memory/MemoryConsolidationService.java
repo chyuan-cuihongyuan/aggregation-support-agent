@@ -3,6 +3,7 @@ package cn.chyuan.ai.infrastructure.gateway.memory;
 import cn.chyuan.ai.domain.memory.adapter.port.IMemoryConsolidationGateway;
 import cn.chyuan.ai.domain.memory.model.enums.ConsolidationAction;
 import cn.chyuan.ai.domain.memory.model.valobj.ConsolidationDecision;
+import cn.chyuan.ai.domain.memory.model.valobj.StructuredMemory;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
