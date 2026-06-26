@@ -79,7 +79,7 @@ jobs:
           MAVEN_OPTS: -Dfile.encoding=UTF-8
         run: |
           cd agent-rag-observability-server-deps
-          mvn -B install -pl agent-rag-observability-server-types,agent-rag-observability-server-client -am -DskipTests -Daether.checksums.forSignature=false -Daether.connector.connectTimeout=30s -Daether.connector.requestTimeout=120s
+          mvn -B install -s ~/.m2/settings.xml -pl agent-rag-observability-server-types,agent-rag-observability-server-client -am -DskipTests -Daether.checksums.forSignature=false -Daether.connector.connectTimeout=30s -Daether.connector.requestTimeout=120s
 
       - name: 编译验证
         env:
