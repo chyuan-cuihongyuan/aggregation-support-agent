@@ -290,6 +290,15 @@
     </dependencyManagement>
 
     <repositories>
+        <!-- Maven 中央仓库（主仓库，确保正式版依赖可下载） -->
+        <repository>
+            <id>central</id>
+            <name>Maven Central</name>
+            <url>https://repo.maven.apache.org/maven2</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
         <repository>
             <id>spring-milestones</id>
             <name>Spring Milestones</name>
