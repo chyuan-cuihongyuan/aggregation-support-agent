@@ -134,6 +134,20 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
     private static final float EPISODE_DEFAULT_IMPORTANCE = 0.6f;
 
     private void storeNewMemory(ExtractedFact fact, MemoryOptions options) {
+        // 基于 fact 内容计算哈希；DB 唯一键 uk_content_tenant_user 为
+        // (content_hash, tenant_id, user_id)，不含 scope，因此去重须跨 scope。
+        String contentHash = Hashing.sha256()
+            .hashString(fact.getContent(), StandardCharsets.UTF_8)
+            .toString();
+
+        // 去重预检查：传 null scope 以跨 scope 检查，与 DB 唯一键语义对齐
+        // (remember() 顶部的检查用的是原始内容哈希，无法覆盖 LLM 提取后的 fact 哈希)
+        if (memoryRepository.existsByContentHash(
+                contentHash, options.getTenantId(), options.getUserId(), null)) {
+            log.debug("记忆已存在(按 fact 哈希去重)，跳过: {}", contentHash.substring(0, 8));
+            return;
+        }
+
         // Step 5: 评估重要性
         // EPISODE 类型跳过 LLM 重要性评估，使用默认值，避免高频对话场景的额外 LLM 调用
         Float importance = (fact.getType() == MemoryType.EPISODE)
@@ -143,7 +157,7 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
         // Step 6: 生成 Embedding
         String memoryId = UUID.randomUUID().toString();
         float[] embedding = embeddingService.embed(fact.getContent());
-        
+
         // Step 7: 构建实体
         AgentMemoryEntity entity = AgentMemoryEntity.builder()
             .memoryId(memoryId)
@@ -152,9 +166,7 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
             .agentId(options.getAgentId())
             .sessionId(options.getSessionId())
             .content(fact.getContent())
-            .contentHash(Hashing.sha256()
-                .hashString(fact.getContent(), StandardCharsets.UTF_8)
-                .toString())
+            .contentHash(contentHash)
             .memoryType(fact.getType() != null ? fact.getType() : MemoryType.FACT)
             .scope(options.getScope() != null ? options.getScope() : "/")
             .importance(importance)
@@ -209,8 +221,13 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
         Map<String, float[]> fallbackEmbeddings = batchEmbedMissingScores(candidates);
 
         // 复合评分（优先使用 Milvus 返回的 searchScore，避免重新嵌入）
+        // 双重过滤：
+        //   ① 语义硬门槛 minSemanticScore —— 拦截仅词面重叠的记忆被时效/重要性误抬（如"内存使用率高"误匹配"内存条进货价"）；
+        //   ② 复合分数门槛 minScore —— 综合语义/时效/重要性的最终准入。
+        // 两者为"与"关系：必须语义足够相关且综合分数达标才返回。
         List<MemoryMatch> results = candidates.stream()
             .map(entry -> calculateMatch(entry, queryEmbedding, options, fallbackEmbeddings))
+            .filter(match -> match.getSemanticScore() >= options.getMinSemanticScore())
             .filter(match -> match.getScore() >= options.getMinScore())
             .sorted(Comparator.comparingDouble(MemoryMatch::getScore).reversed())
             .limit(options.getLimit())
@@ -377,6 +394,10 @@ public class DefaultAgentMemoryService implements AgentMemoryService {
         }
         if (options.getMinScore() == null) {
             options.setMinScore(0.3);
+        }
+        if (options.getMinSemanticScore() == null) {
+            // 语义硬门槛默认值：低于 0.55 视为仅词面重叠、语义不相关，直接丢弃
+            options.setMinSemanticScore(0.55);
         }
         if (options.getSemanticWeight() == null) {
             options.setSemanticWeight(0.5);

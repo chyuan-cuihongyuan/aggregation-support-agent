@@ -99,14 +99,17 @@ public class AiAgentConfigTableVO {
                     private String name;
                     private String baseUri;
                     private String sseEndpoint;
-                    private Integer requestTimeout = 3000;
+                    // requestTimeout 同时作用于 initialize() 和 callTool()，
+                    // 工具调用(如搜索/检索)通常需要 10-30 秒，3 秒会导致 HTTP 502。
+                    // 建连超时由 SSEToolMcpCreateService 单独控制（capped at 3s）。
+                    private Integer requestTimeout = 60000;
 
                 }
 
                 @Data
                 public static class StdioServerParameters {
                     private String name;
-                    private Integer requestTimeout = 3000;
+                    private Integer requestTimeout = 60000;
                     private ServerParameters serverParameters;
 
                     @Data

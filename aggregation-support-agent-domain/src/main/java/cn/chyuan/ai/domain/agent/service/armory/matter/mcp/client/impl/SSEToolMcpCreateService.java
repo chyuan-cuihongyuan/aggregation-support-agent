@@ -51,7 +51,9 @@ public class SSEToolMcpCreateService implements TooMcpCreateService {
         }
 
         sseEndpoint = StringUtils.isBlank(sseEndpoint) ? "/sse" : sseEndpoint;
-        long requestTimeoutMs = sseConfig.getRequestTimeout() == null ? 3000L : sseConfig.getRequestTimeout();
+        // requestTimeout 覆盖 initialize() + callTool()，工具调用需较长超时；
+        // connectTimeout 单独 capped 在 3s，不受此值影响
+        long requestTimeoutMs = sseConfig.getRequestTimeout() == null ? 60000L : sseConfig.getRequestTimeout();
         long connectTimeoutMs = Math.min(requestTimeoutMs, DEFAULT_CONNECT_TIMEOUT_MS);
 
         Exception lastException = null;

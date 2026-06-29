@@ -28,6 +28,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -130,6 +131,8 @@ public class AgentServiceController implements IAgentService {
         long start = System.currentTimeMillis();
         String userId = null;
         String sessionId = null;
+        // 请求入口生成 traceId，作为本次对话所有上报的兜底标识（未触发 RAG 时检索级 traceId 为空）
+        final String requestTraceId = generateRequestTraceId();
         try {
             userId = CurrentUserSupport.requireUserIdString(request);
             log.info("智能体对话 agentId:{} userId:{}", requestDTO.getAgentId(), userId);
@@ -154,8 +157,10 @@ public class AgentServiceController implements IAgentService {
             responseDTO.setContent(String.join("\n", messages));
             // traceId 和 sources 仅用于内部可观测性上报，不再返回给前端
 
+            // 上报 traceId：检索级为空（未触发 RAG）时回退到请求入口生成的 traceId
+            String reportTraceId = resolveReportTraceId(traceId, requestTraceId);
             int costMs = (int) (System.currentTimeMillis() - start);
-            reportObservability(holder, traceId, sessionId, userId, requestDTO.getAgentId(),
+            reportObservability(holder, reportTraceId, sessionId, userId, requestDTO.getAgentId(),
                     requestDTO.getMessage(), responseDTO.getContent(), "SUCCESS", costMs, null);
 
             return Response.<ChatResponseDTO>builder()
@@ -165,7 +170,7 @@ public class AgentServiceController implements IAgentService {
                     .build();
         } catch (AppException e) {
             log.error("智能体对话异常", e);
-            reportChatFailure(sessionId, userId, requestDTO.getAgentId(), requestDTO.getMessage(),
+            reportChatFailure(requestTraceId, sessionId, userId, requestDTO.getAgentId(), requestDTO.getMessage(),
                     (int) (System.currentTimeMillis() - start), e.getInfo());
             return Response.<ChatResponseDTO>builder()
                     .code(e.getCode())
@@ -173,7 +178,7 @@ public class AgentServiceController implements IAgentService {
                     .build();
         } catch (Exception e) {
             log.error("智能体对话失败 agentId:{} userId:{}", requestDTO.getAgentId(), requestDTO.getUserId(), e);
-            reportChatFailure(sessionId, userId, requestDTO.getAgentId(), requestDTO.getMessage(),
+            reportChatFailure(requestTraceId, sessionId, userId, requestDTO.getAgentId(), requestDTO.getMessage(),
                     (int) (System.currentTimeMillis() - start), e.getMessage());
             return Response.<ChatResponseDTO>builder()
                     .code(ResponseCode.UN_ERROR.getCode())
@@ -209,6 +214,7 @@ public class AgentServiceController implements IAgentService {
             }
 
             // 从 branchType 推导 intentType
+            // 注意：branchType 依据检索级 traceId（holder 内部）判断，而非上报 traceId（已兜底非空）
             String branchType = (holder != null && !holder.getTraceId().isEmpty()) ? "RAG" : "DIRECT_ANSWER";
             // 如果有工具调用但无 RAG 检索，则修正为 TOOL_CALL
             if ("DIRECT_ANSWER".equals(branchType) && !toolCalls.isEmpty()) {
@@ -225,12 +231,12 @@ public class AgentServiceController implements IAgentService {
             }
 
             // 上报问答结果（含 Token 消耗）
-            observabilityHelper.reportChatResult(traceId, sessionId, userId, question, answer,
+            observabilityHelper.reportChatResult(traceId, sessionId, userId, agentId, question, answer,
                     promptTokens, completionTokens, status, costMs, modelVersion);
 
-            // 上报 RAG 检索（含 retrievalStages）
-            if (holder != null && traceId != null && !traceId.isEmpty()) {
-                observabilityHelper.reportRagRetrieval(traceId, sessionId, userId,
+            // 上报 RAG 检索（含 retrievalStages）：仅检索级 traceId 非空（即触发了 RAG）时上报
+            if (holder != null && !holder.getTraceId().isEmpty()) {
+                observabilityHelper.reportRagRetrieval(traceId, sessionId, userId, agentId,
                         holder.getRetrievalQuery(), holder.getRewriteText(), holder.getTopK(),
                         holder.snapshotSources(), costMs,
                         holder.getRetrievalStages(), holder.getRagStrategyVersion());
@@ -250,15 +256,35 @@ public class AgentServiceController implements IAgentService {
     }
 
     /** 对话失败路径上报：无检索证据，仅上报问答结果(FAIL) + 决策 */
-    private void reportChatFailure(String sessionId, String userId, String agentId,
+    private void reportChatFailure(String traceId, String sessionId, String userId, String agentId,
                                    String question, int costMs, String errorMessage) {
         try {
-            observabilityHelper.reportChatResult(null, sessionId, userId, question, "", "FAIL", costMs);
-            observabilityHelper.reportAgentDecision(null, sessionId, userId, null, agentId,
+            observabilityHelper.reportChatResult(traceId, sessionId, userId, agentId, question, "", "FAIL", costMs);
+            observabilityHelper.reportAgentDecision(traceId, sessionId, userId, null, agentId,
                     question, "DIRECT_ANSWER", "FAIL", costMs, errorMessage);
         } catch (Exception e) {
             log.debug("observability fail report failed: {}", e.getMessage());
         }
+    }
+
+    /**
+     * 生成请求级 traceId：本次对话的唯一标识，用于串联问答/检索/决策/工具/记忆等所有上报。
+     * 与 {@link RagSourceCollector#getTraceId()}（检索级，仅触发 RAG 时才写入）不同，
+     * 本方法保证无论走哪个分支（直接回答 / 工具调用 / RAG 检索）都有 traceId。
+     */
+    private static String generateRequestTraceId() {
+        return UUID.randomUUID().toString().replace("-", "");
+    }
+
+    /**
+     * 解析上报用 traceId：优先用检索级 traceId（命中 RAG 时已由 RagService 写入），
+     * 为空（未触发检索）时回退到请求入口生成的 traceId，确保每条上报都有非空 traceId。
+     */
+    private static String resolveReportTraceId(String retrievalTraceId, String requestTraceId) {
+        if (retrievalTraceId != null && !retrievalTraceId.isEmpty()) {
+            return retrievalTraceId;
+        }
+        return requestTraceId == null ? "" : requestTraceId;
     }
 
     /**
@@ -333,6 +359,8 @@ public class AgentServiceController implements IAgentService {
         SseEmitter emitter = new SseEmitter(3 * 60 * 1000L);
         RagSourceCollector.Holder requestHolder = null;
         long start = System.currentTimeMillis();
+        // 请求入口生成 traceId，作为本次流式对话所有上报的兜底标识（未触发 RAG 时检索级 traceId 为空）
+        final String requestTraceId = generateRequestTraceId();
         try {
             String userId = CurrentUserSupport.requireUserIdString(request);
             String agentId = requestDTO.getAgentId();
@@ -444,7 +472,9 @@ public class AgentServiceController implements IAgentService {
                             },
                             err -> {
                                 try {
-                                    String traceId = holderRef == null ? "" : holderRef.getTraceId();
+                                    String retrievalTraceId = holderRef == null ? "" : holderRef.getTraceId();
+                                    // 上报 traceId：检索级为空（未触发 RAG）时回退到请求入口生成的 traceId
+                                    String traceId = resolveReportTraceId(retrievalTraceId, requestTraceId);
                                     List<RagSourceVO> sources = holderRef == null ? null : holderRef.snapshotSources();
                                     String rewriteText = holderRef == null ? null : holderRef.getRewriteText();
                                     Integer topK = holderRef == null ? null : holderRef.getTopK();
@@ -458,14 +488,16 @@ public class AgentServiceController implements IAgentService {
                                     String modelVersion = holderRef != null ? holderRef.getModelVersion() : null;
 
                                     observabilityHelper.reportChatResult(traceId, finalSessionIdForReport,
-                                            finalUserIdForReport, message, "",
+                                            finalUserIdForReport, finalAgentIdForReport, message, "",
                                             promptTokens, completionTokens, "FAIL", costMs, modelVersion);
-                                    if (traceId != null && !traceId.isEmpty()) {
+                                    // RAG 检索：仅检索级 traceId 非空（即触发了 RAG）时上报
+                                    if (!retrievalTraceId.isEmpty()) {
                                         observabilityHelper.reportRagRetrieval(traceId, finalSessionIdForReport,
-                                                finalUserIdForReport, message, rewriteText, topK, sources, costMs,
+                                                finalUserIdForReport, finalAgentIdForReport, message, rewriteText, topK, sources, costMs,
                                                 retrievalStages, ragStrategyVersion);
                                     }
-                                    String failBranchType = (traceId != null && !traceId.isEmpty()) ? "RAG" : "DIRECT_ANSWER";
+                                    // branchType 依据检索级 traceId 判断，而非上报 traceId（已兜底非空）
+                                    String failBranchType = !retrievalTraceId.isEmpty() ? "RAG" : "DIRECT_ANSWER";
                                     observabilityHelper.reportAgentDecision(traceId, finalSessionIdForReport,
                                             finalUserIdForReport, null, finalAgentIdForReport, message,
                                             deriveIntentType(failBranchType), null, null,
@@ -475,7 +507,7 @@ public class AgentServiceController implements IAgentService {
                                     List<Map<String, Object>> failToolCalls = holderRef != null ? holderRef.getToolCalls() : Collections.emptyList();
                                     reportToolCallDetails(traceId, failToolCalls);
                                     reportMemoryRecallDetails(traceId, holderRef);
-                                } catch (Exception reportErr) {
+                                } catch (Throwable reportErr) {
                                     log.debug("流式对话失败上报异常: {}", reportErr.getMessage());
                                 }
                                 RagSourceCollector.drainHolder(holderRef);
@@ -484,7 +516,9 @@ public class AgentServiceController implements IAgentService {
                             () -> {
                                 try {
                                     // 内部收集 traceId 和 sources 仅用于可观测性上报，不再发送给前端
-                                    String traceId = holderRef == null ? "" : holderRef.getTraceId();
+                                    String retrievalTraceId = holderRef == null ? "" : holderRef.getTraceId();
+                                    // 上报 traceId：检索级为空（未触发 RAG）时回退到请求入口生成的 traceId
+                                    String traceId = resolveReportTraceId(retrievalTraceId, requestTraceId);
                                     List<RagSourceVO> sources = holderRef == null ? null : holderRef.snapshotSources();
                                     String rewriteText = holderRef == null ? null : holderRef.getRewriteText();
                                     Integer topK = holderRef == null ? null : holderRef.getTopK();
@@ -522,7 +556,8 @@ public class AgentServiceController implements IAgentService {
                                     }
 
                                     // 推导 intentType 和 branchType
-                                    String branchType = (traceId != null && !traceId.isEmpty()) ? "RAG" : "DIRECT_ANSWER";
+                                    // 注意：branchType 依据检索级 traceId 判断，而非上报 traceId（已兜底非空）
+                                    String branchType = !retrievalTraceId.isEmpty() ? "RAG" : "DIRECT_ANSWER";
                                     if ("DIRECT_ANSWER".equals(branchType) && !toolCalls.isEmpty()) {
                                         branchType = "TOOL_CALL";
                                     }
@@ -541,11 +576,12 @@ public class AgentServiceController implements IAgentService {
                                     // 上报问答结果 + RAG 检索 + Agent 决策
                                     try {
                                         observabilityHelper.reportChatResult(traceId, finalSessionIdForReport,
-                                                finalUserIdForReport, message, fullAnswer,
+                                                finalUserIdForReport, finalAgentIdForReport, message, fullAnswer,
                                                 promptTokens, completionTokens, "SUCCESS", costMs, modelVersion);
-                                        if (traceId != null && !traceId.isEmpty()) {
+                                        // RAG 检索：仅检索级 traceId 非空（即触发了 RAG）时上报
+                                        if (!retrievalTraceId.isEmpty()) {
                                             observabilityHelper.reportRagRetrieval(traceId, finalSessionIdForReport,
-                                                    finalUserIdForReport, message, rewriteText, topK, sources, costMs,
+                                                    finalUserIdForReport, finalAgentIdForReport, message, rewriteText, topK, sources, costMs,
                                                     retrievalStages, ragStrategyVersion);
                                         }
                                         observabilityHelper.reportAgentDecision(traceId, finalSessionIdForReport,
@@ -557,7 +593,7 @@ public class AgentServiceController implements IAgentService {
                                         // 上报工具调用详情 + 记忆检索结果
                                         reportToolCallDetails(traceId, toolCalls);
                                         reportMemoryRecallDetails(traceId, holderRef);
-                                    } catch (Exception reportErr) {
+                                    } catch (Throwable reportErr) {
                                         log.debug("流式对话成功上报异常: {}", reportErr.getMessage());
                                     }
 

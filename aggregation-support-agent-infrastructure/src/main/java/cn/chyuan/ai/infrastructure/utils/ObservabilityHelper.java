@@ -52,31 +52,31 @@ public class ObservabilityHelper {
                     .agentStatus(status).costTimeMs(costTimeMs)
                     .modelVersion(modelVersion).errorMessage(errorMessage).build();
             observabilityClient.reportAgentDecision(report);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.debug("observability report failed: {}", e.getMessage());
         }
     }
 
-    public void reportChatResult(String traceId, String sessionId, String userId,
+    public void reportChatResult(String traceId, String sessionId, String userId, String agentId,
                                   String question, String answer, String status,
                                   Integer costTimeMs) {
-        reportChatResult(traceId, sessionId, userId, question, answer, 0, 0, status, costTimeMs, null);
+        reportChatResult(traceId, sessionId, userId, agentId, question, answer, 0, 0, status, costTimeMs, null);
     }
 
-    public void reportChatResult(String traceId, String sessionId, String userId,
+    public void reportChatResult(String traceId, String sessionId, String userId, String agentId,
                                   String question, String answer,
                                   Integer promptTokens, Integer completionTokens,
                                   String status, Integer costTimeMs, String modelVersion) {
         try {
             ChatResultReport report = ChatResultReport.builder()
                     .traceId(traceId).sourceService(SOURCE_SERVICE)
-                    .ownerUserId(userId).sessionId(sessionId)
+                    .ownerUserId(userId).sessionId(sessionId).agentId(agentId)
                     .question(question).answer(answer)
                     .promptTokens(promptTokens).completionTokens(completionTokens)
                     .finalStatus(status).totalCostTimeMs(costTimeMs)
                     .modelVersion(modelVersion).build();
             observabilityClient.reportChatResult(report);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.debug("observability report failed: {}", e.getMessage());
         }
     }
@@ -85,13 +85,13 @@ public class ObservabilityHelper {
      * 上报 RAG 检索日志 — 把本次请求累积的检索证据序列化为 sourceDocs / rerankScores。
      * traceId 为空说明本次对话未触发检索，直接跳过。
      */
-    public void reportRagRetrieval(String traceId, String sessionId, String userId,
+    public void reportRagRetrieval(String traceId, String sessionId, String userId, String agentId,
                                    String queryText, String rewriteText, Integer topK,
                                    List<RagSourceVO> sources, Integer costTimeMs) {
-        reportRagRetrieval(traceId, sessionId, userId, queryText, rewriteText, topK, sources, costTimeMs, null, null);
+        reportRagRetrieval(traceId, sessionId, userId, agentId, queryText, rewriteText, topK, sources, costTimeMs, null, null);
     }
 
-    public void reportRagRetrieval(String traceId, String sessionId, String userId,
+    public void reportRagRetrieval(String traceId, String sessionId, String userId, String agentId,
                                    String queryText, String rewriteText, Integer topK,
                                    List<RagSourceVO> sources, Integer costTimeMs,
                                    String retrievalStages, String ragStrategyVersion) {
@@ -112,7 +112,7 @@ public class ObservabilityHelper {
                             .collect(Collectors.toList()));
             RagRetrievalReport report = RagRetrievalReport.builder()
                     .traceId(traceId).sourceService(SOURCE_SERVICE)
-                    .ownerUserId(userId).sessionId(sessionId)
+                    .ownerUserId(userId).sessionId(sessionId).agentId(agentId)
                     .queryText(queryText).rewriteText(rewriteText)
                     .retrievalTopk(topK).retrievalCount(count)
                     .sourceDocs(sourceDocs).rerankScores(rerankScores)
@@ -121,7 +121,7 @@ public class ObservabilityHelper {
                     .retrievalStages(retrievalStages)
                     .ragStrategyVersion(ragStrategyVersion).build();
             observabilityClient.reportRagRetrieval(report);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.debug("observability rag retrieval report failed: {}", e.getMessage());
         }
     }
@@ -140,7 +140,7 @@ public class ObservabilityHelper {
                     .status(status).costTimeMs(costTimeMs).errorMessage(errorMessage)
                     .callOrder(callOrder).build();
             observabilityClient.reportToolCall(report);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.debug("observability tool call report failed: {}", e.getMessage());
         }
     }
@@ -159,7 +159,7 @@ public class ObservabilityHelper {
                     .sessionMemoryScores(sessionMemoryScores).agentMemoryScores(agentMemoryScores)
                     .injectContent(injectContent).costTimeMs(costTimeMs).build();
             observabilityClient.reportMemoryRecall(report);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.debug("observability memory recall report failed: {}", e.getMessage());
         }
     }

@@ -53,7 +53,7 @@ import java.util.stream.Collectors;
  * 四层优化：
  * <ul>
  *   <li>索引层：Parent-Child分块，小块检索、大块使用</li>
- *   <li>查询层：Query改写、Multi-Query扩展</li>
+ *   <li>查询层：Query改写</li>
  *   <li>召回层：向量检索 + BM25多路召回 + RRF融合</li>
  *   <li>重排序层：Cross-encoder Rerank精排</li>
  * </ul>
@@ -79,14 +79,6 @@ public class EnhancedRagService implements IRagService {
     /** 是否启用Query优化 */
     @Value("${rag.query.rewrite.enabled}")
     private boolean queryRewriteEnabled;
-
-    /** 是否启用Multi-Query */
-    @Value("${rag.query.multi-query.enabled}")
-    private boolean multiQueryEnabled;
-
-    /** Multi-Query扩展数量 */
-    @Value("${rag.query.multi-query.count}")
-    private int multiQueryCount;
 
     /** 是否启用BM25多路召回 */
     @Value("${rag.retrieval.bm25.enabled}")
@@ -340,7 +332,7 @@ public class EnhancedRagService implements IRagService {
     /**
      * 统一的检索内部流程 — 供 search 与 searchWithTrace 共用
      * <p>
-     * 流程：Query 改写 → 多路召回（向量 + BM25 + 可选 Multi-Query）→ Rerank → Lost-in-the-Middle 重排
+     * 流程：Query 改写 → 多路召回（向量 + BM25）→ Rerank → Lost-in-the-Middle 重排
      *
      * @param query 用户查询文本
      * @param topK  返回结果数量
@@ -624,16 +616,6 @@ public class EnhancedRagService implements IRagService {
         allFutures.add(graphFuture);
         futureLabels.add("知识图谱检索");
 
-        // 第四路：Multi-Query 扩展检索（每个扩展查询作为独立路径参与融合，避免双重融合）
-        List<CompletableFuture<List<VectorSearchResultVO>>> multiQueryFutures = new ArrayList<>();
-        if (multiQueryEnabled) {
-            multiQueryFutures = expandAndLaunchMultiQuery(query, vectorTopK, scope);
-            for (int i = 0; i < multiQueryFutures.size(); i++) {
-                allFutures.add(multiQueryFutures.get(i));
-                futureLabels.add("Multi-Query#" + (i + 1));
-            }
-        }
-
         // 统一超时等待所有并行任务
         try {
             CompletableFuture.allOf(allFutures.toArray(new CompletableFuture[0]))
@@ -666,28 +648,6 @@ public class EnhancedRagService implements IRagService {
 
         // RRF融合 — 使用 fusionTopK 而非 topK，确保融合后候选数 > rerankTopK，让 Rerank 有筛选空间
         return resultFusionService.rrfFusion(allResults, fusionTopK);
-    }
-
-    /**
-     * 扩展查询并启动并行检索 — 每个扩展查询返回独立的检索结果列表，
-     * 直接作为独立路径参与外层 RRF 融合，避免内层再融合一次导致分数被压低
-     */
-    private List<CompletableFuture<List<VectorSearchResultVO>>> expandAndLaunchMultiQuery(
-            String originalQuery, int topK, TenantScopeVO scope) {
-        try {
-            List<String> expandedQueries = queryOptimizationService.expandQuery(originalQuery, multiQueryCount);
-            if (expandedQueries == null || expandedQueries.isEmpty()) {
-                return Collections.emptyList();
-            }
-
-            int perQueryTopK = topK / expandedQueries.size() + 1;
-            return expandedQueries.stream()
-                    .map(q -> supplyRetrievalAsync(() -> vectorRetrieval(q, perQueryTopK, scope)))
-                    .collect(Collectors.toList());
-        } catch (Exception e) {
-            log.error("Multi-Query扩展失败: {}", e.getMessage());
-            return Collections.emptyList();
-        }
     }
 
     /**

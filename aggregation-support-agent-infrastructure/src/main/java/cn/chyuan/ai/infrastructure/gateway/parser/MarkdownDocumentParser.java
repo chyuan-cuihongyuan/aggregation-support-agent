@@ -163,12 +163,12 @@ public class MarkdownDocumentParser implements IDocumentParser {
 
         // 移除加粗标记
         cleaned = BOLD_PATTERN.matcher(cleaned).replaceAll(m -> {
-            return m.group(1) != null ? m.group(1) : m.group(2);
+            return Matcher.quoteReplacement(m.group(1) != null ? m.group(1) : m.group(2));
         });
 
         // 移除斜体标记
         cleaned = ITALIC_PATTERN.matcher(cleaned).replaceAll(m -> {
-            return m.group(1) != null ? m.group(1) : m.group(2);
+            return Matcher.quoteReplacement(m.group(1) != null ? m.group(1) : m.group(2));
         });
 
         // 移除行内代码

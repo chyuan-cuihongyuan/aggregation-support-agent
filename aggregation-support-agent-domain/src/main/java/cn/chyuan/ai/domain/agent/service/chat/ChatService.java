@@ -419,7 +419,8 @@ public class ChatService implements IChatService {
                     .agentId(agentId)
                     .scope(conversationScope(sessionId))
                     .limit(5)
-                    .minScore(0.3)
+                    .minScore(0.45)
+                    .minSemanticScore(0.6)
                     .build()
             );
 
@@ -436,7 +437,8 @@ public class ChatService implements IChatService {
                         .agentId(agentId)
                         .scope("/agent/" + agentId)
                         .limit(5)
-                        .minScore(0.3)
+                        .minScore(0.45)
+                        .minSemanticScore(0.6)
                         .build()
                 );
                 // 合并去重

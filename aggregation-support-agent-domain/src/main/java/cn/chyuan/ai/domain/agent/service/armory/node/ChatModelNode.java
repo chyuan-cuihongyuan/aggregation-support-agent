@@ -59,6 +59,10 @@ public class ChatModelNode extends AbstractArmorySupport {
                 try {
                     TooMcpCreateService tooMcpCreateService = defaultMcpClientFactory.getTooMcpCreateService(toolMcp);
                     ToolCallback[] toolCallbacks = tooMcpCreateService.buildToolCallback(toolMcp);
+                    if (toolCallbacks == null || toolCallbacks.length == 0) {
+                        log.error("MCP 工具初始化返回空，该 MCP 服务无任何工具可用（可能是 SSE 初始化失败耗尽重试）。" +
+                                "agent: {}, toolMcp: {}", aiAgentConfigTableVO.getAppName(), toolMcpName(toolMcp));
+                    }
                     for (ToolCallback toolCallback : ScopedToolCallback.wrapAll(toolCallbacks)) {
                         String toolName = toolCallback.getToolDefinition().name();
                         if (registeredToolNames.add(toolName)) {
@@ -68,8 +72,8 @@ public class ChatModelNode extends AbstractArmorySupport {
                         }
                     }
                 } catch (Exception e) {
-                    log.error("MCP 工具初始化失败，跳过该工具。agent: {}, 错误: {}",
-                            aiAgentConfigTableVO.getAppName(), e.getMessage());
+                    log.error("MCP 工具初始化失败，跳过该工具。agent: {}, toolMcp: {}, 错误: {}",
+                            aiAgentConfigTableVO.getAppName(), toolMcpName(toolMcp), e.getMessage());
                 }
             }
         }
@@ -108,7 +112,39 @@ public class ChatModelNode extends AbstractArmorySupport {
         dynamicContext.setChatModel(chatModel);
         dynamicContext.setHasTools(!toolCallbackList.isEmpty());
 
+        // 打印最终注册的工具名清单，便于排查 "No ToolCallback found" 类问题
+        if (toolCallbackList.isEmpty()) {
+            log.warn("Agent [{}] 未注册任何工具（toolCallbacks 为空），将作为纯对话智能体运行。",
+                    aiAgentConfigTableVO.getAppName());
+        } else {
+            String toolNames = toolCallbackList.stream()
+                    .map(cb -> cb.getToolDefinition().name())
+                    .collect(java.util.stream.Collectors.joining(", "));
+            log.info("Agent [{}] 注册了 {} 个工具: [{}]",
+                    aiAgentConfigTableVO.getAppName(), toolCallbackList.size(), toolNames);
+        }
+
         return router(requestParameter, dynamicContext);
+    }
+
+    /**
+     * 提取 toolMcp 的可读名称（local 用 name，sse/stdio 用 name），用于日志输出。
+     */
+    private String toolMcpName(AiAgentConfigTableVO.Module.ChatModel.ToolMcp toolMcp) {
+        try {
+            if (toolMcp.getLocal() != null && toolMcp.getLocal().getName() != null) {
+                return "local:" + toolMcp.getLocal().getName();
+            }
+            if (toolMcp.getSse() != null && toolMcp.getSse().getName() != null) {
+                return "sse:" + toolMcp.getSse().getName();
+            }
+            if (toolMcp.getStdio() != null && toolMcp.getStdio().getName() != null) {
+                return "stdio:" + toolMcp.getStdio().getName();
+            }
+        } catch (Exception ignored) {
+            // 名称提取失败不影响主流程
+        }
+        return "unknown";
     }
 
     @Override

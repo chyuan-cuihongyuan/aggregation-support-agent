@@ -5,7 +5,6 @@ import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import cn.chyuan.ai.domain.rag.adapter.repository.IVectorStoreRepository;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
 import cn.chyuan.ai.domain.rag.service.fusion.IResultFusionService;
-import cn.chyuan.ai.domain.rag.service.query.IQueryOptimizationService;
 import cn.chyuan.ai.domain.rag.service.retrieval.IBM25SearchService;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -60,30 +59,6 @@ class EnhancedRagServiceRetrievalTest {
                 service, "multiPathRetrieval", "query", 5, TenantScopeVO.singleUser("u1"));
 
         assertThat(results).extracting(VectorSearchResultVO::getContent).containsExactly("vector");
-    }
-
-    @Test
-    void multiQueryChildFailureDoesNotFailWholeRetrieval() {
-        EnhancedRagService service = serviceWithFusion();
-        IEmbeddingService embeddingService = mock(IEmbeddingService.class);
-        when(embeddingService.embed("query")).thenReturn(new float[]{1.0f});
-        when(embeddingService.embed("bad")).thenThrow(new RuntimeException("bad query"));
-        when(embeddingService.embed("good")).thenReturn(new float[]{2.0f});
-        IVectorStoreRepository vectorStore = mock(IVectorStoreRepository.class);
-        when(vectorStore.search(any(float[].class), anyInt(), any())).thenReturn(List.of(result("vector")));
-        IQueryOptimizationService queryOptimization = mock(IQueryOptimizationService.class);
-        when(queryOptimization.expandQuery("query", 2)).thenReturn(List.of("bad", "good"));
-
-        ReflectionTestUtils.setField(service, "embeddingService", embeddingService);
-        ReflectionTestUtils.setField(service, "vectorStoreRepository", vectorStore);
-        ReflectionTestUtils.setField(service, "queryOptimizationService", queryOptimization);
-        ReflectionTestUtils.setField(service, "multiQueryEnabled", true);
-        ReflectionTestUtils.setField(service, "multiQueryCount", 2);
-
-        List<VectorSearchResultVO> results = ReflectionTestUtils.invokeMethod(
-                service, "multiPathRetrieval", "query", 5, TenantScopeVO.singleUser("u1"));
-
-        assertThat(results).isNotEmpty();
     }
 
     private EnhancedRagService serviceWithFusion() {

@@ -32,6 +32,7 @@ import io.milvus.response.QueryResultsWrapper;
 import io.milvus.response.SearchResultsWrapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Repository;
 
 import jakarta.annotation.PostConstruct;
@@ -256,7 +257,13 @@ public class AgentMemoryMilvusRepository implements IAgentMemoryRepository {
     public void save(AgentMemoryEntity entity) {
         // 保存到 MySQL
         AgentMemoryPO po = convertToPO(entity);
-        agentMemoryMapper.insert(po);
+        try {
+            agentMemoryMapper.insert(po);
+        } catch (DuplicateKeyException e) {
+            // 并发或预检查窗口外的重复写入：视为幂等成功
+            // (唯一键 uk_content_tenant_user: content_hash + tenant_id + user_id)
+            log.debug("记忆已存在(唯一键冲突)，跳过: hash={}", entity.getContentHash());
+        }
     }
     
     @Override

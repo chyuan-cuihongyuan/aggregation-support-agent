@@ -20,15 +20,6 @@ public interface IQueryOptimizationService {
     String rewriteQuery(String originalQuery, List<String> chatHistory);
 
     /**
-     * Multi-Query扩展 — 将一个问题扩展为多个不同角度的问法
-     *
-     * @param originalQuery 原始查询
-     * @param count         扩展数量
-     * @return 扩展后的查询列表（包含原始查询）
-     */
-    List<String> expandQuery(String originalQuery, int count);
-
-    /**
      * HyDE（假设文档嵌入）— 生成假设答案用于检索
      *
      * @param query 用户查询

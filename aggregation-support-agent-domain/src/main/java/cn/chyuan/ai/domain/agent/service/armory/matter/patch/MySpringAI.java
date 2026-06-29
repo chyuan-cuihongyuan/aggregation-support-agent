@@ -14,23 +14,30 @@ import com.google.adk.models.springai.observability.SpringAIObservabilityHandler
 import com.google.adk.models.springai.properties.SpringAIProperties;
 import io.reactivex.rxjava3.core.BackpressureStrategy;
 import io.reactivex.rxjava3.core.Flowable;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.StreamingChatModel;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
+import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.tool.ToolCallback;
 import reactor.core.publisher.Flux;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * Spring AI 补丁
  * @author chyuan @chyuan
  * 2026/1/9 08:20
  */
+@Slf4j
 public class MySpringAI extends BaseLlm {
 
     private final ChatModel chatModel;
@@ -205,6 +212,7 @@ public class MySpringAI extends BaseLlm {
             return Flowable.just(llmResponse);
         } catch (Exception e) {
             observabilityHandler.recordError(context, e);
+            logNoToolCallbackDiagnostic(e);
             SpringAIErrorMapper.MappedError mappedError = SpringAIErrorMapper.mapError(e);
 
             return Flowable.error(new RuntimeException(mappedError.getNormalizedMessage(), e));
@@ -223,21 +231,29 @@ public class MySpringAI extends BaseLlm {
                         Prompt prompt = withScopedToolContext(messageConverter.toLlmPrompt(llmRequest), tenantScope, holder);
                         observabilityHandler.logRequest(prompt.toString(), model());
 
-                        if (this.chatModel != null && hasToolCallbacks(prompt)) {
+                        if (this.chatModel != null && hasDefaultToolCallbacks()) {
                             ChatResponse chatResponse = chatModel.call(prompt);
                             LlmResponse llmResponse = messageConverter.toLlmResponse(chatResponse);
                             observabilityHandler.logResponse(extractTextFromResponse(llmResponse), model());
-                            observabilityHandler.recordSuccess(
-                                    context,
-                                    extractTokenCount(chatResponse),
-                                    extractInputTokenCount(chatResponse),
-                                    extractOutputTokenCount(chatResponse));
+                            int totalTokens = extractTokenCount(chatResponse);
+                            int inputTokens = extractInputTokenCount(chatResponse);
+                            int outputTokens = extractOutputTokenCount(chatResponse);
+                            observabilityHandler.recordSuccess(context, totalTokens, inputTokens, outputTokens);
+                            // 写入 Holder，供可观测性上报（与非流式 generateContent 路径保持一致）
+                            if (holder != null) {
+                                holder.setPromptTokens(inputTokens);
+                                holder.setCompletionTokens(outputTokens);
+                                holder.setModelVersion(model());
+                            }
                             emitter.onNext(llmResponse);
                             emitter.onComplete();
                             return;
                         }
 
                         Flux<ChatResponse> responseFlux = withThreadLocalScope(prompt, tenantScope, holder);
+
+                        // 累计流式响应的 token 数（多数 provider 仅在最后一个 chunk 返回 usage，取最后非零值）
+                        final int[] tokenAccumulator = new int[]{0, 0, 0};
 
                         responseFlux
                                 .doOnError(
@@ -251,6 +267,13 @@ public class MySpringAI extends BaseLlm {
                                 .subscribe(
                                         chatResponse -> {
                                             try {
+                                                // 累计 token（部分 provider 在中间 chunk 也返回 usage）
+                                                int t = extractTokenCount(chatResponse);
+                                                int i = extractInputTokenCount(chatResponse);
+                                                int o = extractOutputTokenCount(chatResponse);
+                                                if (t > 0) tokenAccumulator[0] = t;
+                                                if (i > 0) tokenAccumulator[1] = i;
+                                                if (o > 0) tokenAccumulator[2] = o;
                                                 // Use enhanced streaming-aware conversion
                                                 LlmResponse llmResponse =
                                                         messageConverter.toLlmResponse(chatResponse, true);
@@ -274,12 +297,18 @@ public class MySpringAI extends BaseLlm {
                                                     new RuntimeException(mappedError.getNormalizedMessage(), error));
                                         },
                                         () -> {
-                                            // Record success for streaming completion
-                                            observabilityHandler.recordSuccess(context, 0, 0, 0);
+                                            // 写入 Holder，供可观测性上报（与非流式路径保持一致）
+                                            if (holder != null) {
+                                                holder.setPromptTokens(tokenAccumulator[1]);
+                                                holder.setCompletionTokens(tokenAccumulator[2]);
+                                                holder.setModelVersion(model());
+                                            }
+                                            observabilityHandler.recordSuccess(context, tokenAccumulator[0], tokenAccumulator[1], tokenAccumulator[2]);
                                             emitter.onComplete();
                                         });
                     } catch (Exception e) {
                         observabilityHandler.recordError(context, e);
+                        logNoToolCallbackDiagnostic(e);
                         SpringAIErrorMapper.MappedError mappedError = SpringAIErrorMapper.mapError(e);
                         emitter.onError(new RuntimeException(mappedError.getNormalizedMessage(), e));
                     }
@@ -287,11 +316,9 @@ public class MySpringAI extends BaseLlm {
                 BackpressureStrategy.BUFFER);
     }
 
-    private boolean hasToolCallbacks(Prompt prompt) {
-        ChatOptions options = prompt.getOptions();
-        return options instanceof ToolCallingChatOptions toolOptions
-                && toolOptions.getToolCallbacks() != null
-                && !toolOptions.getToolCallbacks().isEmpty();
+    private boolean hasDefaultToolCallbacks() {
+        List<ToolCallback> defaultToolCallbacks = resolveDefaultToolCallbacks();
+        return defaultToolCallbacks != null && !defaultToolCallbacks.isEmpty();
     }
 
     private boolean hasTools(LlmRequest llmRequest) {
@@ -354,6 +381,48 @@ public class MySpringAI extends BaseLlm {
         return ToolCallingChatOptions.builder()
                 .toolContext(scopedContext)
                 .build();
+    }
+
+    /**
+     * Resolves the default toolCallbacks registered on the ChatModel's defaultOptions.
+     * Returns null if the ChatModel is not an OpenAiChatModel or has no toolCallbacks.
+     * <p>
+     * Spring AI 的 {@code OpenAiChatModel.buildRequestPrompt()} 会自动把 defaultOptions
+     * 的 toolCallbacks 合并进运行时 prompt options（由 {@code mergeToolCallbacks} 完成），
+     * 因此本类无需在 prompt 层手动桥接 toolCallbacks —— 那样反而会因重建 options 对象、
+     * 破坏 OpenAiChatOptions 类型而触发 "No ToolCallback found" 错误。
+     */
+    private List<ToolCallback> resolveDefaultToolCallbacks() {
+        if (chatModel instanceof OpenAiChatModel openAiChatModel) {
+            ChatOptions defaultOptions = openAiChatModel.getDefaultOptions();
+            if (defaultOptions instanceof OpenAiChatOptions openAiOptions) {
+                return openAiOptions.getToolCallbacks();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 当工具执行抛出 "No ToolCallback found for tool name: X" 类异常时，输出诊断信息：
+     * 当前 ChatModel defaultOptions 上注册的工具名清单。帮助快速定位是工具未注册、
+     * 还是合并路径异常。
+     */
+    private void logNoToolCallbackDiagnostic(Exception e) {
+        String message = e.getMessage() == null ? "" : e.getMessage();
+        if (!message.contains("No ToolCallback found")) {
+            return;
+        }
+        List<ToolCallback> defaultToolCallbacks = resolveDefaultToolCallbacks();
+        if (defaultToolCallbacks == null || defaultToolCallbacks.isEmpty()) {
+            log.error("工具执行失败且 ChatModel.defaultOptions 无任何 toolCallbacks 注册。" +
+                    "请检查 MCP/Skills 工具装配是否成功。异常: {}", message);
+        } else {
+            String registeredNames = defaultToolCallbacks.stream()
+                    .map(cb -> cb.getToolDefinition().name())
+                    .collect(Collectors.joining(", "));
+            log.error("工具执行失败。ChatModel.defaultOptions 已注册 {} 个工具: [{}]。" +
+                    "异常: {}", defaultToolCallbacks.size(), registeredNames, message);
+        }
     }
 
     private Flux<ChatResponse> withThreadLocalScope(

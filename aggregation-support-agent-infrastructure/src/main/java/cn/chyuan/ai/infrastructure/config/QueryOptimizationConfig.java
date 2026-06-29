@@ -15,8 +15,8 @@ import org.springframework.web.client.RestClient;
 /**
  * 查询优化专用 ChatModel 配置
  * <p>
- * 使用轻量级模型（glm-4-flash）供 QueryOptimizationService 进行
- * 查询改写、Multi-Query 扩展、HyDE 生成等操作。
+ * 使用轻量级模型（glm-4.5-flash）供 QueryOptimizationService 进行
+ * 查询改写、HyDE 生成等操作。
  * <p>
  * 独立于智能体装配系统的动态 ChatModel，避免 @Autowired(required=false) 注入为 null。
  */
@@ -30,12 +30,12 @@ public class QueryOptimizationConfig {
     @Value("${ai-api.api-key}")
     private String apiKey;
 
-    @Value("${rag.query.chat-model:glm-4-flash}")
+    @Value("${rag.query.chat-model:glm-4.5-flash}")
     private String model;
 
     /**
      * 查询优化专用 ChatModel Bean
-     * 仅在查询改写或 Multi-Query 启用时才创建
+     * 仅在查询改写启用时才创建
      */
     @Bean("queryOptimizationChatModel")
     @ConditionalOnProperty(name = "rag.query.rewrite.enabled", havingValue = "true")
