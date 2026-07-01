@@ -1,0 +1,5 @@
+spring:
+  config:
+    name: aggregation-support-agent-app
+  profiles:
+    active: dev  # 可选: dev / test / prod
