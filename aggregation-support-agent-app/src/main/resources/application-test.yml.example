@@ -1,0 +1,50 @@
+server:
+  port: 8091
+
+# 线程池配置
+thread:
+  pool:
+    executor:
+      config:
+        core-pool-size: 20
+        max-pool-size: 50
+        keep-alive-time: 5000
+        block-queue-size: 5000
+        policy: CallerRunsPolicy
+
+# 数据库配置（按需启用）
+#spring:
+#  datasource:
+#    username: <your-username>
+#    password: <your-password>
+#    url: jdbc:mysql://<your-host>:<port>/<database>?useUnicode=true&characterEncoding=utf8&autoReconnect=true&zeroDateTimeBehavior=convertToNull&serverTimezone=UTC&useSSL=true
+#    driver-class-name: com.mysql.cj.jdbc.Driver
+#  hikari:
+#    pool-name: Retail_HikariCP
+#    minimum-idle: 15
+#    idle-timeout: 180000
+#    maximum-pool-size: 25
+#    auto-commit: true
+#    max-lifetime: 1800000
+#    connection-timeout: 30000
+#    connection-test-query: SELECT 1
+#  type: com.zaxxer.hikari.HikariDataSource
+
+#mybatis:
+#  mapper-locations: classpath:/mybatis/mapper/*.xml
+#  config-location:  classpath:/mybatis/config/mybatis-config.xml
+
+# 日志
+logging:
+  level:
+    root: info
+  config: classpath:logback-spring.xml
+
+rag:
+  upload:
+    max-size-mb: 50
+  document:
+    executor:
+      core-size: 1
+      max-size: 2
+      queue-capacity: 20
