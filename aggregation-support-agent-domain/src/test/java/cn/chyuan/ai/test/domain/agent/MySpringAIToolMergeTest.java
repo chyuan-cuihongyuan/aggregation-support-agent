@@ -41,12 +41,12 @@ import static org.mockito.Mockito.when;
 /**
  * MySpringAI 工具合并路径回归测试。
  * <p>
- * 验证删除 {@code ensureToolCallbacks} 补丁后：
+ * 验证删除 {@code ensureToolCallbacks} 和 {@code withScopedToolContext} 补丁后：
  * <ul>
- *   <li>{@code MySpringAI} 不再向 prompt options 手动注入 toolCallbacks，
- *       而是信任 Spring AI {@code OpenAiChatModel.buildRequestPrompt()} 的原生合并；</li>
- *   <li>租户作用域（tenantScope）和 RAG Holder 仍能通过 {@code withScopedToolContext}
- *       正确合并进 prompt options 的 toolContext；</li>
+ *   <li>{@code MySpringAI} 不重建 prompt options，不手动注入 toolCallbacks，
+ *       信任 Spring AI {@code OpenAiChatModel.buildRequestPrompt()} 的原生合并；</li>
+ *   <li>租户作用域（tenantScope）和 RAG Holder 通过 ThreadLocal（RequestScopeContext /
+ *       RagSourceCollector）传递，{@code ScopedToolCallback} 从 ThreadLocal 兜底恢复；</li>
  *   <li>有/无工具场景下，{@code chatModel.call(prompt)} 都能被正常调用。</li>
  * </ul>
  *
@@ -114,7 +114,7 @@ class MySpringAIToolMergeTest {
     }
 
     @Test
-    @DisplayName("有工具 + 有租户作用域：prompt 的 toolContext 含 tenantScope，且不手动注入 toolCallbacks")
+    @DisplayName("有工具 + 有租户作用域：MySpringAI 不重建 options，由 buildRequestPrompt 合并；作用域通过 ThreadLocal 传递")
     void shouldMergeTenantScopeIntoToolContextWithoutInjectingToolCallbacks() {
         // given：ChatModel 注册了 agent_order_query 等工具
         List<ToolCallback> defaultCallbacks = new ArrayList<>(List.of(
@@ -125,7 +125,7 @@ class MySpringAIToolMergeTest {
 
         MySpringAI springAI = new MySpringAI(chatModel, true);
 
-        // attach 租户作用域
+        // attach 租户作用域（通过 ThreadLocal 传递，不再注入 prompt options）
         TenantScopeVO scope = TenantScopeVO.builder()
                 .tenantId("tenant-a").ownerUserId("user-a").build();
         RequestScopeContext.attach(scope);
@@ -140,29 +140,27 @@ class MySpringAIToolMergeTest {
         Prompt prompt = captured.get();
         assertNotNull(prompt, "chatModel.call() 应被调用并捕获 prompt");
 
+        // ★核心回归：MySpringAI 不重建 prompt options★
+        // prompt.getOptions() 可以为 null —— 实际运行时 Spring AI 的 buildRequestPrompt
+        // 会合并 defaultOptions（含 agent_order_query 等 toolCallbacks）。
+        // 重建 options 会破坏 mergeToolCallbacks 逻辑（runtime 非空时丢弃 default），
+        // 导致 "No ToolCallback found for tool name: agent_order_query"。
         ChatOptions options = prompt.getOptions();
-        assertNotNull(options, "prompt 应携带 options");
-
-        // ★核心回归：MySpringAI 不再向 prompt options 手动注入 toolCallbacks★
-        // toolCallbacks 应为空（由 Spring AI buildRequestPrompt 原生合并，而非本类注入）
         if (options instanceof ToolCallingChatOptions toolOptions) {
-            // 即使 options 是 ToolCallingChatOptions，toolCallbacks 也应不在 prompt 层注入
-            // （agent_order_query 等存在于 ChatModel.defaultOptions，由 Spring AI 合并）
+            // 如果有 options，toolCallbacks 不应包含 agent_order_query（不应手动注入）
             List<ToolCallback> injected = toolOptions.getToolCallbacks();
             boolean orderQueryInjected = injected == null || injected.stream()
                     .noneMatch(cb -> "agent_order_query".equals(cb.getToolDefinition().name()));
             assertTrue(orderQueryInjected,
-                    "删除 ensureToolCallbacks 后，MySpringAI 不应在 prompt 层注入 toolCallbacks");
+                    "MySpringAI 不应在 prompt 层注入 toolCallbacks（由 buildRequestPrompt 合并）");
         }
 
-        // tenantScope 被合并进 toolContext
-        if (options instanceof ToolCallingChatOptions toolOptions) {
-            Map<String, Object> toolContext = toolOptions.getToolContext();
-            assertNotNull(toolContext, "toolContext 不应为空（有 tenantScope）");
-            assertEquals(scope, toolContext.get(TENANT_SCOPE_KEY),
-                    "tenantScope 应被合并进 toolContext");
-            assertNotNull(toolContext.get(HOLDER_KEY), "RAG Holder 应被合并进 toolContext");
-        }
+        // 租户作用域通过 ThreadLocal 传递（RequestScopeContext/RagSourceCollector），
+        // ScopedToolCallback.call 会从 ThreadLocal 兜底恢复，不再依赖 prompt options 的 toolContext
+        assertEquals(scope, RequestScopeContext.snapshot(),
+                "租户作用域应仍存在于 ThreadLocal 中");
+        assertNotNull(RagSourceCollector.currentHolder(),
+                "RAG Holder 应仍存在于 ThreadLocal 中");
     }
 
     @Test

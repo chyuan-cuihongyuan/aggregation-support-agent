@@ -5,11 +5,14 @@ import cn.chyuan.ai.domain.agent.model.valobj.AiAgentConfigTableVO;
 import cn.chyuan.ai.domain.agent.model.valobj.AiAgentRegisterVO;
 import cn.chyuan.ai.domain.agent.service.armory.AbstractArmorySupport;
 import cn.chyuan.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
+import cn.chyuan.ai.domain.agent.service.armory.matter.mcp.toolset.SpringAiToolset;
 import cn.chyuan.ai.domain.agent.service.armory.matter.patch.MySpringAI;
 import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
 import com.google.adk.agents.LlmAgent;
+import com.google.adk.tools.BaseToolset;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.Resource;
@@ -61,6 +64,18 @@ public class AgentNode extends AbstractArmorySupport {
         ChatModel chatModel = dynamicContext.getChatModel();
         boolean hasTools = dynamicContext.isHasTools();
 
+        // 把 Spring AI ToolCallback 包装成 ADK BaseToolset，挂到每个 LlmAgent 上，
+        // 让工具走 ADK 原生路径（LlmRequest.tools() → MessageConverter → prompt.options），
+        // 解决工具只挂在 ChatModel.defaultOptions 时执行阶段找不到 ToolCallback 的问题。
+        BaseToolset toolset = null;
+        if (hasTools) {
+            List<ToolCallback> toolCallbacks = dynamicContext.getToolCallbacks();
+            if (toolCallbacks != null && !toolCallbacks.isEmpty()) {
+                toolset = SpringAiToolset.of(toolCallbacks);
+                log.info("Agent 装配：已将 {} 个工具包装为 SpringAiToolset 挂载到 LlmAgent", toolCallbacks.size());
+            }
+        }
+
         AiAgentConfigTableVO aiAgentConfigTableVO = requestParameter.getAiAgentConfigTableVO();
         List<AiAgentConfigTableVO.Module.Agent> agents = aiAgentConfigTableVO.getModule().getAgents();
 
@@ -79,6 +94,11 @@ public class AgentNode extends AbstractArmorySupport {
                     .model(new MySpringAI(chatModel, hasTools))
                     .instruction(instruction)
                     .outputKey(agentConfig.getOutputKey());
+
+            // 挂载工具集，走 ADK 原生工具路径
+            if (toolset != null) {
+                agentBuilder.tools(List.of(toolset));
+            }
 
             // 设置 ReAct 循环最大步数
             // 无工具的纯对话智能体：强制 maxSteps=1，不允许 ADK 多轮调用 LLM

@@ -100,6 +100,14 @@ public class ObservabilityHelper {
         }
         try {
             int count = sources == null ? 0 : sources.size();
+            // P2 治本：score 为 null 时兜底 0f，避免 fastjson 丢弃字段导致下游可观测性评分解析为空
+            if (sources != null) {
+                for (RagSourceVO s : sources) {
+                    if (s.getScore() == null) {
+                        s.setScore(0f);
+                    }
+                }
+            }
             String sourceDocs = sources == null ? "[]" : JSON.toJSONString(sources);
             String rerankScores = sources == null ? "[]" : JSON.toJSONString(
                     sources.stream()

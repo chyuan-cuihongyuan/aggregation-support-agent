@@ -111,6 +111,8 @@ public class ChatModelNode extends AbstractArmorySupport {
 
         dynamicContext.setChatModel(chatModel);
         dynamicContext.setHasTools(!toolCallbackList.isEmpty());
+        // 显式传递工具列表，供 AgentNode 包装成 SpringAiToolset 挂到 LlmAgent 上走 ADK 原生工具路径
+        dynamicContext.setToolCallbacks(toolCallbackList);
 
         // 打印最终注册的工具名清单，便于排查 "No ToolCallback found" 类问题
         if (toolCallbackList.isEmpty()) {

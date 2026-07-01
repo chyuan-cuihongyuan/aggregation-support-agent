@@ -20,15 +20,12 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.StreamingChatModel;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.tool.ToolCallback;
 import reactor.core.publisher.Flux;
 
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -185,9 +182,13 @@ public class MySpringAI extends BaseLlm {
                 observabilityHandler.startRequest(model(), "chat");
 
         try {
-            TenantScopeVO tenantScope = currentTenantScope();
-            RagSourceCollector.Holder holder = RagSourceCollector.currentHolder();
-            Prompt prompt = withScopedToolContext(messageConverter.toLlmPrompt(llmRequest), tenantScope, holder);
+            // 不重建 prompt options —— 811f2ef 引入的 withScopedToolContext 会调用
+            // toolOptions.copy() 重建 options，破坏 buildRequestPrompt 的 toolCallbacks 合并
+            // （runtime toolCallbacks 非空时 mergeToolCallbacks 会丢弃 defaultOptions 的工具），
+            // 导致 "No ToolCallback found for tool name: agent_order_query"。
+            // 多租户作用域改由 ThreadLocal（RequestScopeContext/RagSourceCollector）传递，
+            // ScopedToolCallback.call 会从 ThreadLocal 兜底恢复。
+            Prompt prompt = messageConverter.toLlmPrompt(llmRequest);
             observabilityHandler.logRequest(prompt.toString(), model());
 
             ChatResponse chatResponse = chatModel.call(prompt);
@@ -202,7 +203,8 @@ public class MySpringAI extends BaseLlm {
 
             observabilityHandler.recordSuccess(context, totalTokens, inputTokens, outputTokens);
 
-            // 新增：写入 Holder，供可观测性上报
+            // 写入 Holder，供可观测性上报
+            RagSourceCollector.Holder holder = RagSourceCollector.currentHolder();
             if (holder != null) {
                 holder.setPromptTokens(inputTokens);
                 holder.setCompletionTokens(outputTokens);
@@ -226,9 +228,11 @@ public class MySpringAI extends BaseLlm {
         return Flowable.create(
                 emitter -> {
                     try {
+                        // 不重建 prompt options（同 generateContent 的修复理由），
+                        // 多租户作用域由 withThreadLocalScope 通过 ThreadLocal 传递。
                         TenantScopeVO tenantScope = currentTenantScope();
                         RagSourceCollector.Holder holder = RagSourceCollector.currentHolder();
-                        Prompt prompt = withScopedToolContext(messageConverter.toLlmPrompt(llmRequest), tenantScope, holder);
+                        Prompt prompt = messageConverter.toLlmPrompt(llmRequest);
                         observabilityHandler.logRequest(prompt.toString(), model());
 
                         if (this.chatModel != null && hasDefaultToolCallbacks()) {
@@ -337,50 +341,12 @@ public class MySpringAI extends BaseLlm {
                 .orElse(true);
     }
 
-    private Prompt withScopedToolContext(Prompt prompt, TenantScopeVO tenantScope, RagSourceCollector.Holder holder) {
-        Map<String, Object> scopedContext = new LinkedHashMap<>();
-        if (tenantScope != null) {
-            scopedContext.put(RequestScopeContext.TOOL_CONTEXT_TENANT_SCOPE_KEY, tenantScope);
-        }
-        if (holder != null) {
-            scopedContext.put(RagSourceCollector.TOOL_CONTEXT_HOLDER_KEY, holder);
-        }
-        if (scopedContext.isEmpty()) {
-            return prompt;
-        }
-
-        ChatOptions options = prompt.getOptions();
-        ChatOptions scopedOptions = mergeToolContext(options, scopedContext);
-        return Prompt.builder()
-                .messages(prompt.getInstructions())
-                .chatOptions(scopedOptions)
-                .build();
-    }
-
     private TenantScopeVO currentTenantScope() {
         TenantScopeVO tenantScope = RequestScopeContext.snapshot();
         if (tenantScope == null) {
             tenantScope = RagSourceCollector.currentTenantScope();
         }
         return tenantScope;
-    }
-
-    private ChatOptions mergeToolContext(ChatOptions options, Map<String, Object> scopedContext) {
-        if (options instanceof ToolCallingChatOptions toolOptions) {
-            ChatOptions copiedOptions = toolOptions.copy();
-            if (copiedOptions instanceof ToolCallingChatOptions copiedToolOptions) {
-                Map<String, Object> merged = new LinkedHashMap<>();
-                if (copiedToolOptions.getToolContext() != null) {
-                    merged.putAll(copiedToolOptions.getToolContext());
-                }
-                merged.putAll(scopedContext);
-                copiedToolOptions.setToolContext(merged);
-                return copiedToolOptions;
-            }
-        }
-        return ToolCallingChatOptions.builder()
-                .toolContext(scopedContext)
-                .build();
     }
 
     /**

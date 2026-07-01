@@ -9,11 +9,16 @@ import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.converter.HttpMessageConverter;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
 import jakarta.annotation.Resource;
+import java.util.ArrayList;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -33,8 +38,13 @@ public class AiApiNode extends AbstractArmorySupport {
         requestFactory.setConnectTimeout(30000);
         requestFactory.setReadTimeout(300000);
 
+        // 部分 OpenAI 兼容服务商（智谱 bigmodel、DeepSeek 代理等）会用 application/octet-stream
+        // 返回 JSON，而默认 MappingJackson2HttpMessageConverter 仅支持 application/json，
+        // 导致 "Error while extracting response ... content type [application/octet-stream]"。
+        // 这里在原有 Jackson 转换器基础上补充支持 application/octet-stream，复用其 ObjectMapper。
         RestClient.Builder restClientBuilder = RestClient.builder()
-                .requestFactory(requestFactory);
+                .requestFactory(requestFactory)
+                .messageConverters(this::augmentJacksonConverterForOctetStream);
 
         OpenAiApi openAiApi = OpenAiApi.builder()
                 .baseUrl(aiApiConfig.getBaseUrl())
@@ -52,6 +62,28 @@ public class AiApiNode extends AbstractArmorySupport {
     @Override
     public StrategyHandler<ArmoryCommandEntity, DefaultArmoryFactory.DynamicContext, AiAgentRegisterVO> get(ArmoryCommandEntity requestParameter, DefaultArmoryFactory.DynamicContext dynamicContext) throws Exception {
         return chatModelNode;
+    }
+
+    /**
+     * 将 RestClient 默认的 Jackson 转换器替换为同时支持 application/octet-stream 的副本，
+     * 以兼容用 octet-stream 返回 JSON 的 OpenAI 兼容服务商。复用原转换器的 ObjectMapper，
+     * 避免影响其它请求的 JSON 解析行为，且不修改共享实例。
+     */
+    private void augmentJacksonConverterForOctetStream(List<HttpMessageConverter<?>> converters) {
+        for (int i = 0; i < converters.size(); i++) {
+            HttpMessageConverter<?> converter = converters.get(i);
+            if (converter instanceof MappingJackson2HttpMessageConverter defaultJackson) {
+                MappingJackson2HttpMessageConverter octetStreamAware =
+                        new MappingJackson2HttpMessageConverter(defaultJackson.getObjectMapper());
+                List<MediaType> mediaTypes = new ArrayList<>(defaultJackson.getSupportedMediaTypes());
+                if (!mediaTypes.contains(MediaType.APPLICATION_OCTET_STREAM)) {
+                    mediaTypes.add(MediaType.APPLICATION_OCTET_STREAM);
+                }
+                octetStreamAware.setSupportedMediaTypes(mediaTypes);
+                converters.set(i, octetStreamAware);
+                return;
+            }
+        }
     }
 
 }

@@ -13,6 +13,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 
@@ -66,6 +67,12 @@ public class DefaultArmoryFactory {
          * 是否注册了工具
          */
         private boolean hasTools;
+
+        /**
+         * 已装配的工具回调列表，供 AgentNode 包装成 SpringAiToolset 挂到 LlmAgent 上。
+         * 这些工具同时也会挂在 ChatModel.defaultOptions，此处显式传递便于走 ADK 原生工具路径。
+         */
+        private List<ToolCallback> toolCallbacks;
 
         /**
          * 智能体配置组
