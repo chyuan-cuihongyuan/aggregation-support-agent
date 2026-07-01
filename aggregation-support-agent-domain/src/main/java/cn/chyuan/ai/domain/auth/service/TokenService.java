@@ -108,16 +108,34 @@ public class TokenService implements ITokenService {
         }
     }
 
-    public TokenVO refreshToken(String oldToken) {
+    @Override
+    public String renewToken(String oldToken) {
         Claims claims = parseToken(oldToken);
         if (claims == null) return null;
 
         Long userId = Long.valueOf(claims.getSubject());
         String username = claims.get("username", String.class);
         String role = claims.get("role", String.class);
+        // 复用原 jti，保证 Redis key 不变，避免滑动续期时产生多个有效 key
+        String jti = claims.getId();
 
-        removeToken(oldToken);
-        return doGenerateToken(userId, username, role);
+        Date now = new Date();
+        Date expireDate = new Date(now.getTime() + expiration);
+        String newToken = Jwts.builder()
+                .setId(jti)
+                .setSubject(String.valueOf(userId))
+                .claim("username", username)
+                .claim("role", role)
+                .setIssuedAt(now)
+                .setExpiration(expireDate)
+                .signWith(getSigningKey())
+                .compact();
+
+        // 重置 Redis TTL（同 key 覆盖），实现滑动过期
+        String redisKey = buildRedisKey(userId, jti);
+        tokenRepository.saveToken(redisKey, newToken, expiration / 1000);
+
+        return newToken;
     }
 
     private String buildRedisKey(Long userId, String jti) {

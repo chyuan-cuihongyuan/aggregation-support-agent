@@ -19,4 +19,11 @@ public interface ITokenService {
 
     /** 主动吊销 Token */
     void removeToken(String token);
+
+    /**
+     * 滑动续期 — 复用原 Token 的 jti 重新签发 JWT（新 exp = now + expiration），
+     * 并重置 Redis TTL。用于每次请求刷新会话，实现"无操作 N 分钟后失效"的滑动过期。
+     * 返回新 Token；原 Token 解析失败返回 null。
+     */
+    String renewToken(String token);
 }
