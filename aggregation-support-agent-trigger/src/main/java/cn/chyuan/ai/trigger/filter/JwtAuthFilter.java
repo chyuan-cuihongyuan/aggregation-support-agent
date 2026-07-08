@@ -47,7 +47,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private static final Set<String> WHITE_LIST = new HashSet<>(Arrays.asList(
             "/api/v1/auth/register",
-            "/api/v1/auth/login"
+            "/api/v1/auth/login",
+            "/api/v1/chat"
     ));
 
     @Override
@@ -63,6 +64,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         // 白名单和非API路径放行
         if (WHITE_LIST.contains(path) || !path.startsWith("/api/")) {
+            // 为白名单 API 路径设置系统默认用户，供控制器获取 userId 不报错
+            if (path.startsWith("/api/")) {
+                request.setAttribute(ATTR_USER_ID, 0L);
+                request.setAttribute(ATTR_USERNAME, "eval-system");
+            }
             filterChain.doFilter(request, response);
             return;
         }
