@@ -226,10 +226,10 @@ done
 
 ```bash
 # 查询智能体列表
-curl http://49.232.169.33:8091/api/v1/query_ai_agent_config_list
+curl http://127.0.0.1:8091/api/v1/query_ai_agent_config_list
 
 # 检查 Milvus 健康状态
-curl http://49.232.169.33:8091/api/v1/milvus/health
+curl http://127.0.0.1:8091/api/v1/milvus/health
 ```
 
 ## 项目结构

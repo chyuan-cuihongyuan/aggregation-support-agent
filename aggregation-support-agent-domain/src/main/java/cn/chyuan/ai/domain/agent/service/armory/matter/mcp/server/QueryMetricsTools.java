@@ -317,7 +317,7 @@ public class QueryMetricsTools {
                 .state("firing")
                 .severity("critical")
                 .serviceName("payment-service")
-                .instance("10.0.1.15:8080")
+                .instance("127.0.0.1:8080")
                 .currentValue("92%")
                 .threshold("80%")
                 .description("支付服务 CPU 使用率持续超过 80% 阈值已达 15 分钟，当前值 92%")
@@ -330,7 +330,7 @@ public class QueryMetricsTools {
                 .state("firing")
                 .severity("warning")
                 .serviceName("order-service")
-                .instance("10.0.2.22:8080")
+                .instance("127.0.0.1:8080")
                 .currentValue("91%")
                 .threshold("85%")
                 .description("订单服务内存使用率持续超过 85% 阈值已达 10 分钟，当前值 91%")
@@ -343,7 +343,7 @@ public class QueryMetricsTools {
                 .state("firing")
                 .severity("warning")
                 .serviceName("user-service")
-                .instance("10.0.3.18:8080")
+                .instance("127.0.0.1:8080")
                 .currentValue("4.2s")
                 .threshold("2s")
                 .description("用户服务 P99 响应时间持续超过 2s 阈值已达 5 分钟，当前值 4.2s")
@@ -361,7 +361,7 @@ public class QueryMetricsTools {
     private String buildMockPromQLResult(String query) throws Exception {
         List<MetricResult> results = new ArrayList<>();
         results.add(MetricResult.builder()
-                .metric(Map.of("__name__", query.split("\\{")[0], "instance", "49.232.169.33:9090"))
+                .metric(Map.of("__name__", query.split("\\{")[0], "instance", "127.0.0.1:9090"))
                 .value("78.5")
                 .build());
         PromQLQueryOutput output = PromQLQueryOutput.builder()

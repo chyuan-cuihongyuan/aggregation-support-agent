@@ -32,8 +32,8 @@ import org.springframework.util.StringUtils;
 @ConditionalOnProperty(name = "elasticsearch.enabled", havingValue = "true", matchIfMissing = false)
 public class ElasticsearchConfig {
 
-    /** ES主机地址 */
-    private String host = "49.232.169.33";
+    /** ES主机地址（公开仓库统一使用回环地址，实际地址经环境变量注入） */
+    private String host = "127.0.0.1";
 
     /** ES端口 */
     private int port = 9200;

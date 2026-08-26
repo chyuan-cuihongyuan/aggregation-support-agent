@@ -59,7 +59,7 @@ public class EndToEndIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        baseUrl = "http://49.232.169.33:" + port + "/api/v1";
+        baseUrl = "http://127.0.0.1:" + port + "/api/v1";
     }
 
     // ==================== 知识库检索测试 ====================
