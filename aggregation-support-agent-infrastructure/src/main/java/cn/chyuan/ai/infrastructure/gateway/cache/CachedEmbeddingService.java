@@ -167,12 +167,22 @@ public class CachedEmbeddingService implements IEmbeddingService {
         return results;
     }
 
+    /** 缓存键摘要算法（SHA-256，替代原 MD5，见安全扫描整改 0017） */
+    private static final String CACHE_KEY_DIGEST_ALGORITHM = "SHA-256";
+
     /**
-     * 生成缓存key（文本的MD5 hash）
+     * 生成缓存key（文本的 SHA-256 hash），键前缀与结构保持不变
      */
     private String generateCacheKey(String text) {
+        return generateCacheKey(text, CACHE_KEY_DIGEST_ALGORITHM);
+    }
+
+    /**
+     * 生成缓存key。algorithm 参数化便于测试异常降级路径（算法不可用时回退文本 hashcode）。
+     */
+    String generateCacheKey(String text, String algorithm) {
         try {
-            MessageDigest md = MessageDigest.getInstance("MD5");
+            MessageDigest md = MessageDigest.getInstance(algorithm);
             byte[] hash = md.digest(text.getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) {
