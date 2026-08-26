@@ -60,6 +60,8 @@ public class RequiredConfigurationValidator implements InitializingBean {
             require(missingKeys, "elasticsearch.password");
         }
         if (enabled("neo4j.enabled", false)) {
+            require(missingKeys, "neo4j.uri");
+            require(missingKeys, "neo4j.authentication.username");
             require(missingKeys, "neo4j.authentication.password");
         }
         if (enabled("business.agent.enabled", false)) {

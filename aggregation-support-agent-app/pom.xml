@@ -197,6 +197,7 @@
                     <testFailureIgnore>false</testFailureIgnore>
                     <includes>
                         <include>**/trigger/http/*Test.java</include>
+                        <include>**/config/*Test.java</include>
                     </includes>
                 </configuration>
             </plugin>
