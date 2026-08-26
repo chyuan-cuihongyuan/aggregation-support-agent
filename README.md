@@ -218,7 +218,7 @@ java -jar aggregation-support-agent-app/target/aggregation-support-agent-app.jar
 5. **上传运维文档**
 ```bash
 for f in docs/aiops-docs/*.md; do
-  curl -X POST http://49.232.169.33:8091/api/v1/upload -F "file=@$f"
+  curl -X POST http://127.0.0.1:8091/api/v1/upload -F "file=@$f"
 done
 ```
 
