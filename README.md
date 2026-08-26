@@ -187,7 +187,7 @@ AIOps 采用 Planner-Executor 串行工作流：
 
 ### 环境要求
 
-- JDK 17+
+- JDK 21+
 - Maven 3.8+
 - Docker 20.10+
 - Docker Compose 2.0+
