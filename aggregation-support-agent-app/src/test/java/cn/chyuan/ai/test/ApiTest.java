@@ -16,7 +16,8 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.content.Media;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.ai.openai.api.OpenAiApi;
+import com.openai.client.OpenAIClient;
+import com.openai.client.okhttp.OpenAIOkHttpClient;
 
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
@@ -41,16 +42,14 @@ public class ApiTest {
         Resource resource = new ClassPathResource("dog.png", classLoader);
         assert resourceAsStream != null;
 
-        OpenAiApi openAiApi = OpenAiApi.builder()
-                .baseUrl("https://apis.itedus.cn")
+        OpenAIClient openAIClient = OpenAIOkHttpClient.builder()
+                .baseUrl("https://apis.itedus.cn/v1")
                 .apiKey("sk-REDACTED")
-                .completionsPath("v1/chat/completions")
-                .embeddingsPath("v1/embeddings")
                 .build();
 
         ChatModel chatModel = OpenAiChatModel.builder()
-                .openAiApi(openAiApi)
-                .defaultOptions(OpenAiChatOptions.builder()
+                .openAiClient(openAIClient)
+                .options(OpenAiChatOptions.builder()
                         .model("gpt-4o")
                         .build())
                 .build();

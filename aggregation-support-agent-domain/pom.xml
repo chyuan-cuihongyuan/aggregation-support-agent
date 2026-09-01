@@ -15,9 +15,20 @@
             <artifactId>xfg-wrench-starter-design-framework</artifactId>
             <version>3.0.0</version>
         </dependency>
+        <!-- Jackson 2 databind — ADK Spring AI 桥接与补丁类消费（Boot 4 默认 Jackson 3，Jackson 2 需显式声明） -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-openai</artifactId>
+        </dependency>
+        <!-- 官方 openai-java OkHttp 客户端 — Spring AI 2.0 的 openai 模块仅传递 core，
+             OpenAIOkHttpClient 构建需显式引入（0016 第 1 条同款，版本由 platform-bom 管理） -->
+        <dependency>
+            <groupId>com.openai</groupId>
+            <artifactId>openai-java-client-okhttp</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>

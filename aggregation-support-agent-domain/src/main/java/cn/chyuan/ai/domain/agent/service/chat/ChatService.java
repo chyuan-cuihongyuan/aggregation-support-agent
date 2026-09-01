@@ -679,7 +679,8 @@ public class ChatService implements IChatService {
                 .build();
         Event event = Event.builder()
                 .author(author)
-                .content(Optional.of(content))
+                // genai 新版（随 ADK 1.7）content() 直接收 Content，不再包 Optional
+                .content(content)
                 .build();
         runner.sessionService().appendEvent(session, event).blockingGet();
     }

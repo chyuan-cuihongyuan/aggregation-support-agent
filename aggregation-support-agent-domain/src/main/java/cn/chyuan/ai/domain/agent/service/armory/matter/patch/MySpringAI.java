@@ -188,7 +188,7 @@ public class MySpringAI extends BaseLlm {
             // 导致 "No ToolCallback found for tool name: agent_order_query"。
             // 多租户作用域改由 ThreadLocal（RequestScopeContext/RagSourceCollector）传递，
             // ScopedToolCallback.call 会从 ThreadLocal 兜底恢复。
-            Prompt prompt = messageConverter.toLlmPrompt(llmRequest);
+            Prompt prompt = messageConverter.toLlmPrompt(llmRequest, resolveDefaultOptions());
             observabilityHandler.logRequest(prompt.toString(), model());
 
             ChatResponse chatResponse = chatModel.call(prompt);
@@ -232,7 +232,7 @@ public class MySpringAI extends BaseLlm {
                         // 多租户作用域由 withThreadLocalScope 通过 ThreadLocal 传递。
                         TenantScopeVO tenantScope = currentTenantScope();
                         RagSourceCollector.Holder holder = RagSourceCollector.currentHolder();
-                        Prompt prompt = messageConverter.toLlmPrompt(llmRequest);
+                        Prompt prompt = messageConverter.toLlmPrompt(llmRequest, resolveDefaultOptions());
                         observabilityHandler.logRequest(prompt.toString(), model());
 
                         if (this.chatModel != null && hasDefaultToolCallbacks()) {
@@ -360,10 +360,25 @@ public class MySpringAI extends BaseLlm {
      */
     private List<ToolCallback> resolveDefaultToolCallbacks() {
         if (chatModel instanceof OpenAiChatModel openAiChatModel) {
-            ChatOptions defaultOptions = openAiChatModel.getDefaultOptions();
+            ChatOptions defaultOptions = openAiChatModel.getOptions();
             if (defaultOptions instanceof OpenAiChatOptions openAiOptions) {
                 return openAiOptions.getToolCallbacks();
             }
+        }
+        return null;
+    }
+
+    /**
+     * 返回底层模型自带的默认 ChatOptions（ADK 1.7.0 桥接对齐）：
+     * 作为 Prompt options 的基底，使 OpenAiChatModel 等具体实现拿到
+     * 其期望的具体选项类型，避免 ClassCastException。
+     */
+    private ChatOptions resolveDefaultOptions() {
+        if (chatModel != null) {
+            return chatModel.getOptions();
+        }
+        if (streamingChatModel instanceof ChatModel) {
+            return ((ChatModel) streamingChatModel).getOptions();
         }
         return null;
     }

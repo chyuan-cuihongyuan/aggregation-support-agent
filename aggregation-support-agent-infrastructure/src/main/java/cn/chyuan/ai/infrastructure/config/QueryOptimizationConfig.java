@@ -1,22 +1,17 @@
 package cn.chyuan.ai.infrastructure.config;
 
+import com.openai.client.OpenAIClient;
+import com.openai.client.okhttp.OpenAIOkHttpClient;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.http.converter.HttpMessageConverter;
-import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
-import org.springframework.web.client.RestClient;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.time.Duration;
 
 /**
  * 查询优化专用 ChatModel 配置
@@ -47,51 +42,19 @@ public class QueryOptimizationConfig {
     @ConditionalOnProperty(name = "rag.query.rewrite.enabled", havingValue = "true")
     public ChatModel queryOptimizationChatModel() {
         log.info("初始化查询优化 ChatModel: baseUrl={}, model={}", baseUrl, model);
-        // base-url 为智谱 .../api/paas/v4，需覆盖默认补全路径 /v1/chat/completions，
-        // 否则拼成 .../v4/v1/chat/completions 触发 404
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(30000);
-        requestFactory.setReadTimeout(180000);
-
-        // 智谱等 OpenAI 兼容服务商会用 application/octet-stream 返回 JSON，默认 Jackson 转换器
-        // 仅支持 application/json，补充支持 application/octet-stream 以避免反序列化失败。
-        RestClient.Builder restClientBuilder = RestClient.builder()
-                .requestFactory(requestFactory)
-                .messageConverters(this::augmentJacksonConverterForOctetStream);
-
-        OpenAiApi openAiApi = OpenAiApi.builder()
+        // Spring AI 2.0 起基于官方 openai-java SDK：客户端固定在 baseUrl 后拼 /chat/completions，
+        // 旧 completionsPath=/chat/completions（空前缀）折叠后 baseUrl 原样保留，实际请求地址不变
+        // （工单 0023，同 mcp-gateway 0016 口径）。octet-stream 兼容 hack 随官方 SDK 自行解析响应移除。
+        OpenAIClient openAIClient = OpenAIOkHttpClient.builder()
                 .baseUrl(baseUrl)
-                .completionsPath("/chat/completions")
                 .apiKey(apiKey)
-                .restClientBuilder(restClientBuilder)
+                .timeout(Duration.ofMillis(180000))
                 .build();
         return OpenAiChatModel.builder()
-                .openAiApi(openAiApi)
-                .defaultOptions(OpenAiChatOptions.builder()
+                .openAiClient(openAIClient)
+                .options(OpenAiChatOptions.builder()
                         .model(model)
                         .build())
                 .build();
-    }
-
-    /**
-     * 将 RestClient 默认的 Jackson 转换器替换为同时支持 application/octet-stream 的副本，
-     * 以兼容用 octet-stream 返回 JSON 的 OpenAI 兼容服务商。复用原转换器的 ObjectMapper，
-     * 避免影响其它请求的 JSON 解析行为，且不修改共享实例。
-     */
-    private void augmentJacksonConverterForOctetStream(List<HttpMessageConverter<?>> converters) {
-        for (int i = 0; i < converters.size(); i++) {
-            HttpMessageConverter<?> converter = converters.get(i);
-            if (converter instanceof MappingJackson2HttpMessageConverter defaultJackson) {
-                MappingJackson2HttpMessageConverter octetStreamAware =
-                        new MappingJackson2HttpMessageConverter(defaultJackson.getObjectMapper());
-                List<MediaType> mediaTypes = new ArrayList<>(defaultJackson.getSupportedMediaTypes());
-                if (!mediaTypes.contains(MediaType.APPLICATION_OCTET_STREAM)) {
-                    mediaTypes.add(MediaType.APPLICATION_OCTET_STREAM);
-                }
-                octetStreamAware.setSupportedMediaTypes(mediaTypes);
-                converters.set(i, octetStreamAware);
-                return;
-            }
-        }
     }
 }

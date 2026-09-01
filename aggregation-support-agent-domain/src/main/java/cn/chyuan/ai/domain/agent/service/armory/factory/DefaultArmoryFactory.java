@@ -12,7 +12,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.openai.api.OpenAiApi;
+import com.openai.client.OpenAIClient;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
@@ -54,9 +54,9 @@ public class DefaultArmoryFactory {
     public static class DynamicContext {
 
         /**
-         * LLM API
+         * LLM API（Spring AI 2.0 起为官方 openai-java 客户端）
          */
-        private OpenAiApi openAiApi;
+        private OpenAIClient openAIClient;
 
         /**
          * LLM ChatModel

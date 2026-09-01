@@ -125,10 +125,10 @@ AIOps 采用 Planner-Executor 串行工作流：
 
 | 技术 | 版本 | 说明 |
 |------|------|------|
-| Spring Boot | 3.4.3 | 应用框架 |
-| Java | 17 | 编程语言 |
-| Google ADK | 0.5.0 | Agent Development Kit |
-| Spring AI | 1.1.0-M3 | AI 集成框架 |
+| Spring Boot | 4.1.1 | 应用框架 |
+| Java | 21 | 编程语言 |
+| Google ADK | 1.7.0 | Agent Development Kit |
+| Spring AI | 2.0.1 | AI 集成框架 |
 | LangChain4j | 1.4.0 | LLM 应用框架 |
 
 ### 数据存储

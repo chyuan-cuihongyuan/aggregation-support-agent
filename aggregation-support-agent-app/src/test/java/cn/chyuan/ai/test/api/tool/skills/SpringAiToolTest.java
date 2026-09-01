@@ -10,7 +10,8 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.ai.openai.api.OpenAiApi;
+import com.openai.client.OpenAIClient;
+import com.openai.client.okhttp.OpenAIOkHttpClient;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.core.io.ClassPathResource;
 
@@ -29,11 +30,9 @@ import java.util.ArrayList;
 public class SpringAiToolTest {
 
     public static void main(String[] args) {
-        OpenAiApi openAiApi = OpenAiApi.builder()
-                .baseUrl("https://apis.itedus.cn")
+        OpenAIClient openAIClient = OpenAIOkHttpClient.builder()
+                .baseUrl("https://apis.itedus.cn/v1")
                 .apiKey("sk-REDACTED")
-                .completionsPath("v1/chat/completions")
-                .embeddingsPath("v1/embeddings")
                 .build();
 
         // https://github.com/spring-ai-community/spring-ai-agent-utils
@@ -46,8 +45,8 @@ public class SpringAiToolTest {
                 .build();
 
         ChatModel chatModel = OpenAiChatModel.builder()
-                .openAiApi(openAiApi)
-                .defaultOptions(OpenAiChatOptions.builder()
+                .openAiClient(openAIClient)
+                .options(OpenAiChatOptions.builder()
                         .model("gpt-4.1")
                         .toolCallbacks(new ArrayList<>(){{
                             add(toolCallback02);

@@ -11,14 +11,20 @@ import cn.chyuan.ai.domain.rag.service.IRagService;
 import cn.chyuan.ai.trigger.http.AgentServiceController;
 import com.alibaba.fastjson.JSON;
 import lombok.extern.slf4j.Slf4j;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -43,8 +49,8 @@ public class EndToEndIntegrationTest {
     @LocalServerPort
     private int port;
 
-    @Autowired
-    private TestRestTemplate restTemplate;
+    // Boot 4 移除 TestRestTemplate；本测试 baseUrl 已含随机端口，原生 RestTemplate 等价替换（工单 0023）
+    private final RestTemplate restTemplate = new RestTemplate();
 
     @Autowired(required = false)
     private IRagService ragService;
