@@ -151,7 +151,7 @@ public class AuthController {
      */
     @RequestMapping(value = "logout", method = RequestMethod.POST)
     public Response<Boolean> logout(HttpServletRequest request, HttpServletResponse response) {
-        String token = (String) request.getAttribute(JwtAuthFilter.ATTR_AUTH_TOKEN);
+        String token = (String) request.getAttribute(JwtAuthFilter.REQUEST_ATTR_JWT);
         if (token != null && !token.isEmpty()) {
             tokenService.removeToken(token);
         }

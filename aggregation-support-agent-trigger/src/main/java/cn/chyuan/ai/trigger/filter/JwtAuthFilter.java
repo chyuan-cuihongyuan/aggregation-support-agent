@@ -29,7 +29,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     public static final String ATTR_USER_ID = "userId";
     public static final String ATTR_USERNAME = "username";
     public static final String ATTR_ROLE = "role";
-    public static final String ATTR_AUTH_TOKEN = "authToken";
+    public static final String REQUEST_ATTR_JWT = "authToken";
 
     private static final String COOKIE_NAME = "auth_token";
 
@@ -96,9 +96,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             String renewedToken = tokenService.renewToken(token);
             if (renewedToken != null) {
                 response.setHeader("Set-Cookie", buildCookieHeader(renewedToken));
-                request.setAttribute(ATTR_AUTH_TOKEN, renewedToken);
+                request.setAttribute(REQUEST_ATTR_JWT, renewedToken);
             } else {
-                request.setAttribute(ATTR_AUTH_TOKEN, token);
+                request.setAttribute(REQUEST_ATTR_JWT, token);
             }
 
             RequestScopeContext.set(resolveTenantScope(claims, String.valueOf(userId)));

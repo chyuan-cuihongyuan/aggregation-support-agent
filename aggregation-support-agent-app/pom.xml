@@ -144,6 +144,21 @@
 
         <!-- spring ai & google adk end -->
 
+        <!-- Buzhou 按模块引入（工单 0007 决策 D1-C / 0026：enhance 叠加 + memory；
+             不引 starter 全家桶，模块自带 AutoConfiguration，属性前缀 buzhou.*） -->
+        <dependency>
+            <groupId>io.github.chyuan-cuihongyuan</groupId>
+            <artifactId>buzhou-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.chyuan-cuihongyuan</groupId>
+            <artifactId>buzhou-memory</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.chyuan-cuihongyuan</groupId>
+            <artifactId>buzhou-store-jdbc</artifactId>
+        </dependency>
+
         <!-- 工程模块；启动依赖 trigger->domain, infrastructure-->
         <dependency>
             <groupId>cn.chyuan.ai</groupId>

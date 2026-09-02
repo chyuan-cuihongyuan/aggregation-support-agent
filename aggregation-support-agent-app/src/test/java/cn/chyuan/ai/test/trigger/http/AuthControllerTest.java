@@ -259,7 +259,7 @@ public class AuthControllerTest {
     @DisplayName("登出成功 — 返回成功响应码并清除 Cookie")
     public void testLogout_Success() {
         // 准备 — 模拟已认证用户
-        request.setAttribute(JwtAuthFilter.ATTR_AUTH_TOKEN, "valid-jwt-token");
+        request.setAttribute(JwtAuthFilter.REQUEST_ATTR_JWT, "valid-jwt-token");
         request.setAttribute(JwtAuthFilter.ATTR_USER_ID, 1L);
         request.setAttribute(JwtAuthFilter.ATTR_USERNAME, "testuser");
 
@@ -276,7 +276,7 @@ public class AuthControllerTest {
     @DisplayName("登出 — 无 Token 时仍然返回成功")
     public void testLogout_NoToken() {
         // 准备 — 不设置任何 token
-        request.setAttribute(JwtAuthFilter.ATTR_AUTH_TOKEN, null);
+        request.setAttribute(JwtAuthFilter.REQUEST_ATTR_JWT, null);
 
         // 执行
         Response<Boolean> result = authController.logout(request, response);
@@ -291,7 +291,7 @@ public class AuthControllerTest {
     @DisplayName("登出 — 空 Token 时不清除 Token")
     public void testLogout_EmptyToken() {
         // 准备
-        request.setAttribute(JwtAuthFilter.ATTR_AUTH_TOKEN, "");
+        request.setAttribute(JwtAuthFilter.REQUEST_ATTR_JWT, "");
 
         // 执行
         Response<Boolean> result = authController.logout(request, response);

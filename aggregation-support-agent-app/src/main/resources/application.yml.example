@@ -3,3 +3,16 @@ spring:
     name: aggregation-support-agent-app
   profiles:
     active: dev  # 可选: dev / test / prod
+
+# Buzhou 增强链（工单 0007 决策 D1-C/D5-C + 0026 基座）：
+# enhance 链默认关闭——开启前确认 buzhou 模块依赖与（jdbc 场景）数据库可达。
+# chain.enhance-enabled=false 时 BuzhouChatClientConfig 完全不装配，ADK 主链零影响。
+buzhou:
+  chain:
+    enhance-enabled: false   # 单会话长对话第二链开关（guard 工单 0027 落地后按 agent 类型启用）
+  store:
+    type: memory             # 开发/测试内存态；生产（dev-ops compose）改 jdbc：
+                             #   buzhou.store.type=jdbc（复用主 DataSource，自动执行 V1-V3 迁移建 buzhou_* 表，
+                             #   dialect AUTO 探测 MySQL；写失败策略 write-failure-policy 默认 FAIL_TURN）
+  memory:
+    enabled: true            # 渐进压缩（P0 恒留）+ 召回搜索；阈值 compact-threshold 默认 0.90

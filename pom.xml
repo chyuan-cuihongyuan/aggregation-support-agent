@@ -62,6 +62,16 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- Buzhou BOM 直引（工单 0026）：platform-bom 源码已含同条 import，但本机 mvn install 被
+                 门禁拦截、~/.m2 里的 platform-bom 1.0 尚无 buhou 条目，故此处直接 import 保证本地可构建；
+                 platform-bom 下次 install 后两条 import 同版本并存无害 -->
+            <dependency>
+                <groupId>io.github.chyuan-cuihongyuan</groupId>
+                <artifactId>buzhou-bom</artifactId>
+                <version>0.1.0-SNAPSHOT</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <!-- Milvus 向量数据库 Java SDK -->
             <dependency>
                 <groupId>io.milvus</groupId>
