@@ -14,6 +14,7 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Primary;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -37,6 +38,7 @@ import java.util.stream.Collectors;
  * updateEmbedding 用 UPDATE（Milvus 只能删+插）。
  */
 @Slf4j
+@Primary
 @Repository
 @ConditionalOnProperty(name = "pgvector.enabled", havingValue = "true", matchIfMissing = true)
 public class AgentMemoryPgVectorRepository implements IAgentMemoryRepository {

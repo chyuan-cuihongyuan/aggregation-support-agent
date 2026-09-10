@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -24,6 +25,11 @@ import java.util.Map;
 /**
  * pgvector 向量仓库实现（工单 0129，三期 Milvus→pgvector 替换）——RAG 文档块。
  *
+ * <p>双引擎共存口径（用户 2026-09-10 明确：MySQL/PostgreSQL 与 Milvus/pgvector 均长期支持）：
+ * pgvector.enabled（默认 true）与 milvus.enabled（默认 false）可独立开关；
+ * <b>两者同时开启时本实现为 @Primary（pgvector 承接读写，Milvus Bean 待命不注入）</b>，
+ * 单独开 milvus.enabled=true + pgvector.enabled=false 则完整回到 Milvus 路径。
+ *
  * <p>表结构：biz_chunks(id identity, content text, metadata jsonb, embedding halfvec(dim))；
  * 索引 hnsw(embedding halfvec_l2_ops) + gin(metadata jsonb_path_ops)。
  * 分数语义与 Milvus 时代严格对齐：<b>L2 距离，越小越好</b>（结果按距离升序=最优在前），
@@ -35,6 +41,7 @@ import java.util.Map;
  * ③租户过滤 metadata @> jsonb + GIN，库级开启 hnsw.iterative_scan 对抗后过滤少召回。
  */
 @Slf4j
+@Primary
 @Repository
 @ConditionalOnProperty(name = "pgvector.enabled", havingValue = "true", matchIfMissing = true)
 public class PgVectorVectorStoreRepository implements IVectorStoreRepository {

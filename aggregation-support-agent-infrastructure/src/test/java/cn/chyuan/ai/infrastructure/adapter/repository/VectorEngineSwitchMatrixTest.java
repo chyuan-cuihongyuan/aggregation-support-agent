@@ -25,6 +25,10 @@ class VectorEngineSwitchMatrixTest {
             assertTrue(conditional != null && "pgvector.enabled".equals(conditional.name()[0]),
                     clazz.getSimpleName() + " 应挂 pgvector.enabled");
             assertTrue(conditional.matchIfMissing(), clazz.getSimpleName() + " 应默认启用（matchIfMissing=true）");
+            // 双引擎同开共存（用户口径：Milvus/pgvector 均长期支持）：
+            // pgvector 为 @Primary 消除注入歧义，单开 milvus 则完整回退 Milvus 路径
+            assertTrue(clazz.isAnnotationPresent(org.springframework.context.annotation.Primary.class),
+                    clazz.getSimpleName() + " 应为 @Primary（两引擎同开时消除注入歧义）");
         }
     }
 
