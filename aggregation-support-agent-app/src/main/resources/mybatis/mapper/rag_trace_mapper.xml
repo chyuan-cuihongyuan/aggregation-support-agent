@@ -106,14 +106,24 @@
         ORDER BY total DESC
     </select>
 
-    <!-- 按日期（yyyy-MM-dd）聚合 -->
-    <select id="statByDay" resultMap="StatResultMap">
+    <!-- 按日期（yyyy-MM-dd）聚合。双方言（工单 0127）：DATE_FORMAT 为 MySQL 专有，PG 用 to_char -->
+    <select id="statByDay" resultMap="StatResultMap" databaseId="mysql">
         SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS group_key,
                COUNT(1) AS total,
                AVG(retrieval_topk) AS avg_topk
         FROM rag_trace
         <include refid="adminConditionWhere"/>
         GROUP BY DATE_FORMAT(create_time, '%Y-%m-%d')
+        ORDER BY group_key ASC
+    </select>
+
+    <select id="statByDay" resultMap="StatResultMap" databaseId="postgresql">
+        SELECT to_char(create_time, 'YYYY-MM-DD') AS group_key,
+               COUNT(1) AS total,
+               AVG(retrieval_topk) AS avg_topk
+        FROM rag_trace
+        <include refid="adminConditionWhere"/>
+        GROUP BY to_char(create_time, 'YYYY-MM-DD')
         ORDER BY group_key ASC
     </select>
 

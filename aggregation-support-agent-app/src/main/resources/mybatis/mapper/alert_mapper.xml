@@ -61,7 +61,7 @@
                metrics_json, labels_json, description, alert_time, create_time, update_time
         FROM alert
         ORDER BY alert_time DESC
-        LIMIT #{offset}, #{limit}
+        LIMIT #{limit} OFFSET #{offset}
     </select>
 
     <select id="countAll" resultType="int">
