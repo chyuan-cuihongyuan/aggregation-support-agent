@@ -386,3 +386,21 @@ CREATE INDEX IF NOT EXISTS idx_biz_chunks_hnsw ON biz_chunks USING hnsw (embeddi
 CREATE INDEX IF NOT EXISTS idx_biz_chunks_metadata ON biz_chunks USING gin (metadata jsonb_path_ops);
 -- 过滤+ANN 后过滤少召回：库级开启 iterative scan（需库 owner；应用启动幂等设置）
 -- ALTER DATABASE <db> SET hnsw.iterative_scan = strict_order;
+
+-- Agent 记忆向量（工单 0130；canonical DDL 由 AgentMemoryPgVectorRepository @PostConstruct 幂等维护）
+-- 相似度语义：1 - (embedding <=> q)，[0,1] 越大越好（对齐 Milvus COSINE 分数）
+CREATE TABLE IF NOT EXISTS agent_memory_vec (
+  memory_id    VARCHAR(64) PRIMARY KEY,
+  content      TEXT,
+  tenant_id    VARCHAR(64),
+  user_id      VARCHAR(64),
+  agent_id     VARCHAR(64),
+  scope        VARCHAR(255),
+  memory_type  VARCHAR(32),
+  importance   REAL,
+  content_hash VARCHAR(64),
+  created_at   BIGINT,
+  embedding    halfvec(2048)
+);
+COMMENT ON TABLE agent_memory_vec IS 'Agent 记忆向量（HNSW COSINE；scope 前缀 LIKE 过滤）';
+CREATE INDEX IF NOT EXISTS idx_amv_hnsw ON agent_memory_vec USING hnsw (embedding halfvec_cosine_ops) WITH (m = 16, ef_construction = 200);

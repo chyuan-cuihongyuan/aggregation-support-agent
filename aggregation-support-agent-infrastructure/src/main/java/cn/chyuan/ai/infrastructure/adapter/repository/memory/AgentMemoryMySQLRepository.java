@@ -22,12 +22,12 @@ import java.util.stream.Collectors;
 /**
  * Agent 记忆 MySQL-only 仓储实现（降级方案）
  * <p>
- * 当 Milvus 不可用时，使用此实现作为降级方案。
+ * 当 Milvus 与 pgvector 均不可用时，使用此实现作为降级方案（工单 0130 补充 pgvector 判定）。
  * 不支持向量检索，仅支持基于内容哈希的精确匹配和时间排序。
  */
 @Slf4j
 @Repository
-@ConditionalOnMissingBean(AgentMemoryMilvusRepository.class)
+@ConditionalOnMissingBean({AgentMemoryMilvusRepository.class, AgentMemoryPgVectorRepository.class})
 @RequiredArgsConstructor
 public class AgentMemoryMySQLRepository implements IAgentMemoryRepository {
     
