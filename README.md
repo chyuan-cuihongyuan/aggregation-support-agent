@@ -32,7 +32,7 @@ Aggregation Support Agent 是一个基于 Spring Boot 的智能运维平台，�
 | POST | `/api/v1/chat_stream` | 流式对话（SSE） |
 | POST | `/api/v1/upload` | 上传文档到知识库 |
 | POST | `/api/v1/ai_ops` | AIOps 一键分析（SSE） |
-| GET | `/api/v1/milvus/health` | Milvus 健康检查 |
+| GET | `/api/v1/vector/health`（旧路径 `/api/v1/milvus/health` 兼容） | 向量引擎健康检查（engine=pgvector/milvus） |
 
 ### 3. RAG 知识库功能
 
@@ -135,7 +135,7 @@ AIOps 采用 Planner-Executor 串行工作流：
 
 | 技术 | 版本 | 说明 |
 |------|------|------|
-| Milvus | 2.6.10 | 向量数据库 |
+| pgvector | 0.8.6 | 向量引擎（PG 扩展，三期起默认；Milvus 2.6.10 过渡保留） |
 | MySQL | 8.0.32 | 关系数据库 |
 | Redis | 6.2 | 缓存 |
 | Elasticsearch | 8.x | 全文检索（可选） |
@@ -171,7 +171,7 @@ AIOps 采用 Planner-Executor 串行工作流：
 | Prometheus | 监控指标 |
 | Grafana | 监控面板 |
 | Loki | 日志聚合 |
-| Attu | Milvus 可视化管理 |
+| Attu | Milvus 可视化管理（三期 Milvus 退场后移除，历史条目） |
 
 ### 设计模式
 
@@ -228,8 +228,8 @@ done
 # 查询智能体列表
 curl http://127.0.0.1:8091/api/v1/query_ai_agent_config_list
 
-# 检查 Milvus 健康状态
-curl http://127.0.0.1:8091/api/v1/milvus/health
+# 检查向量引擎健康状态（engine=pgvector/milvus）
+curl http://127.0.0.1:8091/api/v1/vector/health
 ```
 
 ## 项目结构

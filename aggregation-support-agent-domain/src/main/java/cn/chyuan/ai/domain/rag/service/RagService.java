@@ -23,6 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.Resource;
@@ -44,7 +45,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 @ConditionalOnMissingBean(EnhancedRagService.class)
-@ConditionalOnProperty(name = "milvus.enabled", havingValue = "true", matchIfMissing = false)
+@Conditional(cn.chyuan.ai.domain.rag.condition.VectorEngineEnabledCondition.class)
 public class RagService implements IRagService {
 
     /** 检索返回的最相似文档数量 */

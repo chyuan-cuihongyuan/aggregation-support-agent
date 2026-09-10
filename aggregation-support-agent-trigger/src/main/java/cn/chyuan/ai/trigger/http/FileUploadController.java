@@ -116,7 +116,7 @@ public class FileUploadController {
                         fileName, "RAG服务未启用", ip, ua);
                 return Response.<UploadResponseDTO>builder()
                         .code(ResponseCode.UN_ERROR.getCode())
-                        .info("RAG服务未启用，请配置milvus.enabled=true")
+                        .info("RAG服务未启用，请配置向量引擎（pgvector.enabled 默认开；Milvus 过渡需 milvus.enabled=true）")
                         .build();
             }
 
@@ -207,7 +207,7 @@ public class FileUploadController {
                         fileName, "RAG服务未启用", ip, ua);
                 return Response.<UploadResponseDTO>builder()
                         .code(ResponseCode.UN_ERROR.getCode())
-                        .info("RAG服务未启用，请配置milvus.enabled=true")
+                        .info("RAG服务未启用，请配置向量引擎（pgvector.enabled 默认开；Milvus 过渡需 milvus.enabled=true）")
                         .build();
             }
 

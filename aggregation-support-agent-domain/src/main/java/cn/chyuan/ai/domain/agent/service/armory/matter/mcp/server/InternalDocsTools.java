@@ -245,7 +245,7 @@ public class InternalDocsTools {
     private Map<String, Object> ragDisabledResponse(String query) {
         Map<String, Object> errorResponse = new HashMap<>();
         errorResponse.put("error", true);
-        errorResponse.put("message", "RAG服务未启用，请配置milvus.enabled=true");
+        errorResponse.put("message", "RAG服务未启用，请配置向量引擎（pgvector.enabled 默认开；Milvus 过渡需 milvus.enabled=true）");
         if (query != null) {
             errorResponse.put("query", query);
         }

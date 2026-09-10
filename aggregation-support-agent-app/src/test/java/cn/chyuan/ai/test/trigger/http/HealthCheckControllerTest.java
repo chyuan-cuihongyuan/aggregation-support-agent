@@ -108,7 +108,7 @@ public class HealthCheckControllerTest {
         assertEquals(ResponseCode.SUCCESS.getCode(), response.getCode(), "响应码应为 0000");
         assertEquals("DISABLED", response.getData().get("milvus"), "Milvus 状态应为 DISABLED");
         assertEquals("UNAVAILABLE", response.getData().get("rag"), "RAG 应为 UNAVAILABLE");
-        assertEquals("RAG服务未启用，请配置milvus.enabled=true", response.getData().get("message"),
+        assertEquals("RAG服务未启用（向量引擎默认 pgvector，Milvus 过渡需 milvus.enabled=true）", response.getData().get("message"),
                 "提示信息应引导用户配置");
     }
 
@@ -123,7 +123,7 @@ public class HealthCheckControllerTest {
 
         // 验证
         assertEquals(ResponseCode.UN_ERROR.getCode(), response.getCode(), "响应码应为未知失败");
-        assertTrue(response.getInfo().contains("Milvus 健康检查失败"), "响应信息应包含失败描述");
+        assertTrue(response.getInfo().contains("向量引擎健康检查失败"), "响应信息应包含失败描述");
         assertEquals("DOWN", response.getData().get("milvus"), "Milvus 状态应为 DOWN");
         assertEquals("UNAVAILABLE", response.getData().get("rag"), "RAG 应为 UNAVAILABLE");
         assertEquals("Milvus 连接超时", response.getData().get("error"), "错误信息应与异常消息一致");

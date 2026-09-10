@@ -30,6 +30,7 @@ import cn.chyuan.ai.domain.rag.support.RagSourceCollector;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
@@ -61,7 +62,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @Primary
 @Service
-@ConditionalOnProperty(name = "milvus.enabled", havingValue = "true", matchIfMissing = false)
+@Conditional(cn.chyuan.ai.domain.rag.condition.VectorEngineEnabledCondition.class)
 public class EnhancedRagService implements IRagService {
 
     /** 检索返回的最相似文档数量 */

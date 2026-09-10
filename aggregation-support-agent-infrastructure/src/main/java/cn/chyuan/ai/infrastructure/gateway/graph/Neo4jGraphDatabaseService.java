@@ -33,7 +33,7 @@ public class Neo4jGraphDatabaseService implements IGraphDatabaseService {
     private Driver neo4jDriver;
 
     /** 向量维度 — 从配置读取，与嵌入模型输出维度保持一致 */
-    @Value("${milvus.dimension:2048}")
+    @Value("${vector.dimension:2048}")
     private int vectorDimension;
 
     @Override
