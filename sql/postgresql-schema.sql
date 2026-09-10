@@ -367,3 +367,22 @@ COMMENT ON COLUMN agent_memory.updated_at IS '更新时间（应用层维护）'
 CREATE INDEX IF NOT EXISTS idx_memory_tenant_user ON agent_memory (tenant_id, user_id, status);
 CREATE INDEX IF NOT EXISTS idx_memory_scope ON agent_memory (scope);
 CREATE INDEX IF NOT EXISTS idx_memory_expire ON agent_memory (tenant_id, user_id, expires_at);
+
+-- =============================================================================
+-- pgvector 向量表（工单 0129，三期 Milvus→pgvector；canonical DDL 由
+-- PgVectorVectorStoreRepository.ensureCollection 幂等维护，此处为登记副本）
+-- =============================================================================
+
+-- RAG 文档块向量（替代 Milvus biz collection：IVF_FLAT+L2 → HNSW halfvec_l2_ops）
+CREATE TABLE IF NOT EXISTS biz_chunks (
+  id        BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  content   TEXT   NOT NULL,
+  metadata  JSONB  NOT NULL DEFAULT '{}'::jsonb,
+  embedding halfvec(2048)
+);
+COMMENT ON TABLE biz_chunks IS 'RAG 文档块向量（租户过滤经 metadata @> + GIN）';
+COMMENT ON COLUMN biz_chunks.embedding IS 'halfvec：dim 2048 超 vector 索引上限 2000';
+CREATE INDEX IF NOT EXISTS idx_biz_chunks_hnsw ON biz_chunks USING hnsw (embedding halfvec_l2_ops) WITH (m = 16, ef_construction = 200);
+CREATE INDEX IF NOT EXISTS idx_biz_chunks_metadata ON biz_chunks USING gin (metadata jsonb_path_ops);
+-- 过滤+ANN 后过滤少召回：库级开启 iterative scan（需库 owner；应用启动幂等设置）
+-- ALTER DATABASE <db> SET hnsw.iterative_scan = strict_order;
