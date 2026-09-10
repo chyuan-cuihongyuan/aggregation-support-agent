@@ -30,6 +30,14 @@ thread:
 #    connection-test-query: SELECT 1
 #  type: com.zaxxer.hikari.HikariDataSource
 
+# ── PostgreSQL 切换模板（三期 PG 双轨，工单 0122）────────────────────
+# 切 PG 时将上方 url / driver-class-name 替换为：
+#   url: jdbc:postgresql://<your-host>:5432/<database>?currentSchema=public
+#   driver-class-name: org.postgresql.Driver
+# 连接池与 connection-test-query: SELECT 1 对 PG 同样适用。
+# 建表脚本：sql/ 目录双方言 DDL（MySQL/PG）。
+# ─────────────────────────────────────────────────────────────────────
+
 #mybatis:
 #  mapper-locations: classpath:/mybatis/mapper/*.xml
 #  config-location:  classpath:/mybatis/config/mybatis-config.xml
