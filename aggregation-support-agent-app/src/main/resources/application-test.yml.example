@@ -79,3 +79,6 @@ rag:
   cache-enabled: false
   cache-ttl-seconds: 300
   cache-max-capacity: 1000
+  # 引用溯源对齐（工单 0169）：未对齐句阈值（对齐度低于该值计入未对齐列表）
+  citation:
+    align-threshold: 0.1
