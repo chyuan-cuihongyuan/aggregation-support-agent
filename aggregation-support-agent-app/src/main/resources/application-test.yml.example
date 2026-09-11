@@ -71,3 +71,7 @@ rag:
   # 规则版同义扩展表（key=value 逗号分隔，工单 0165）
   rewrite:
     synonyms: ""
+  # 父子分块装配（工单 0166）：默认关=语义分块原行为；开启后子块元数据携带 parent_id/parent_text，检索命中去重回取父块
+  parent-child-enabled: false
+  parent-child:
+    parent-max-chars: 1000

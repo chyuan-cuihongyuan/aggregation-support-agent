@@ -276,6 +276,8 @@ CREATE TABLE IF NOT EXISTS rag_trace (
   rewrite_text        TEXT,
   retrieval_topk      INT           NULL,
   source_docs         TEXT,
+  parent_ids          TEXT,
+  parent_texts        TEXT,
   answer_score        DECIMAL(10,6) NULL,
   hallucination_score DECIMAL(10,6) NULL,
   create_time         TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -290,12 +292,20 @@ COMMENT ON COLUMN rag_trace.query_text IS '原始查询文本';
 COMMENT ON COLUMN rag_trace.rewrite_text IS 'Query 改写后的检索文本';
 COMMENT ON COLUMN rag_trace.retrieval_topk IS '检索 TopK（PO Integer→INT）';
 COMMENT ON COLUMN rag_trace.source_docs IS '命中证据 JSON 字符串（PO String→TEXT）';
+COMMENT ON COLUMN rag_trace.parent_ids IS '命中子块对应父块ID列表（JSON 数组文本，工单 0166 父子分块；存量行 NULL）';
+COMMENT ON COLUMN rag_trace.parent_texts IS '命中子块对应父块文本列表（JSON 数组文本，工单 0166 父子分块；存量行 NULL）';
 COMMENT ON COLUMN rag_trace.answer_score IS '答案质量分（预留，PO Double→DECIMAL(10,6)）';
 COMMENT ON COLUMN rag_trace.hallucination_score IS '幻觉率（预留，PO Double→DECIMAL(10,6)）';
 COMMENT ON COLUMN rag_trace.create_time IS '创建时间';
 CREATE INDEX IF NOT EXISTS idx_rag_trace_trace ON rag_trace (trace_id);
 CREATE INDEX IF NOT EXISTS idx_rag_trace_scope ON rag_trace (tenant_id, owner_user_id, create_time);
 CREATE INDEX IF NOT EXISTS idx_rag_trace_session ON rag_trace (session_id, create_time);
+
+-- 存量库迁移（工单 0166 父子分块，rag_trace 增列；ADD COLUMN IF NOT EXISTS 幂等可重复执行）
+ALTER TABLE rag_trace ADD COLUMN IF NOT EXISTS parent_ids   TEXT;
+ALTER TABLE rag_trace ADD COLUMN IF NOT EXISTS parent_texts TEXT;
+COMMENT ON COLUMN rag_trace.parent_ids IS '命中子块对应父块ID列表（JSON 数组文本，工单 0166 父子分块）';
+COMMENT ON COLUMN rag_trace.parent_texts IS '命中子块对应父块文本列表（JSON 数组文本，工单 0166 父子分块）';
 
 -- 9. 用户表（user_mapper.xml + UserPO；PG 保留字 user，建表须带双引号 "user"）
 CREATE TABLE IF NOT EXISTS "user" (

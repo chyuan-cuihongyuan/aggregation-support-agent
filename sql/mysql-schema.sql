@@ -179,6 +179,8 @@ CREATE TABLE IF NOT EXISTS rag_trace (
   rewrite_text        TEXT          COMMENT 'Query 改写后的检索文本',
   retrieval_topk      INT           NULL COMMENT '检索 TopK（PO Integer）',
   source_docs         TEXT          COMMENT '命中证据 JSON 字符串（PO String）',
+  parent_ids          TEXT          NULL COMMENT '命中子块对应父块ID列表（JSON 数组文本，工单 0166 父子分块；存量行 NULL）',
+  parent_texts        TEXT          NULL COMMENT '命中子块对应父块文本列表（JSON 数组文本，工单 0166 父子分块；存量行 NULL）',
   answer_score        DECIMAL(10,6) NULL COMMENT '答案质量分（预留，PO Double）',
   hallucination_score DECIMAL(10,6) NULL COMMENT '幻觉率（预留，PO Double）',
   create_time         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -229,3 +231,11 @@ CREATE TABLE IF NOT EXISTS agent_memory (
   KEY idx_memory_scope (scope),
   KEY idx_memory_expire (tenant_id, user_id, expires_at)
 ) COMMENT 'Agent记忆表';
+
+-- =============================================================================
+-- 存量库迁移段（工单 0166 父子分块，检索日志 rag_trace 增列；新库由上方
+-- CREATE TABLE 定义直接生效。MySQL 不支持 ADD COLUMN IF NOT EXISTS，
+-- 存量库按需手工执行并先验证列不存在）：
+-- ALTER TABLE rag_trace ADD COLUMN parent_ids   TEXT NULL COMMENT '命中子块对应父块ID列表（JSON 数组文本，工单 0166 父子分块）';
+-- ALTER TABLE rag_trace ADD COLUMN parent_texts TEXT NULL COMMENT '命中子块对应父块文本列表（JSON 数组文本，工单 0166 父子分块）';
+-- =============================================================================

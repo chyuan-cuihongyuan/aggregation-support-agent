@@ -38,4 +38,10 @@ public class RagSourceVO implements Serializable {
 
     /** 内容片段（截断 200 字符以内，便于前端展示） */
     private String snippet;
+
+    /** 父块ID（工单 0166 父子分块：命中子块对应父块；存量数据为 null） */
+    private String parentId;
+
+    /** 父块文本片段（工单 0166：截断 200 字符以内；存量数据为 null） */
+    private String parentText;
 }

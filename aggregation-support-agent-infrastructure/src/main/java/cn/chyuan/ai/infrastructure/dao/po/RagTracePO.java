@@ -48,6 +48,12 @@ public class RagTracePO implements Serializable {
     /** 命中证据 JSON 字符串（落库到 source_docs 列） */
     private String sourceDocs;
 
+    /** 父块ID列表（工单 0166 父子分块：JSON 数组文本，落库到 parent_ids 列） */
+    private String parentIds;
+
+    /** 父块文本列表（工单 0166：JSON 数组文本，落库到 parent_texts 列） */
+    private String parentTexts;
+
     /** 答案质量分（预留） */
     private Double answerScore;
 

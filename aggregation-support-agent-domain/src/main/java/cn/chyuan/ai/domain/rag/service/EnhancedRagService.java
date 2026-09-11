@@ -21,6 +21,7 @@ import cn.chyuan.ai.domain.rag.model.valobj.RagSourceVO;
 import cn.chyuan.ai.domain.rag.model.valobj.SearchOutcomeVO;
 import cn.chyuan.ai.domain.rag.model.valobj.SearchResultDetailVO;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
+import cn.chyuan.ai.domain.rag.service.chunker.ParentAssembler;
 import cn.chyuan.ai.domain.rag.service.chunker.ParentChildChunker;
 import cn.chyuan.ai.domain.rag.service.chunker.SemanticChunker;
 import cn.chyuan.ai.domain.rag.service.evaluation.AnswerQualityEvaluator;
@@ -132,6 +133,14 @@ public class EnhancedRagService implements IRagService {
     /** RRF 平滑因子 k（工单 0163 纯函数内核，默认 60 经验值） */
     @Value("${rag.retrieval.fusion.rrf-k:60}")
     private int hybridRrfK;
+
+    /** 是否启用父子分块装配（工单 0166：开启后索引子块+检索命中去重回取父块；默认关=语义分块原行为零回归） */
+    @Value("${rag.parent-child-enabled:false}")
+    private boolean parentChildEnabled;
+
+    /** 父块文本长度上限（工单 0166 装配器截断配置，默认 1000 字符） */
+    @Value("${rag.parent-child.parent-max-chars:1000}")
+    private int parentMaxChars;
 
     @Value("${rag.retrieval.timeout-ms}")
     private long retrievalTimeoutMs;
@@ -246,9 +255,8 @@ public class EnhancedRagService implements IRagService {
                 // Parent-Child分块：只索引子chunk
                 ParentChildChunker.ParentChildChunks parentChildChunks = parentChildChunker.chunk(parsedDocument, command.getFileName());
                 chunks = parentChildChunks.getChildChunks();
-
-                // 存储父chunk到元数据（用于检索后获取完整上下文）
-                // 实际生产中可能需要单独存储父chunk
+                // 工单 0166：父块全文写入子块元数据（parent_id/parent_text），供检索后 ParentAssembler 去重回取
+                attachParentMetadata(parentChildChunks);
                 log.info("使用Parent-Child分块: childCount={}, parentCount={}",
                         parentChildChunks.getChildChunks().size(), parentChildChunks.getParentChunks().size());
             } else {
@@ -426,6 +434,9 @@ public class EnhancedRagService implements IRagService {
             holder.setRetrievalStages(com.alibaba.fastjson.JSON.toJSONString(stages));
         }
 
+        // W4 父子分块装配（工单 0166）：开启时命中子块去重回取父块（关闭=原样返回零回归）
+        results = assembleParentContext(results);
+
         log.info("检索完成: resultCount={}, rerankApplied={}, stages={}", results.size(), rerankApplied, stages.size());
         return new InternalSearchOutput(rewriteQuery, results, rerankApplied);
     }
@@ -476,6 +487,13 @@ public class EnhancedRagService implements IRagService {
                 .rewriteText(internal.rewriteQuery)
                 .retrievalTopk(topK)
                 .sources(sources)
+                // 工单 0166：父子分块开启时记录去重后的父块 ID/文本（检索日志增列）
+                .parentIds(parentChildEnabled
+                        ? collectDistinctParentField(rawResults, ParentAssembler.META_PARENT_ID, ParentAssembler.META_PARENT_ID_LEGACY)
+                        : null)
+                .parentTexts(parentChildEnabled
+                        ? collectDistinctParentField(rawResults, ParentAssembler.META_PARENT_TEXT, ParentAssembler.META_PARENT_TEXT_LEGACY)
+                        : null)
                 .createTime(new Date())
                 .build();
         // 兼容：如果 RequestScopeContext 后续扩展出会话/智能体上下文，可以在此覆盖
@@ -512,6 +530,14 @@ public class EnhancedRagService implements IRagService {
                 ? String.valueOf(metadata.get("chunkId")) : null;
         Integer chunkIndex = metadata != null && metadata.get("chunkIndex") != null
                 ? ((Number) metadata.get("chunkIndex")).intValue() : null;
+        // 工单 0166 父子分块：父块 ID/文本透传进证据 VO（文本截断 200，与 snippet 同口径）
+        String parentId = metadata != null && metadata.get(ParentAssembler.META_PARENT_ID) != null
+                ? String.valueOf(metadata.get(ParentAssembler.META_PARENT_ID)) : null;
+        String parentText = metadata != null && metadata.get(ParentAssembler.META_PARENT_TEXT) != null
+                ? String.valueOf(metadata.get(ParentAssembler.META_PARENT_TEXT)) : null;
+        if (parentText != null && parentText.length() > 200) {
+            parentText = parentText.substring(0, 200);
+        }
 
         String content = result.getContent();
         String snippet = content == null ? "" : (content.length() > 200 ? content.substring(0, 200) : content);
@@ -524,6 +550,8 @@ public class EnhancedRagService implements IRagService {
                 .score(result.getScore())
                 .retrievalType(retrievalType)
                 .snippet(snippet)
+                .parentId(parentId)
+                .parentText(parentText)
                 .build();
     }
 
@@ -857,10 +885,68 @@ public class EnhancedRagService implements IRagService {
 
     /**
      * 判断是否启用Parent-Child分块
+     * <p>
+     * 工单 0166：改为读取 rag.parent-child-enabled 配置（默认 false，
+     * 关闭时走语义分块原行为零回归）
      */
     private boolean isParentChildEnabled() {
-        // 可以通过配置控制
-        return false; // 暂时禁用，需要更多测试
+        return parentChildEnabled;
+    }
+
+    /**
+     * 父块元数据下放（工单 0166）：按 parentId 关联把父块全文写入子块元数据
+     * parent_id / parent_text（向量为 jsonb/JSON 元数据，可承载），
+     * 检索命中后 ParentAssembler 据此去重回取父块
+     */
+    private void attachParentMetadata(ParentChildChunker.ParentChildChunks parentChildChunks) {
+        Map<String, DocumentChunkEntity> parentById = new java.util.HashMap<>();
+        for (DocumentChunkEntity parent : parentChildChunks.getParentChunks()) {
+            parentById.put(parent.getId(), parent);
+        }
+        for (DocumentChunkEntity child : parentChildChunks.getChildChunks()) {
+            Object parentId = child.getMetadata().get("parentId");
+            if (parentId == null) {
+                continue;
+            }
+            child.getMetadata().put(ParentAssembler.META_PARENT_ID, String.valueOf(parentId));
+            DocumentChunkEntity parent = parentById.get(String.valueOf(parentId));
+            child.getMetadata().put(ParentAssembler.META_PARENT_TEXT,
+                    parent != null && parent.getContent() != null ? parent.getContent() : "");
+        }
+    }
+
+    /**
+     * W4 装配挂点（工单 0166）：父子分块开启时，命中子块去重回取父块
+     */
+    private List<VectorSearchResultVO> assembleParentContext(List<VectorSearchResultVO> results) {
+        if (!parentChildEnabled || results == null || results.isEmpty()) {
+            return results;
+        }
+        List<VectorSearchResultVO> assembled = new ParentAssembler(parentMaxChars).assemble(results);
+        log.info("父子分块装配完成: hits={}, assembled={}", results.size(), assembled.size());
+        return assembled;
+    }
+
+    /**
+     * 收集去重后的父块字段（工单 0166）：检索日志增列 parent_ids / parent_texts（JSON 数组文本）
+     */
+    private String collectDistinctParentField(List<VectorSearchResultVO> results, String primaryKey, String fallbackKey) {
+        List<String> values = new ArrayList<>();
+        if (results != null) {
+            for (VectorSearchResultVO result : results) {
+                Map<String, Object> metadata = result.getMetadata();
+                Object value = metadata != null && metadata.get(primaryKey) != null
+                        ? metadata.get(primaryKey)
+                        : (metadata != null ? metadata.get(fallbackKey) : null);
+                if (value != null) {
+                    String v = String.valueOf(value);
+                    if (!v.isBlank() && !values.contains(v)) {
+                        values.add(v);
+                    }
+                }
+            }
+        }
+        return values.isEmpty() ? null : com.alibaba.fastjson.JSON.toJSONString(values);
     }
 
     /**

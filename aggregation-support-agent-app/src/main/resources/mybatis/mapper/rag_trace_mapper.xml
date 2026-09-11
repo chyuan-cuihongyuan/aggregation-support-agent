@@ -13,6 +13,9 @@
         <result column="rewrite_text" property="rewriteText"/>
         <result column="retrieval_topk" property="retrievalTopk"/>
         <result column="source_docs" property="sourceDocs"/>
+        <!-- 工单 0166 父子分块：检索日志增列（存量行 NULL，双方言同型 TEXT 无需分叉） -->
+        <result column="parent_ids" property="parentIds"/>
+        <result column="parent_texts" property="parentTexts"/>
         <result column="answer_score" property="answerScore"/>
         <result column="hallucination_score" property="hallucinationScore"/>
         <result column="create_time" property="createTime"/>
@@ -39,14 +42,17 @@
     <insert id="insert" parameterType="cn.chyuan.ai.infrastructure.dao.po.RagTracePO"
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO rag_trace (trace_id, tenant_id, owner_user_id, session_id, agent_id, query_text, rewrite_text,
-                               retrieval_topk, source_docs, answer_score, hallucination_score, create_time)
+                               retrieval_topk, source_docs, parent_ids, parent_texts,
+                               answer_score, hallucination_score, create_time)
         VALUES (#{traceId}, #{tenantId}, #{ownerUserId}, #{sessionId}, #{agentId}, #{queryText}, #{rewriteText},
-                #{retrievalTopk}, #{sourceDocs}, #{answerScore}, #{hallucinationScore}, #{createTime})
+                #{retrievalTopk}, #{sourceDocs}, #{parentIds}, #{parentTexts},
+                #{answerScore}, #{hallucinationScore}, #{createTime})
     </insert>
 
     <select id="selectByTraceId" resultMap="BaseResultMap">
         SELECT id, trace_id, tenant_id, owner_user_id, session_id, agent_id, query_text, rewrite_text,
-               retrieval_topk, source_docs, answer_score, hallucination_score, create_time
+               retrieval_topk, source_docs, parent_ids, parent_texts,
+               answer_score, hallucination_score, create_time
         FROM rag_trace
         WHERE trace_id = #{traceId}
           AND tenant_id = #{tenantId}
@@ -56,7 +62,8 @@
 
     <select id="selectBySessionId" resultMap="BaseResultMap">
         SELECT id, trace_id, tenant_id, owner_user_id, session_id, agent_id, query_text, rewrite_text,
-               retrieval_topk, source_docs, answer_score, hallucination_score, create_time
+               retrieval_topk, source_docs, parent_ids, parent_texts,
+               answer_score, hallucination_score, create_time
         FROM rag_trace
         WHERE session_id = #{sessionId}
           AND tenant_id = #{tenantId}
@@ -67,7 +74,8 @@
     <!-- 管理员视角分页查询，不带租户作用域 -->
     <select id="selectForAdmin" resultMap="BaseResultMap">
         SELECT id, trace_id, tenant_id, owner_user_id, session_id, agent_id, query_text, rewrite_text,
-               retrieval_topk, source_docs, answer_score, hallucination_score, create_time
+               retrieval_topk, source_docs, parent_ids, parent_texts,
+               answer_score, hallucination_score, create_time
         FROM rag_trace
         <include refid="adminConditionWhere"/>
         ORDER BY create_time DESC, id DESC

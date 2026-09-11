@@ -48,6 +48,12 @@ public class RagTraceEntity implements Serializable {
     /** 命中证据列表（落库为 JSON） */
     private List<RagSourceVO> sources;
 
+    /** 父块ID列表（工单 0166 父子分块：JSON 数组文本，去重后；存量数据为 null） */
+    private String parentIds;
+
+    /** 父块文本列表（工单 0166：JSON 数组文本，去重后；存量数据为 null） */
+    private String parentTexts;
+
     /** 答案质量分（预留，本期可为 null） */
     private Double answerScore;
 
