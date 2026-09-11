@@ -1,5 +1,6 @@
 package cn.chyuan.ai.test.domain.armory;
 
+import cn.chyuan.ai.domain.agent.service.armory.matter.mcp.server.QueryLogsTools;
 import cn.chyuan.ai.domain.agent.service.armory.matter.mcp.server.QueryMetricsTools;
 import cn.chyuan.ai.domain.agent.service.armory.matter.mcp.server.ToolResultSpillGuard;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +26,7 @@ class ToolResultSpillGuardTest {
         ReflectionTestUtils.setField(guard, "maxChars", 100);
         ReflectionTestUtils.setField(guard, "maxAlerts", 3);
         ReflectionTestUtils.setField(guard, "maxTimeseriesPoints", 5);
+        ReflectionTestUtils.setField(guard, "maxLogEntries", 4);
     }
 
     @Test
@@ -113,6 +115,23 @@ class ToolResultSpillGuardTest {
         }
     }
 
+    @Test
+    void capLogsOverLimitKeepsTrueTotalAndNote() {
+        QueryLogsTools.LogQueryOutput output = logsOutput(132, 132);
+        QueryLogsTools.LogQueryOutput capped = guard.capLogs(output);
+
+        assertThat(capped.getLogs()).hasSize(4);
+        assertThat(capped.getTotalLogs()).isEqualTo(132);
+        assertThat(capped.getSpillNote()).contains("132").contains("[spill]").contains("最近");
+    }
+
+    @Test
+    void capLogsUnderLimitUnchanged() {
+        QueryLogsTools.LogQueryOutput output = logsOutput(3, 3);
+        assertThat(guard.capLogs(output).getSpillNote()).isNull();
+        assertThat(output.getLogs()).hasSize(3);
+    }
+
     // ========== 构造器 ==========
 
     private QueryMetricsTools.PrometheusAlertsOutput alertsOutput(int total, int listSize) {
@@ -136,5 +155,19 @@ class ToolResultSpillGuardTest {
                     .build());
         }
         return list;
+    }
+
+    private QueryLogsTools.LogQueryOutput logsOutput(int total, int listSize) {
+        List<QueryLogsTools.LogEntry> logs = new ArrayList<>();
+        for (int i = 0; i < listSize; i++) {
+            QueryLogsTools.LogEntry entry = new QueryLogsTools.LogEntry();
+            entry.setTimestamp("2026-09-12T03:00:" + String.format("%02d", i % 60) + "Z");
+            entry.setMessage("log-line-" + i);
+            entry.setLevel("ERROR");
+            logs.add(entry);
+        }
+        return QueryLogsTools.LogQueryOutput.builder()
+                .status("success").totalLogs(total).logs(logs)
+                .build();
     }
 }

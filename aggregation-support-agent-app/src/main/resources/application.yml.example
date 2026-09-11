@@ -11,3 +11,4 @@ spring:
 #     max-chars: 6000              # 单次工具返回字符预算
 #     max-alerts: 20               # 活动告警单次返回条数上限（totalAlerts 保留真实值）
 #     max-timeseries-points: 120   # 单时间序列点数上限（等距降采样，保首尾）
+#     max-log-entries: 50          # 日志单次返回条数上限（totalLogs 保留真实值，保留最近）

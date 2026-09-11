@@ -38,6 +38,9 @@ public class ToolResultSpillGuard {
     @Value("${aiops.spill.max-timeseries-points:120}")
     private int maxTimeseriesPoints;
 
+    @Value("${aiops.spill.max-log-entries:50}")
+    private int maxLogEntries;
+
     /**
      * 字符预算围栏：超限时截断并追加模型可见的溢出标记（不静默）。
      */
@@ -82,6 +85,23 @@ public class ToolResultSpillGuard {
             mr.setSpillNote(String.format("[spill] 原时间序列 %d 点，等距降采样至 %d 点（保留首尾）。",
                     ts.size(), maxTimeseriesPoints));
         }
+    }
+
+    /**
+     * 日志条数围栏：保留前 maxLogEntries 条（Loki 已按时间倒序，保留最近），
+     * totalLogs 保持真实总数并附 spillNote。
+     */
+    public QueryLogsTools.LogQueryOutput capLogs(QueryLogsTools.LogQueryOutput output) {
+        if (output == null || output.getLogs() == null || output.getLogs().size() <= maxLogEntries) {
+            return output;
+        }
+        List<QueryLogsTools.LogEntry> capped =
+                new ArrayList<>(output.getLogs().subList(0, maxLogEntries));
+        output.setLogs(capped);
+        output.setSpillNote(String.format("[spill] 匹配日志共 %d 条，超出单次返回上限 %d 条，仅保留最近 %d 条（时间倒序）；如需更早日志请缩小时间范围或提高过滤精度。",
+                output.getTotalLogs(), maxLogEntries, maxLogEntries));
+        log.warn("日志结果触发 spill 条数围栏: totalLogs={}, capped={}", output.getTotalLogs(), maxLogEntries);
+        return output;
     }
 
     /**

@@ -45,7 +45,13 @@ public class QueryLogsTools {
     @Value("${aiops.loki.timeout}")
     private int lokiTimeout;
 
+    private final ToolResultSpillGuard spillGuard;
+
     private OkHttpClient httpClient;
+
+    public QueryLogsTools(ToolResultSpillGuard spillGuard) {
+        this.spillGuard = spillGuard;
+    }
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -74,7 +80,7 @@ public class QueryLogsTools {
 
             String result = objectMapper.writeValueAsString(response);
             log.info("返回 {} 个日志主题", topics.size());
-            return result;
+            return spillGuard.bound(result);
 
         } catch (Exception e) {
             log.error("获取日志主题列表失败: {}", e.getMessage(), e);
@@ -93,9 +99,9 @@ public class QueryLogsTools {
         try {
             if (mockEnabled) {
                 LogQueryOutput mockOutput = buildMockLogs(logTopic, query, limit);
-                String result = objectMapper.writeValueAsString(mockOutput);
+                String result = objectMapper.writeValueAsString(spillGuard.capLogs(mockOutput));
                 log.info("Mock 模式返回模拟日志数据, 共 {} 条日志", mockOutput.getLogs().size());
-                return result;
+                return spillGuard.bound(result);
             }
 
             return queryLogsFromLoki(logTopic, query, limit);
@@ -126,7 +132,7 @@ public class QueryLogsTools {
         try {
             if (mockEnabled) {
                 LogQueryOutput mockOutput = buildMockLogs("application-logs", "ERROR", limit > 0 ? limit : 100);
-                return objectMapper.writeValueAsString(mockOutput);
+                return spillGuard.bound(objectMapper.writeValueAsString(spillGuard.capLogs(mockOutput)));
             }
 
             int actualLimit = limit > 0 ? limit : 100;
@@ -159,7 +165,7 @@ public class QueryLogsTools {
 
                 String responseBody = response.body() != null ? response.body().string() : "{}";
                 LogQueryOutput output = parseLokiResponse(responseBody);
-                return objectMapper.writeValueAsString(output);
+                return spillGuard.bound(objectMapper.writeValueAsString(spillGuard.capLogs(output)));
             }
 
         } catch (Exception e) {
@@ -211,7 +217,7 @@ public class QueryLogsTools {
             LogQueryOutput output = parseLokiResponse(responseBody);
             output.setLogTopic(logTopic);
             output.setQuery(query);
-            return objectMapper.writeValueAsString(output);
+            return spillGuard.bound(objectMapper.writeValueAsString(spillGuard.capLogs(output)));
         }
     }
 
@@ -573,6 +579,9 @@ public class QueryLogsTools {
         private List<LogEntry> logs;
         @JsonProperty("errorMessage")
         private String errorMessage;
+        /** spill 围栏触发时的模型可见标记（未触发时省略） */
+        @JsonProperty("spillNote")
+        private String spillNote;
     }
 
     @Data
