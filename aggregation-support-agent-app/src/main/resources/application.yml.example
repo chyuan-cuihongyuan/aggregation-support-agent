@@ -3,3 +3,11 @@ spring:
     name: aggregation-support-agent-app
   profiles:
     active: dev  # 可选: dev / test / prod
+
+# AIOps 工具结果溢出围栏（spill guard）—— 超限截断/围栏时在数据内留模型可见 [spill] 标记。
+# 以下为默认值，可按部署在 profile 文件中覆盖：
+# aiops:
+#   spill:
+#     max-chars: 6000              # 单次工具返回字符预算
+#     max-alerts: 20               # 活动告警单次返回条数上限（totalAlerts 保留真实值）
+#     max-timeseries-points: 120   # 单时间序列点数上限（等距降采样，保首尾）

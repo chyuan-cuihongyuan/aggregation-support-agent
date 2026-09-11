@@ -41,7 +41,13 @@ public class QueryMetricsTools {
     @Value("${aiops.mock.enabled}")
     private boolean mockEnabled;
 
+    private final ToolResultSpillGuard spillGuard;
+
     private OkHttpClient httpClient;
+
+    public QueryMetricsTools(ToolResultSpillGuard spillGuard) {
+        this.spillGuard = spillGuard;
+    }
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -65,9 +71,9 @@ public class QueryMetricsTools {
         try {
             if (mockEnabled) {
                 PrometheusAlertsOutput mockOutput = buildMockAlerts();
-                String result = objectMapper.writeValueAsString(mockOutput);
+                String result = objectMapper.writeValueAsString(spillGuard.capAlerts(mockOutput));
                 log.info("Mock 模式返回模拟告警数据, 共 {} 条告警", mockOutput.getAlerts().size());
-                return result;
+                return spillGuard.bound(result);
             }
 
             String url = prometheusBaseUrl + "/api/v1/alerts";
@@ -80,10 +86,10 @@ public class QueryMetricsTools {
                 }
 
                 String responseBody = response.body() != null ? response.body().string() : "{}";
-                PrometheusAlertsOutput output = parsePrometheusAlertsResponse(responseBody);
+                PrometheusAlertsOutput output = spillGuard.capAlerts(parsePrometheusAlertsResponse(responseBody));
                 String result = objectMapper.writeValueAsString(output);
                 log.info("Prometheus 告警查询完成, 共 {} 条活动告警", output.getAlerts().size());
-                return result;
+                return spillGuard.bound(result);
             }
 
         } catch (Exception e) {
@@ -124,7 +130,8 @@ public class QueryMetricsTools {
 
                 String responseBody = response.body() != null ? response.body().string() : "{}";
                 PromQLQueryOutput output = parsePromQLResponse(responseBody);
-                return objectMapper.writeValueAsString(output);
+                spillGuard.capTimeSeries(output.getResults());
+                return spillGuard.bound(objectMapper.writeValueAsString(output));
             }
 
         } catch (Exception e) {
@@ -173,7 +180,8 @@ public class QueryMetricsTools {
 
                 String responseBody = response.body() != null ? response.body().string() : "{}";
                 PromQLQueryOutput output = parsePromQLResponse(responseBody);
-                return objectMapper.writeValueAsString(output);
+                spillGuard.capTimeSeries(output.getResults());
+                return spillGuard.bound(objectMapper.writeValueAsString(output));
             }
 
         } catch (Exception e) {
@@ -388,6 +396,9 @@ public class QueryMetricsTools {
         private List<SimplifiedAlert> alerts;
         @JsonProperty("errorMessage")
         private String errorMessage;
+        /** spill 围栏触发时的模型可见标记（未触发时省略） */
+        @JsonProperty("spillNote")
+        private String spillNote;
     }
 
     @Data
@@ -448,6 +459,9 @@ public class QueryMetricsTools {
         private String timestamp;
         @JsonProperty("timeSeries")
         private List<TimeSeriesPoint> timeSeries;
+        /** spill 围栏触发时的模型可见标记（未触发时省略） */
+        @JsonProperty("spillNote")
+        private String spillNote;
     }
 
     @Data
