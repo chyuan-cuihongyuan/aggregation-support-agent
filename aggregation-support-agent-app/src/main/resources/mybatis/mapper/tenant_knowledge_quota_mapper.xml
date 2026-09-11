@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.chyuan.ai.infrastructure.persistent.mapper.TenantKnowledgeQuotaMapper">
+
+    <resultMap id="BaseResultMap" type="cn.chyuan.ai.infrastructure.dao.po.TenantKnowledgeQuotaPO">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="max_documents" property="maxDocuments"/>
+        <result column="max_chunks" property="maxChunks"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <!-- 工单 0168：全部语句双方言通用（NOW()/COALESCE 为 MySQL/PG 共有，无 databaseId 分叉） -->
+
+    <select id="selectByTenantId" resultMap="BaseResultMap">
+        SELECT id, tenant_id, max_documents, max_chunks, create_time, update_time
+        FROM tenant_knowledge_quota
+        WHERE tenant_id = #{tenantId}
+        LIMIT 1
+    </select>
+
+    <insert id="insert" parameterType="cn.chyuan.ai.infrastructure.dao.po.TenantKnowledgeQuotaPO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO tenant_knowledge_quota (tenant_id, max_documents, max_chunks, create_time, update_time)
+        VALUES (#{tenantId}, #{maxDocuments}, #{maxChunks}, NOW(), NOW())
+    </insert>
+
+    <update id="updateQuota" parameterType="cn.chyuan.ai.infrastructure.dao.po.TenantKnowledgeQuotaPO">
+        UPDATE tenant_knowledge_quota
+        SET max_documents = #{maxDocuments},
+            max_chunks    = #{maxChunks},
+            update_time   = NOW()
+        WHERE tenant_id = #{tenantId}
+    </update>
+
+    <!-- 用量统计（跨读 document_metadata：软删除不计入用量，工单 0168 配额口径） -->
+    <select id="countDocumentsByTenant" resultType="long">
+        SELECT COUNT(1)
+        FROM document_metadata
+        WHERE tenant_id = #{tenantId}
+          AND deleted_flag = 0
+    </select>
+
+    <select id="sumChunksByTenant" resultType="long">
+        SELECT COALESCE(SUM(total_chunks), 0)
+        FROM document_metadata
+        WHERE tenant_id = #{tenantId}
+          AND deleted_flag = 0
+    </select>
+
+</mapper>

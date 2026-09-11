@@ -239,3 +239,16 @@ CREATE TABLE IF NOT EXISTS agent_memory (
 -- ALTER TABLE rag_trace ADD COLUMN parent_ids   TEXT NULL COMMENT '命中子块对应父块ID列表（JSON 数组文本，工单 0166 父子分块）';
 -- ALTER TABLE rag_trace ADD COLUMN parent_texts TEXT NULL COMMENT '命中子块对应父块文本列表（JSON 数组文本，工单 0166 父子分块）';
 -- =============================================================================
+
+-- 11. 租户知识库配额表（tenant_knowledge_quota_mapper.xml + TenantKnowledgeQuotaPO，
+--     工单 0168：文档/分块入库前配额校验；表中无对应租户行 = 不限制（存量兼容），
+--     行内 max_documents / max_chunks 为 NULL 同样视为不限制；update_time 应用层维护）
+CREATE TABLE IF NOT EXISTS tenant_knowledge_quota (
+  id            BIGINT      AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+  tenant_id     VARCHAR(64) NOT NULL COMMENT '租户ID（唯一定位，未配置租户=不限制）',
+  max_documents INT         NULL COMMENT '文档数上限（NULL=不限制，PO Integer）',
+  max_chunks    INT         NULL COMMENT '分块数上限（NULL=不限制，PO Integer）',
+  create_time   DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_time   DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '更新时间（应用层维护）',
+  UNIQUE KEY uk_quota_tenant (tenant_id)
+) COMMENT '租户知识库配额表';

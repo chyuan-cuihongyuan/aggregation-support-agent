@@ -4,6 +4,7 @@ import cn.chyuan.ai.domain.auth.model.valobj.TenantScopeVO;
 import cn.chyuan.ai.domain.auth.support.RequestScopeContext;
 import cn.chyuan.ai.domain.knowledgegraph.service.IKnowledgeGraphService;
 import cn.chyuan.ai.domain.knowledgegraph.model.valobj.GraphSearchResultVO;
+import cn.chyuan.ai.domain.knowledgebase.service.KnowledgeQuotaService;
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import cn.chyuan.ai.domain.rag.adapter.port.IKeywordSearchPort;
 import cn.chyuan.ai.domain.rag.adapter.port.IDocumentParserFactory;
@@ -179,6 +180,10 @@ public class EnhancedRagService implements IRagService {
     @Autowired(required = false)
     private RetrievalCacheService retrievalCacheService;
 
+    /** 租户知识库配额服务（工单 0168；文档/分块入库前校验，缺席=不校验兼容） */
+    @Autowired(required = false)
+    private KnowledgeQuotaService knowledgeQuotaService;
+
     @Resource
     private IBM25SearchService bm25SearchService;
 
@@ -220,6 +225,11 @@ public class EnhancedRagService implements IRagService {
         long fileSize = command.getRawContent() != null ? command.getRawContent().length
                 : (command.getContent() != null ? command.getContent().length() : 0L);
         String extension = resolveExtension(command.getFileName());
+
+        // W6 配额校验挂点一（工单 0168）：文档入库前校验文档数配额（超限拒绝+明确错误）
+        String quotaTenantId = command.getTenantId() != null && !command.getTenantId().isBlank()
+                ? command.getTenantId() : command.getUserId();
+        checkDocumentQuota(quotaTenantId);
 
         DocumentMetadataEntity metadata = DocumentMetadataEntity.builder()
                 .documentId(documentId)
@@ -292,6 +302,9 @@ public class EnhancedRagService implements IRagService {
             for (DocumentChunkEntity chunk : chunks) {
                 enrichChunkMetadata(chunk, documentId, metadata);
             }
+
+            // W6 配额校验挂点二（工单 0168）：分块数量确定后、嵌入入库前校验分块配额
+            checkChunkQuota(quotaTenantId, chunks.size());
 
             // 3. 批量嵌入：将所有分块文本转换为向量
             List<String> texts = chunks.stream()
@@ -905,6 +918,26 @@ public class EnhancedRagService implements IRagService {
         } catch (Exception e) {
             log.warn("添加到BM25索引失败: {}", e.getMessage());
         }
+    }
+
+    /**
+     * W6 配额校验（工单 0168）：文档数挂点；服务缺席（未装配）或租户缺失时不校验（兼容）
+     */
+    private void checkDocumentQuota(String tenantId) {
+        if (knowledgeQuotaService == null || tenantId == null || tenantId.isBlank()) {
+            return;
+        }
+        knowledgeQuotaService.checkDocumentQuota(tenantId);
+    }
+
+    /**
+     * W6 配额校验（工单 0168）：分块数挂点
+     */
+    private void checkChunkQuota(String tenantId, int incomingChunks) {
+        if (knowledgeQuotaService == null || tenantId == null || tenantId.isBlank()) {
+            return;
+        }
+        knowledgeQuotaService.checkChunkQuota(tenantId, incomingChunks);
     }
 
     /**

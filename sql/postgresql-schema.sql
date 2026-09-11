@@ -414,3 +414,24 @@ CREATE TABLE IF NOT EXISTS agent_memory_vec (
 );
 COMMENT ON TABLE agent_memory_vec IS 'Agent 记忆向量（HNSW COSINE；scope 前缀 LIKE 过滤）';
 CREATE INDEX IF NOT EXISTS idx_amv_hnsw ON agent_memory_vec USING hnsw (embedding halfvec_cosine_ops) WITH (m = 16, ef_construction = 200);
+
+-- =============================================================================
+-- 11. 租户知识库配额表（工单 0168：tenant_knowledge_quota_mapper.xml +
+--     TenantKnowledgeQuotaPO；表中无对应租户行 = 不限制（存量兼容），
+--     行内 max_documents / max_chunks 为 NULL 同样视为不限制）
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS tenant_knowledge_quota (
+  id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  tenant_id     VARCHAR(64) NOT NULL,
+  max_documents INT         NULL,
+  max_chunks    INT         NULL,
+  create_time   TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time   TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT uk_quota_tenant UNIQUE (tenant_id)
+);
+COMMENT ON TABLE tenant_knowledge_quota IS '租户知识库配额表';
+COMMENT ON COLUMN tenant_knowledge_quota.tenant_id IS '租户ID（唯一定位，未配置租户=不限制）';
+COMMENT ON COLUMN tenant_knowledge_quota.max_documents IS '文档数上限（NULL=不限制，PO Integer→INT）';
+COMMENT ON COLUMN tenant_knowledge_quota.max_chunks IS '分块数上限（NULL=不限制，PO Integer→INT）';
+COMMENT ON COLUMN tenant_knowledge_quota.create_time IS '创建时间';
+COMMENT ON COLUMN tenant_knowledge_quota.update_time IS '更新时间（应用层维护）';
