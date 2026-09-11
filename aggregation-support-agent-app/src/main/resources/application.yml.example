@@ -12,3 +12,10 @@ spring:
 #     max-alerts: 20               # 活动告警单次返回条数上限（totalAlerts 保留真实值）
 #     max-timeseries-points: 120   # 单时间序列点数上限（等距降采样，保首尾）
 #     max-log-entries: 50          # 日志单次返回条数上限（totalLogs 保留真实值，保留最近）
+
+# springdoc-openapi（D06）：文档端点与分组（分组定义见 application-dev.yml）
+# springdoc:
+#   api-docs:
+#     path: /v3/api-docs
+#   swagger-ui:
+#     path: /swagger-ui.html
