@@ -50,12 +50,6 @@ public class ChatService implements IChatService {
     /** 会话 ID 不存在时的兜底 scope 路径 */
     private static final String SCOPE_UNKNOWN = "/conversation/__unknown__";
 
-    /** 会话重建时最大回灌历史条数（避免超出 LLM 上下文窗口） */
-    private static final int MAX_HISTORY_REPLAY = 6;
-
-    /** 单条历史消息最大字符数，超长截断防止历史中的自问自答污染新会话 */
-    private static final int MAX_HISTORY_CHAR_LENGTH = 2000;
-
     @Resource
     private DefaultArmoryFactory defaultArmoryFactory;
 
@@ -70,6 +64,9 @@ public class ChatService implements IChatService {
 
     @Resource
     private IEmbeddingService embeddingService;
+
+    @Resource
+    private HistoryReplayPlanner historyReplayPlanner;
 
     /**
      * 会话 ID 缓存 — 按 tenantId:ownerUserId:agentId 复用同一 session，保持对话上下文连续
@@ -635,27 +632,19 @@ public class ChatService implements IChatService {
                 .createSession(appName, scope.getOwnerUserId(), new ConcurrentHashMap<>(), originalSessionId)
                 .blockingGet();
 
-        // Step 4: 从 chat_history 查出历史对话并回灌（限制条数 + 截断超长内容）
+        // Step 4: 从 chat_history 查出历史对话，经预算规划器回灌（条数 + 单条 + 总预算三级限制）
         List<ChatHistoryEntity> histories = chatHistoryRepository.queryBySessionId(originalSessionId, scope);
-        int replayCount = Math.min(histories.size(), MAX_HISTORY_REPLAY);
-        for (int i = 0; i < replayCount; i++) {
-            ChatHistoryEntity history = histories.get(i);
-            // 回灌用户消息（问题通常较短，不截断）
-            appendHistoryEvent(runner, newSession, "user", history.getQuestion());
-            // 回灌助手消息（截断超长回复，防止历史中的自问自答污染新会话）
-            String answer = history.getAnswer();
-            if (answer != null && answer.length() > MAX_HISTORY_CHAR_LENGTH) {
-                answer = answer.substring(0, MAX_HISTORY_CHAR_LENGTH) + "...[历史回复已截断]";
-            }
-            appendHistoryEvent(runner, newSession, "model", answer);
+        HistoryReplayPlanner.ReplayPlan replayPlan = historyReplayPlanner.plan(histories);
+        for (HistoryReplayPlanner.ReplayItem item : replayPlan.items()) {
+            appendHistoryEvent(runner, newSession, item.author(), item.text());
         }
 
         // Step 5: 更新 Guava 缓存
         String sessionKey = scope.getTenantId() + ":" + scope.getOwnerUserId() + ":" + agentId;
         userSessions.put(sessionKey, originalSessionId);
 
-        log.info("ADK 会话已重建: sessionId={}, 回灌历史消息 {} 条(共 {} 条记录), userId={}",
-                originalSessionId, replayCount * 2, histories.size(), userId);
+        log.info("ADK 会话已重建: sessionId={}, 回灌历史消息 {} 条(共 {} 条记录, 预算截断={}), userId={}",
+                originalSessionId, replayPlan.items().size(), histories.size(), replayPlan.budgetCapped(), userId);
 
         return originalSessionId;
     }
