@@ -7,6 +7,7 @@ import cn.chyuan.ai.domain.knowledgegraph.model.valobj.GraphSearchResultVO;
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import cn.chyuan.ai.domain.rag.adapter.port.IKeywordSearchPort;
 import cn.chyuan.ai.domain.rag.adapter.port.IDocumentParserFactory;
+import cn.chyuan.ai.domain.rag.adapter.port.IQueryRewritePort;
 import cn.chyuan.ai.domain.rag.adapter.port.IRerankPort;
 import cn.chyuan.ai.domain.rag.adapter.repository.IDocumentMetadataRepository;
 import cn.chyuan.ai.domain.rag.adapter.repository.IRagTraceRepository;
@@ -155,6 +156,10 @@ public class EnhancedRagService implements IRagService {
 
     @Resource
     private IQueryOptimizationService queryOptimizationService;
+
+    /** 查询改写端口（工单 0165；rag.rewrite-enabled=true 时装配，默认不装配走既有路径） */
+    @Autowired(required = false)
+    private IQueryRewritePort queryRewritePort;
 
     @Resource
     private IBM25SearchService bm25SearchService;
@@ -373,8 +378,10 @@ public class EnhancedRagService implements IRagService {
         long stepStart = System.currentTimeMillis();
         String optimizedQuery = optimizeQuery(query);
         long rewriteCost = System.currentTimeMillis() - stepStart;
-        // 记录是否真正发生了改写：启用且与原 query 不同
-        String rewriteQuery = (queryRewriteEnabled && optimizedQuery != null && !optimizedQuery.equals(query))
+        // 记录是否真正发生了改写：改写链路启用（既有开关或 W3 端口）且与原 query 不同；
+        // 改写前后 query 都进检索日志（query_text / rewrite_text 双写，工单 0165）
+        boolean rewriteActive = queryRewriteEnabled || queryRewritePort != null;
+        String rewriteQuery = (rewriteActive && optimizedQuery != null && !optimizedQuery.equals(query))
                 ? optimizedQuery : null;
         stages.add(Map.of("stage", "query_rewrite", "count", 1, "costTimeMs", (int) rewriteCost));
 
@@ -604,8 +611,29 @@ public class EnhancedRagService implements IRagService {
 
     /**
      * 查询优化（第二层）
+     * <p>
+     * W3 端口路径（工单 0165）：rag.rewrite-enabled=true 时端口已装配，优先走端口
+     * （规则版/LLM 版由 provider 决定，LLM 版异常内部回退规则版）；
+     * 端口未装配（默认关）时走既有 queryOptimizationService 路径（零回归）。
      */
     private String optimizeQuery(String query) {
+        if (queryRewritePort != null) {
+            try {
+                String rewrittenQuery = queryRewritePort.rewrite(query);
+                if (rewrittenQuery == null || rewrittenQuery.isBlank()) {
+                    // 端口异常空产出兜底：原 query 直通
+                    return query;
+                }
+                if (!rewrittenQuery.equals(query)) {
+                    log.info("Query端口改写: original={}, rewritten={}", query, rewrittenQuery);
+                }
+                return rewrittenQuery;
+            } catch (Exception e) {
+                log.warn("Query端口改写失败，使用原始查询: {}", e.getMessage());
+                return query;
+            }
+        }
+
         if (!queryRewriteEnabled) {
             return query;
         }

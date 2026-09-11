@@ -65,3 +65,9 @@ rag:
       rrf-k: 60
   # 重排端口（工单 0164）：none=规则降级（原分数原序）；upstream=上游 rerank API（复用 rag.rerank.* 连接配置）
   rerank-provider: none
+  # 查询改写端口（工单 0165）：默认关=不装配端口（query 原样直通）；开启后 provider=rule|llm
+  rewrite-enabled: false
+  rewrite-provider: rule
+  # 规则版同义扩展表（key=value 逗号分隔，工单 0165）
+  rewrite:
+    synonyms: ""
