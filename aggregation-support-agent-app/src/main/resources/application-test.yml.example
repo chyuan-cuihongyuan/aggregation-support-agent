@@ -63,3 +63,5 @@ rag:
   retrieval:
     fusion:
       rrf-k: 60
+  # 重排端口（工单 0164）：none=规则降级（原分数原序）；upstream=上游 rerank API（复用 rag.rerank.* 连接配置）
+  rerank-provider: none

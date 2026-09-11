@@ -7,6 +7,7 @@ import cn.chyuan.ai.domain.knowledgegraph.model.valobj.GraphSearchResultVO;
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
 import cn.chyuan.ai.domain.rag.adapter.port.IKeywordSearchPort;
 import cn.chyuan.ai.domain.rag.adapter.port.IDocumentParserFactory;
+import cn.chyuan.ai.domain.rag.adapter.port.IRerankPort;
 import cn.chyuan.ai.domain.rag.adapter.repository.IDocumentMetadataRepository;
 import cn.chyuan.ai.domain.rag.adapter.repository.IRagTraceRepository;
 import cn.chyuan.ai.domain.rag.adapter.repository.IVectorStoreRepository;
@@ -91,6 +92,10 @@ public class EnhancedRagService implements IRagService {
     @Value("${rag.rerank.enabled}")
     private boolean rerankEnabled;
 
+    /** 重排端口开关（工单 0164：none=规则降级不启用挂点；upstream=检索后生成答案前经 IRerankPort 精排） */
+    @Value("${rag.rerank-provider:none}")
+    private String rerankProvider;
+
     /** 最终返回给LLM的chunk数量 */
     @Value("${rag.rerank.top-k}")
     private int rerankTopK;
@@ -163,6 +168,10 @@ public class EnhancedRagService implements IRagService {
 
     @Autowired(required = false)
     private IRerankService rerankService;
+
+    /** 重排端口（工单 0164；provider=upstream 时挂点启用，检索后生成答案前精排） */
+    @Autowired(required = false)
+    private IRerankPort rerankPort;
 
     @Autowired(required = false)
     private IKnowledgeGraphService knowledgeGraphService;
@@ -382,6 +391,16 @@ public class EnhancedRagService implements IRagService {
             results = rerankService.rerank(optimizedQuery, results, topK);
             long rerankCost = System.currentTimeMillis() - stepStart;
             stages.add(Map.of("stage", "rerank", "count", results.size(), "costTimeMs", (int) rerankCost));
+            rerankApplied = true;
+        }
+
+        // W2 重排端口挂点（工单 0164）：rag.rerank-provider=upstream 时在检索后、生成答案前精排；
+        // none（默认）不进分支（零回归），upstream 端口内部异常自带原序降级
+        if ("upstream".equals(rerankProvider) && rerankPort != null && rerankPort.isAvailable()) {
+            stepStart = System.currentTimeMillis();
+            results = rerankPort.rerank(optimizedQuery, results, topK);
+            long portRerankCost = System.currentTimeMillis() - stepStart;
+            stages.add(Map.of("stage", "rerank_port", "count", results.size(), "costTimeMs", (int) portRerankCost));
             rerankApplied = true;
         }
 
