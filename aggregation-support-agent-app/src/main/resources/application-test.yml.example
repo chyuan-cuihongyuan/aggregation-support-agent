@@ -56,3 +56,10 @@ rag:
       core-size: 1
       max-size: 2
       queue-capacity: 20
+  # ── 四期 W 簇检索深化开关（0163-0167，全部默认关：关闭时单路原行为零回归）──
+  # 混合检索：关键词路 ES match + domain RrfFusionService 纯函数融合（工单 0163）
+  hybrid-enabled: false
+  # RRF 平滑因子 k（工单 0163，默认 60 经验值）
+  retrieval:
+    fusion:
+      rrf-k: 60

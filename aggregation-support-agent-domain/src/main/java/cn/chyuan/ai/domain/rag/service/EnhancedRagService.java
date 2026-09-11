@@ -5,6 +5,7 @@ import cn.chyuan.ai.domain.auth.support.RequestScopeContext;
 import cn.chyuan.ai.domain.knowledgegraph.service.IKnowledgeGraphService;
 import cn.chyuan.ai.domain.knowledgegraph.model.valobj.GraphSearchResultVO;
 import cn.chyuan.ai.domain.rag.adapter.port.IEmbeddingService;
+import cn.chyuan.ai.domain.rag.adapter.port.IKeywordSearchPort;
 import cn.chyuan.ai.domain.rag.adapter.port.IDocumentParserFactory;
 import cn.chyuan.ai.domain.rag.adapter.repository.IDocumentMetadataRepository;
 import cn.chyuan.ai.domain.rag.adapter.repository.IRagTraceRepository;
@@ -22,6 +23,7 @@ import cn.chyuan.ai.domain.rag.service.chunker.ParentChildChunker;
 import cn.chyuan.ai.domain.rag.service.chunker.SemanticChunker;
 import cn.chyuan.ai.domain.rag.service.evaluation.AnswerQualityEvaluator;
 import cn.chyuan.ai.domain.rag.service.fusion.IResultFusionService;
+import cn.chyuan.ai.domain.rag.service.fusion.RrfFusionService;
 import cn.chyuan.ai.domain.rag.service.query.IQueryOptimizationService;
 import cn.chyuan.ai.domain.rag.service.rerank.IRerankService;
 import cn.chyuan.ai.domain.rag.service.reorder.LostInTheMiddleReorderer;
@@ -117,6 +119,14 @@ public class EnhancedRagService implements IRagService {
     @Value("${rag.retrieval.fusion.top-k:10}")
     private int fusionTopK;
 
+    /** 是否启用混合检索（工单 0163：关键词路 ES match + RRF 纯函数融合；默认关=单路原行为零回归） */
+    @Value("${rag.hybrid-enabled:false}")
+    private boolean hybridEnabled;
+
+    /** RRF 平滑因子 k（工单 0163 纯函数内核，默认 60 经验值） */
+    @Value("${rag.retrieval.fusion.rrf-k:60}")
+    private int hybridRrfK;
+
     @Value("${rag.retrieval.timeout-ms}")
     private long retrievalTimeoutMs;
 
@@ -143,6 +153,10 @@ public class EnhancedRagService implements IRagService {
 
     @Resource
     private IBM25SearchService bm25SearchService;
+
+    /** 关键词检索端口（工单 0163 混合检索关键词路；ES 未启用时不装配，保持单路） */
+    @Autowired(required = false)
+    private IKeywordSearchPort keywordSearchPort;
 
     @Resource
     private IResultFusionService resultFusionService;
@@ -602,12 +616,20 @@ public class EnhancedRagService implements IRagService {
         allFutures.add(vectorFuture);
         futureLabels.add("向量检索");
 
-        // 第二路：BM25检索
-        CompletableFuture<List<VectorSearchResultVO>> bm25Future = bm25Enabled
-                ? supplyRetrievalAsync(() -> bm25Retrieval(query, bm25TopK, scope))
-                : CompletableFuture.completedFuture(Collections.emptyList());
+        // 第二路：BM25检索 — 混合检索开启（工单 0163）时优先走关键词 ES match 端口
+        CompletableFuture<List<VectorSearchResultVO>> bm25Future;
+        if (hybridEnabled) {
+            bm25Future = (keywordSearchPort != null && keywordSearchPort.isAvailable())
+                    ? supplyRetrievalAsync(() -> keywordSearch(query, bm25TopK, scope))
+                    : CompletableFuture.completedFuture(Collections.emptyList());
+        } else {
+            // 默认关：保持既有 BM25 开关语义，单路=原行为零回归
+            bm25Future = bm25Enabled
+                    ? supplyRetrievalAsync(() -> bm25Retrieval(query, bm25TopK, scope))
+                    : CompletableFuture.completedFuture(Collections.emptyList());
+        }
         allFutures.add(bm25Future);
-        futureLabels.add("BM25检索");
+        futureLabels.add(hybridEnabled ? "关键词检索" : "BM25检索");
 
         // 第三路：知识图谱检索
         CompletableFuture<List<VectorSearchResultVO>> graphFuture =
@@ -637,7 +659,7 @@ public class EnhancedRagService implements IRagService {
             }
         }
 
-        // 如果只有一路结果，直接返回
+        // 如果只有一路结果，直接返回（单路=原行为：混合开关关闭或另一路为空时走到这里）
         if (allResults.size() == 1) {
             return allResults.get(0).stream().limit(topK).collect(Collectors.toList());
         }
@@ -647,8 +669,26 @@ public class EnhancedRagService implements IRagService {
             return Collections.emptyList();
         }
 
+        // 混合检索开启（工单 0163）：domain 纯函数 RrfFusionService 融合（k 可配，rank 从 1 计）
+        if (hybridEnabled) {
+            return new RrfFusionService(hybridRrfK).fuse(allResults, topK);
+        }
+
         // RRF融合 — 使用 fusionTopK 而非 topK，确保融合后候选数 > rerankTopK，让 Rerank 有筛选空间
         return resultFusionService.rrfFusion(allResults, fusionTopK);
+    }
+
+    /**
+     * 关键词路检索（工单 0163）— 经 IKeywordSearchPort 走 ES match 查询，
+     * 异常内部降级为空列表，不阻断向量路
+     */
+    private List<VectorSearchResultVO> keywordSearch(String query, int topK, TenantScopeVO scope) {
+        try {
+            return keywordSearchPort.search(query, topK, scope);
+        } catch (Exception e) {
+            log.error("关键词检索失败: {}", e.getMessage());
+            return new ArrayList<>();
+        }
     }
 
     /**
