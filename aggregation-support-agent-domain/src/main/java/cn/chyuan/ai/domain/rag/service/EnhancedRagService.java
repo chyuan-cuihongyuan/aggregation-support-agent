@@ -23,6 +23,7 @@ import cn.chyuan.ai.domain.rag.model.valobj.SearchResultDetailVO;
 import cn.chyuan.ai.domain.rag.model.valobj.VectorSearchResultVO;
 import cn.chyuan.ai.domain.rag.service.chunker.ParentAssembler;
 import cn.chyuan.ai.domain.rag.service.chunker.ParentChildChunker;
+import cn.chyuan.ai.domain.rag.service.cache.RetrievalCacheService;
 import cn.chyuan.ai.domain.rag.service.chunker.SemanticChunker;
 import cn.chyuan.ai.domain.rag.service.evaluation.AnswerQualityEvaluator;
 import cn.chyuan.ai.domain.rag.service.fusion.IResultFusionService;
@@ -142,6 +143,10 @@ public class EnhancedRagService implements IRagService {
     @Value("${rag.parent-child.parent-max-chars:1000}")
     private int parentMaxChars;
 
+    /** 是否启用检索结果缓存（工单 0167：仅缓存检索不生成；默认关=每次真实检索零回归） */
+    @Value("${rag.cache-enabled:false}")
+    private boolean cacheEnabled;
+
     @Value("${rag.retrieval.timeout-ms}")
     private long retrievalTimeoutMs;
 
@@ -169,6 +174,10 @@ public class EnhancedRagService implements IRagService {
     /** 查询改写端口（工单 0165；rag.rewrite-enabled=true 时装配，默认不装配走既有路径） */
     @Autowired(required = false)
     private IQueryRewritePort queryRewritePort;
+
+    /** 检索结果缓存（工单 0167；rag.cache-enabled=true 时装配，仅缓存检索不生成） */
+    @Autowired(required = false)
+    private RetrievalCacheService retrievalCacheService;
 
     @Resource
     private IBM25SearchService bm25SearchService;
@@ -379,6 +388,16 @@ public class EnhancedRagService implements IRagService {
     private InternalSearchOutput doSearchInternal(String query, int topK, TenantScopeVO scope) {
         log.info("开始检索: query={}, topK={}", query, topK);
 
+        // W5 缓存挂点（工单 0167）：命中直接返回缓存 chunks+分数（缓存仅检索不生成；
+        // 关闭或未装配时跳过，零回归）
+        if (cacheEnabled && retrievalCacheService != null) {
+            List<VectorSearchResultVO> cached = retrievalCacheService.get(query).orElse(null);
+            if (cached != null) {
+                log.info("检索缓存命中: query={}, resultCount={}", query, cached.size());
+                return new InternalSearchOutput(null, cached, false);
+            }
+        }
+
         // 记录各阶段耗时，用于可观测性上报
         List<Map<String, Object>> stages = new ArrayList<>();
 
@@ -436,6 +455,11 @@ public class EnhancedRagService implements IRagService {
 
         // W4 父子分块装配（工单 0166）：开启时命中子块去重回取父块（关闭=原样返回零回归）
         results = assembleParentContext(results);
+
+        // W5 缓存回填（工单 0167）：检索完成后写入缓存（未命中路径）
+        if (cacheEnabled && retrievalCacheService != null && results != null && !results.isEmpty()) {
+            retrievalCacheService.put(query, results);
+        }
 
         log.info("检索完成: resultCount={}, rerankApplied={}, stages={}", results.size(), rerankApplied, stages.size());
         return new InternalSearchOutput(rewriteQuery, results, rerankApplied);

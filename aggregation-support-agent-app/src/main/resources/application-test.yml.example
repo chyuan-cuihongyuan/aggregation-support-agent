@@ -75,3 +75,7 @@ rag:
   parent-child-enabled: false
   parent-child:
     parent-max-chars: 1000
+  # 检索结果缓存（工单 0167）：默认关=每次真实检索；开启后 query 归一化 sha256 键缓存 chunks+分数（仅检索不生成）
+  cache-enabled: false
+  cache-ttl-seconds: 300
+  cache-max-capacity: 1000
