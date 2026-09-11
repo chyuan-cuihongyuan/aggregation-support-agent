@@ -31,10 +31,8 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: 构建 + 单元测试（排除需基础设施的集成测试）
-        run: >-
-          mvn -B -ntp test
-          -Dsurefire.excludes='**/ApiTest.java,**/AiAgentAutoConfigTest.java,**/EndToEndIntegrationTest.java,**/ChatServiceTest.java'
+      - name: 构建 + 单元测试（ci profile：pom 内排除需基础设施的集成测试）
+        run: mvn -B -ntp -Pci test
 
       - name: 上传测试报告（失败时）
         if: failure()
