@@ -3,6 +3,23 @@ spring:
     name: aggregation-support-agent-app
   profiles:
     active: dev  # 可选: dev / test / prod
+  # 优雅停机（D07）：等待在途请求完成再关闭
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+server:
+  shutdown: graceful
+
+# 存活/就绪探针（D07）：/actuator/health/liveness 与 /readiness；仅暴露健康端点，不开放 metrics
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
 
 # AIOps 工具结果溢出围栏（spill guard）—— 超限截断/围栏时在数据内留模型可见 [spill] 标记。
 # 以下为默认值，可按部署在 profile 文件中覆盖：
