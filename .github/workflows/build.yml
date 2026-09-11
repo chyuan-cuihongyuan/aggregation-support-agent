@@ -1,0 +1,45 @@
+name: build
+
+# SELFLOOP D02：aggregation 后端 CI。
+# 4 个 @SpringBootTest（ApiTest/AiAgentAutoConfigTest/EndToEndIntegrationTest/ChatServiceTest）
+# 需要完整基础设施（MySQL/Redis/Milvus/ES/RocketMQ），单测管线显式排除，
+# 集成验证仍走本地 docker-compose 环境（E06 测试金字塔主题再收编）。
+on:
+  push:
+    branches: [online-main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: 构建 + 单元测试（排除需基础设施的集成测试）
+        run: >-
+          mvn -B -ntp test
+          -Dsurefire.excludes='**/ApiTest.java,**/AiAgentAutoConfigTest.java,**/EndToEndIntegrationTest.java,**/ChatServiceTest.java'
+
+      - name: 上传测试报告（失败时）
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: '**/target/surefire-reports/**'
+          retention-days: 7

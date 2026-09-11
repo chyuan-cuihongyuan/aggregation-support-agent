@@ -1,5 +1,7 @@
 # Aggregation Support Agent
 
+[![build](https://github.com/chyuan-cuihongyuan/aggregation-support-agent/actions/workflows/build.yml/badge.svg?branch=online-main)](https://github.com/chyuan-cuihongyuan/aggregation-support-agent/actions/workflows/build.yml)
+
 ## 项目概述
 
 Aggregation Support Agent 是一个基于 Spring Boot 的智能运维平台，集成了大模型对话、RAG（Retrieval-Augmented Generation）知识库检索和 AIOps 告警分析能力。该项目采用领域驱动设计（DDD）架构，实现了多智能体协作的运维分析系统。
