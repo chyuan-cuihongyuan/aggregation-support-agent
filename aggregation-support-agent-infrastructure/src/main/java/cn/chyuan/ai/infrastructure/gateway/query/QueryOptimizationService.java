@@ -20,6 +20,9 @@ public class QueryOptimizationService implements IQueryOptimizationService {
     @Autowired(required = false)
     private ChatModel chatModel;
 
+    @Autowired
+    private LlmOutputGuard llmOutputGuard;
+
     @Override
     public String rewriteQuery(String originalQuery, List<String> chatHistory) {
         log.info("Query改写: originalQuery={}", originalQuery);
@@ -50,10 +53,14 @@ public class QueryOptimizationService implements IQueryOptimizationService {
                 """.formatted(historyStr, originalQuery);
 
         try {
-            String rewritten = chatModel.call(new Prompt(new UserMessage(prompt)))
-                    .getResult().getOutput().getText();
+            // 输出守卫（SELFLOOP2 loop-229）：空/超长/解释性输出重试，全败回退原查询
+            String rewritten = llmOutputGuard.callUntilValid(
+                            () -> chatModel.call(new Prompt(new UserMessage(prompt)))
+                                    .getResult().getOutput().getText(),
+                            LlmOutputGuard.NON_BLANK_MAX_500)
+                    .orElse(originalQuery);
             log.info("Query改写完成: original={}, rewritten={}", originalQuery, rewritten);
-            return rewritten.trim();
+            return rewritten;
         } catch (Exception e) {
             log.warn("Query改写失败，返回原始查询: {}", e.getMessage());
             return originalQuery;
@@ -85,8 +92,11 @@ public class QueryOptimizationService implements IQueryOptimizationService {
                 """.formatted(query);
 
         try {
-            String hypotheticalDoc = chatModel.call(new Prompt(new UserMessage(prompt)))
-                    .getResult().getOutput().getText();
+            String hypotheticalDoc = llmOutputGuard.callUntilValid(
+                            () -> chatModel.call(new Prompt(new UserMessage(prompt)))
+                                    .getResult().getOutput().getText(),
+                            LlmOutputGuard.NON_BLANK_MAX_500)
+                    .orElse(query);
             log.info("HyDE生成完成: length={}", hypotheticalDoc.length());
             return hypotheticalDoc.trim();
         } catch (Exception e) {
@@ -121,10 +131,13 @@ public class QueryOptimizationService implements IQueryOptimizationService {
                 """.formatted(specificQuery);
 
         try {
-            String stepBackQuery = chatModel.call(new Prompt(new UserMessage(prompt)))
-                    .getResult().getOutput().getText();
+            String stepBackQuery = llmOutputGuard.callUntilValid(
+                            () -> chatModel.call(new Prompt(new UserMessage(prompt)))
+                                    .getResult().getOutput().getText(),
+                            LlmOutputGuard.NON_BLANK_MAX_500)
+                    .orElse(specificQuery);
             log.info("Step-back生成完成: stepBackQuery={}", stepBackQuery);
-            return stepBackQuery.trim();
+            return stepBackQuery;
         } catch (Exception e) {
             log.warn("Step-back生成失败: {}", e.getMessage());
             return specificQuery;
