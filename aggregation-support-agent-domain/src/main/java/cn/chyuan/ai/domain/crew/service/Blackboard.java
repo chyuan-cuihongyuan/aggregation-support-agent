@@ -75,13 +75,13 @@ public class Blackboard {
         return java.util.Set.copyOf(facts.keySet());
     }
 
-    /** 不可变快照（键 → 值，保序） */
+    /** 不可变快照（键 → 值，键序稳定）——用 unmodifiableMap(LinkedHashMap) 保序（Map.copyOf 不保证迭代序） */
     public Map<String, Object> snapshot() {
         Map<String, Object> out = new LinkedHashMap<>();
         facts.entrySet().stream()
                 .sorted(java.util.Map.Entry.comparingByKey())
                 .forEach(e -> out.put(e.getKey(), e.getValue().value));
-        return java.util.Map.copyOf(out);
+        return java.util.Collections.unmodifiableMap(out);
     }
 
     /** 累计写入次数（观测） */

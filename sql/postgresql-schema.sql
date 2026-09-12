@@ -455,3 +455,16 @@ COMMENT ON TABLE workflow_run IS '工作流运行历史（AB9：run 级摘要 + 
 COMMENT ON COLUMN workflow_run.status IS '状态：COMPLETED/FAILED/INTERRUPTED';
 COMMENT ON COLUMN workflow_run.node_runs_json IS '节点级明细 JSON 数组（nodeId/status/attempts/durationMs/error）';
 CREATE INDEX IF NOT EXISTS idx_workflow_run_name ON workflow_run (workflow_name, create_time);
+
+-- 15. 检索参数画像表（工单 0235 AE8：配置组合 + 命中率/延迟样本统计）
+CREATE TABLE IF NOT EXISTS retrieval_profile (
+    id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    profile_key   VARCHAR(128) NOT NULL,
+    samples       INT          NOT NULL DEFAULT 0,
+    avg_hit_rate  DOUBLE PRECISION NOT NULL DEFAULT 0,
+    avg_latency_ms DOUBLE PRECISION NOT NULL DEFAULT 0,
+    p95_latency_ms BIGINT      NOT NULL DEFAULT 0,
+    update_time   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_retrieval_profile_key UNIQUE (profile_key)
+);
+COMMENT ON TABLE retrieval_profile IS '检索参数画像（AE8：topK/efSearch/权重组合的命中率与延迟快照）';

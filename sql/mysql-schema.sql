@@ -269,3 +269,15 @@ CREATE TABLE IF NOT EXISTS workflow_run (
   UNIQUE KEY uk_workflow_run_id (run_id),
   KEY idx_workflow_run_name (workflow_name, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工作流运行历史（工单 0212 AB9）';
+
+-- 15. 检索参数画像表（工单 0235 AE8）
+CREATE TABLE IF NOT EXISTS retrieval_profile (
+  id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+  profile_key   VARCHAR(128) NOT NULL COMMENT '配置组合键（topK/ef/vr）',
+  samples       INT          NOT NULL DEFAULT 0 COMMENT '样本数',
+  avg_hit_rate  DOUBLE       NOT NULL DEFAULT 0 COMMENT '平均命中率',
+  avg_latency_ms DOUBLE      NOT NULL DEFAULT 0 COMMENT '平均延迟毫秒',
+  p95_latency_ms BIGINT      NOT NULL DEFAULT 0 COMMENT 'P95 延迟毫秒',
+  update_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_retrieval_profile_key (profile_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='检索参数画像（工单 0235 AE8）';
