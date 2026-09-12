@@ -74,3 +74,6 @@ application-test.yml
 
 ### Agent 配置目录清理：不提交到 GitHub ###
 aggregation-support-agent-app/src/main/resources/agent/
+
+# AUTOLOOP al-05：安全策略文件入库
+!.github/SECURITY.md
