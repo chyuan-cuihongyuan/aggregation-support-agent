@@ -9,13 +9,16 @@ import cn.chyuan.ai.domain.agent.service.armory.matter.mcp.client.ScopedToolCall
 import cn.chyuan.ai.domain.agent.service.armory.matter.mcp.client.TooMcpCreateService;
 import cn.chyuan.ai.domain.agent.service.armory.matter.mcp.client.factory.DefaultMcpClientFactory;
 import cn.chyuan.ai.domain.agent.service.armory.matter.skills.ToolSkillsCreateService;
+import cn.chyuan.ai.domain.agent.service.armory.support.ObservationWiring;
 import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
+import io.micrometer.observation.ObservationRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.ai.tool.ToolCallback;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.Resource;
@@ -36,6 +39,10 @@ public class ChatModelNode extends AbstractArmorySupport {
 
     @Resource
     private ToolSkillsCreateService toolSkillsCreateService;
+
+    /** spring-ai GenAI 指标装配（SELFLOOP2 loop-212）：actuator registry 缺席时回退 NOOP */
+    @Autowired(required = false)
+    private ObservationRegistry observationRegistry;
 
     @Override
     protected AiAgentRegisterVO doApply(ArmoryCommandEntity requestParameter, DefaultArmoryFactory.DynamicContext dynamicContext) throws Exception {
@@ -106,6 +113,7 @@ public class ChatModelNode extends AbstractArmorySupport {
         // 构建对话模型
         ChatModel chatModel = OpenAiChatModel.builder()
                 .openAiApi(openAiApi)
+                .observationRegistry(ObservationWiring.effective(observationRegistry))
                 .defaultOptions(optionsBuilder.build())
                 .build();
 

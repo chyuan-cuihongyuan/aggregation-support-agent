@@ -1,10 +1,12 @@
 package cn.chyuan.ai.infrastructure.config;
 
 import lombok.extern.slf4j.Slf4j;
+import io.micrometer.observation.ObservationRegistry;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -39,6 +41,11 @@ public class QueryOptimizationConfig {
     @Value("${rag.query.chat-model:glm-4.5-flash}")
     private String model;
 
+    /** spring-ai GenAI 指标装配（SELFLOOP2 loop-212）：actuator registry 缺席时回退 NOOP */
+    @Autowired(required = false)
+    private ObservationRegistry observationRegistry;
+
+
     /**
      * 查询优化专用 ChatModel Bean
      * 仅在查询改写启用时才创建
@@ -67,6 +74,8 @@ public class QueryOptimizationConfig {
                 .build();
         return OpenAiChatModel.builder()
                 .openAiApi(openAiApi)
+                .observationRegistry(
+                        cn.chyuan.ai.domain.agent.service.armory.support.ObservationWiring.effective(observationRegistry))
                 .defaultOptions(OpenAiChatOptions.builder()
                         .model(model)
                         .build())
