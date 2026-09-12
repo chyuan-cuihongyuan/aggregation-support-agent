@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.chyuan.ai.infrastructure.dao.IWorkflowRunDao">
+
+    <resultMap id="RunMap" type="cn.chyuan.ai.infrastructure.dao.po.WorkflowRunPO">
+        <id column="id" property="id"/>
+        <result column="run_id" property="runId"/>
+        <result column="workflow_name" property="workflowName"/>
+        <result column="workflow_version" property="workflowVersion"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="status" property="status"/>
+        <result column="failed_node_id" property="failedNodeId"/>
+        <result column="error" property="error"/>
+        <result column="duration_ms" property="durationMs"/>
+        <result column="node_runs_json" property="nodeRunsJson"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <sql id="cols">
+        id, run_id, workflow_name, workflow_version, tenant_id, status, failed_node_id,
+        error, duration_ms, node_runs_json, create_time
+    </sql>
+
+    <insert id="insert">
+        INSERT INTO workflow_run
+            (run_id, workflow_name, workflow_version, tenant_id, status, failed_node_id,
+             error, duration_ms, node_runs_json, create_time)
+        VALUES
+            (#{runId}, #{workflowName}, #{workflowVersion}, #{tenantId}, #{status},
+             #{failedNodeId}, #{error}, #{durationMs}, #{nodeRunsJson}, CURRENT_TIMESTAMP)
+    </insert>
+
+    <select id="queryByRunId" resultMap="RunMap">
+        SELECT <include refid="cols"/>
+        FROM workflow_run
+        WHERE run_id = #{runId}
+    </select>
+
+    <!-- 最近运行：LIMIT 参数化两方言通用；name 为空时全量（动态 SQL 公共子集） -->
+    <select id="queryRecent" resultMap="RunMap">
+        SELECT <include refid="cols"/>
+        FROM workflow_run
+        <where>
+            <if test="workflowName != null and workflowName != ''">
+                workflow_name = #{workflowName}
+            </if>
+        </where>
+        ORDER BY create_time DESC, id DESC
+        LIMIT #{limit}
+    </select>
+</mapper>

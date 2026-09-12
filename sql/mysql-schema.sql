@@ -252,3 +252,20 @@ CREATE TABLE IF NOT EXISTS tenant_knowledge_quota (
   update_time   DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '更新时间（应用层维护）',
   UNIQUE KEY uk_quota_tenant (tenant_id)
 ) COMMENT '租户知识库配额表';
+
+-- 14. 工作流运行表（工单 0212 AB9）
+CREATE TABLE IF NOT EXISTS workflow_run (
+  id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+  run_id           VARCHAR(64)  NOT NULL COMMENT '运行 id（UUID）',
+  workflow_name    VARCHAR(128) NOT NULL COMMENT '工作流名',
+  workflow_version INT          NOT NULL DEFAULT 1 COMMENT '版本号',
+  tenant_id        VARCHAR(64)  NULL COMMENT '租户（灰度切流来源）',
+  status           VARCHAR(16)  NOT NULL COMMENT 'COMPLETED/FAILED/INTERRUPTED',
+  failed_node_id   VARCHAR(128) NULL COMMENT '失败节点',
+  error            VARCHAR(512) NULL COMMENT '错误摘要',
+  duration_ms      BIGINT       NULL COMMENT '总耗时毫秒',
+  node_runs_json   TEXT         NULL COMMENT '节点级明细 JSON 数组',
+  create_time      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_workflow_run_id (run_id),
+  KEY idx_workflow_run_name (workflow_name, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工作流运行历史（工单 0212 AB9）';

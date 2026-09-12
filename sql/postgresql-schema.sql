@@ -435,3 +435,23 @@ COMMENT ON COLUMN tenant_knowledge_quota.max_documents IS '文档数上限（NUL
 COMMENT ON COLUMN tenant_knowledge_quota.max_chunks IS '分块数上限（NULL=不限制，PO Integer→INT）';
 COMMENT ON COLUMN tenant_knowledge_quota.create_time IS '创建时间';
 COMMENT ON COLUMN tenant_knowledge_quota.update_time IS '更新时间（应用层维护）';
+
+-- 14. 工作流运行表（工单 0212 AB9：run 级摘要 + 节点级明细 JSON 文本）
+CREATE TABLE IF NOT EXISTS workflow_run (
+    id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    run_id           VARCHAR(64)  NOT NULL,
+    workflow_name    VARCHAR(128) NOT NULL,
+    workflow_version INT          NOT NULL DEFAULT 1,
+    tenant_id        VARCHAR(64),
+    status           VARCHAR(16)  NOT NULL,
+    failed_node_id   VARCHAR(128),
+    error            VARCHAR(512),
+    duration_ms      BIGINT,
+    node_runs_json   TEXT,
+    create_time      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_workflow_run_id UNIQUE (run_id)
+);
+COMMENT ON TABLE workflow_run IS '工作流运行历史（AB9：run 级摘要 + 节点明细 JSON；执行引擎落档）';
+COMMENT ON COLUMN workflow_run.status IS '状态：COMPLETED/FAILED/INTERRUPTED';
+COMMENT ON COLUMN workflow_run.node_runs_json IS '节点级明细 JSON 数组（nodeId/status/attempts/durationMs/error）';
+CREATE INDEX IF NOT EXISTS idx_workflow_run_name ON workflow_run (workflow_name, create_time);
