@@ -9,11 +9,16 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
@@ -109,6 +114,61 @@ public class GlobalExceptionHandler {
         return Response.builder()
                 .code(ResponseCode.E1001.getCode())
                 .info("参数约束校验失败: " + message)
+                .build();
+    }
+
+    // ===== SELFLOOP2 loop-220：客户端错误精确映射（审计路线 2，同 obs/mcp 模式） =====
+
+    /** 请求体不可读（畸形 JSON）：400 */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Response<?> handleMessageNotReadable(HttpMessageNotReadableException e, HttpServletRequest request) {
+        log.warn("请求体不可读 [{} {}]: {}", request.getMethod(), request.getRequestURI(), e.getMessage());
+        return Response.builder()
+                .code(ResponseCode.ILLEGAL_PARAMETER.getCode())
+                .info("请求体格式错误或不可读")
+                .build();
+    }
+
+    /** 参数类型不匹配：400，带参数名 */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Response<?> handleTypeMismatch(MethodArgumentTypeMismatchException e, HttpServletRequest request) {
+        log.warn("参数类型不匹配 [{} {}]: {}", request.getMethod(), request.getRequestURI(), e.getName());
+        return Response.builder()
+                .code(ResponseCode.ILLEGAL_PARAMETER.getCode())
+                .info("参数类型不匹配: " + e.getName())
+                .build();
+    }
+
+    /** 缺少必填参数：400，带参数名 */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Response<?> handleMissingParam(MissingServletRequestParameterException e, HttpServletRequest request) {
+        log.warn("缺少必填参数 [{} {}]: {}", request.getMethod(), request.getRequestURI(), e.getParameterName());
+        return Response.builder()
+                .code(ResponseCode.ILLEGAL_PARAMETER.getCode())
+                .info("缺少必填参数: " + e.getParameterName())
+                .build();
+    }
+
+    /** 方法不支持：405 */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    @ResponseStatus(HttpStatus.METHOD_NOT_ALLOWED)
+    public Response<?> handleMethodNotSupported(HttpRequestMethodNotSupportedException e, HttpServletRequest request) {
+        return Response.builder()
+                .code(ResponseCode.METHOD_NOT_SUPPORTED.getCode())
+                .info(ResponseCode.METHOD_NOT_SUPPORTED.getInfo())
+                .build();
+    }
+
+    /** 媒体类型不支持：415 */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    @ResponseStatus(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+    public Response<?> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException e, HttpServletRequest request) {
+        return Response.builder()
+                .code(ResponseCode.MEDIA_TYPE_NOT_SUPPORTED.getCode())
+                .info(ResponseCode.MEDIA_TYPE_NOT_SUPPORTED.getInfo())
                 .build();
     }
 }

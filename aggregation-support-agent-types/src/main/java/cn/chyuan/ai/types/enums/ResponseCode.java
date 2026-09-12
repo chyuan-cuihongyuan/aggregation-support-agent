@@ -9,6 +9,9 @@ public enum ResponseCode {
     UN_ERROR("0001", "未知失败"),
     ILLEGAL_PARAMETER("0002", "非法参数"),
     NOT_FOUND_METHOD("0003", "不存在的方法"),
+    // SELFLOOP2 loop-220：HTTP 语义错误码（405/415 精确映射，与 mcp 仓对齐）
+    METHOD_NOT_SUPPORTED("0007", "HTTP 方法不支持"),
+    MEDIA_TYPE_NOT_SUPPORTED("0008", "媒体类型不支持"),
 
     E0001("E0001", "智能体ID不存在"),
     E0002("E0002", "智能体MCP配置不在可加载范围"),
