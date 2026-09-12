@@ -7,6 +7,7 @@ import cn.chyuan.ai.domain.agent.service.armory.AbstractArmorySupport;
 import cn.chyuan.ai.domain.agent.service.armory.factory.DefaultArmoryFactory;
 import cn.chyuan.ai.domain.agent.service.armory.matter.mcp.toolset.SpringAiToolset;
 import cn.chyuan.ai.domain.agent.service.armory.matter.patch.MySpringAI;
+import cn.chyuan.ai.domain.agent.support.prompt.PromptRegistry;
 import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
 import com.google.adk.agents.LlmAgent;
 import com.google.adk.tools.BaseToolset;
@@ -22,7 +23,11 @@ import java.util.List;
 @Service
 public class AgentNode extends AbstractArmorySupport {
 
-    private static final String REACT_PROMPT_PREFIX = """
+    private static final String REACT_PROMPT_NAME = "agent.react.prefix";
+    private static final String REACT_PROMPT_VERSION = "v1";
+
+    static {
+        PromptRegistry.register(REACT_PROMPT_NAME, REACT_PROMPT_VERSION, """
             You are working with tool-calling capability in ReAct (Reasoning + Acting) mode.
 
             ## Core Principle: Use tools proactively when they can provide accurate information
@@ -52,7 +57,8 @@ public class AgentNode extends AbstractArmorySupport {
             - Always use tools for factual queries about data in the knowledge base
             - Do not substitute your own knowledge for tool results on factual questions
             - Your final response should contain only the substantive content, do not include labels like "Final Answer:" or "Thought:"
-            """;
+            """);
+    }
 
     @Resource
     private AgentWorkflowNode agentWorkflowNode;
@@ -85,7 +91,10 @@ public class AgentNode extends AbstractArmorySupport {
             if (Boolean.TRUE.equals(agentConfig.getReactMode()) && hasTools) {
                 log.info("Agent [{}] ReAct mode enabled, injecting ReAct prompt prefix. Original instruction length: {}",
                         agentConfig.getName(), instruction != null ? instruction.length() : 0);
-                instruction = REACT_PROMPT_PREFIX + "\n\n---\n\n" + instruction;
+                String baseInstruction = instruction;
+                instruction = PromptRegistry.current(REACT_PROMPT_NAME)
+                        .map(prefix -> prefix + "\n\n---\n\n" + baseInstruction)
+                        .orElse(baseInstruction);
             }
 
             LlmAgent.Builder agentBuilder = LlmAgent.builder()

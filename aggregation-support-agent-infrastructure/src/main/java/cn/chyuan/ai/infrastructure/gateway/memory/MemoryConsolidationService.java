@@ -1,5 +1,6 @@
 package cn.chyuan.ai.infrastructure.gateway.memory;
 
+import cn.chyuan.ai.domain.agent.support.prompt.PromptRegistry;
 import cn.chyuan.ai.domain.memory.adapter.port.IMemoryConsolidationGateway;
 import cn.chyuan.ai.domain.memory.model.enums.ConsolidationAction;
 import cn.chyuan.ai.domain.memory.model.valobj.ConsolidationDecision;
@@ -50,7 +51,11 @@ public class MemoryConsolidationService implements IMemoryConsolidationGateway {
     /**
      * Consolidation 决策 Prompt
      */
-    private static final String CONSOLIDATION_PROMPT = """
+    private static final String CONSOLIDATION_PROMPT_NAME = "memory.consolidation";
+    private static final String CONSOLIDATION_PROMPT_VERSION = "v1";
+
+    static {
+        PromptRegistry.register(CONSOLIDATION_PROMPT_NAME, CONSOLIDATION_PROMPT_VERSION, """
         你是一个记忆管理助手。判断两条信息的关系，并通过 submit_consolidation_decision 工具提交决策。
 
         现有信息：{existing}
@@ -64,7 +69,8 @@ public class MemoryConsolidationService implements IMemoryConsolidationGateway {
 
         请务必调用 submit_consolidation_decision 工具提交决策；mergedContent 仅在 action 为 UPDATE 或 MERGE 时填写合并后的完整内容。
         若因工具不可用等原因无法调用工具，请在回复正文直接输出相同结构的 JSON（含 action/reason/mergedContent 字段），不要输出多余解释。
-        """;
+        """);
+    }
 
     /**
      * Function Call 工具名 —— 强制模型以工具参数形式返回结构化决策，从根源上避免小模型生成格式错误的 JSON
@@ -112,7 +118,8 @@ public class MemoryConsolidationService implements IMemoryConsolidationGateway {
      */
     public ConsolidationDecision decide(String existingContent, String newContent) {
         try {
-            String prompt = CONSOLIDATION_PROMPT
+            String prompt = PromptRegistry.current(CONSOLIDATION_PROMPT_NAME)
+                .orElseThrow(() -> new IllegalStateException("prompt not registered: " + CONSOLIDATION_PROMPT_NAME))
                 .replace("{existing}", existingContent)
                 .replace("{new_info}", newContent);
             

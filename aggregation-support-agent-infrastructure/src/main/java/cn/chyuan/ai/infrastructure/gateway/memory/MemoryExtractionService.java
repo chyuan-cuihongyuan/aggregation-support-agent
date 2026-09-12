@@ -1,5 +1,6 @@
 package cn.chyuan.ai.infrastructure.gateway.memory;
 
+import cn.chyuan.ai.domain.agent.support.prompt.PromptRegistry;
 import cn.chyuan.ai.domain.memory.adapter.port.IMemoryExtractionGateway;
 import cn.chyuan.ai.domain.memory.model.enums.MemoryType;
 import cn.chyuan.ai.domain.memory.model.valobj.ExtractedFact;
@@ -51,7 +52,13 @@ public class MemoryExtractionService implements IMemoryExtractionGateway {
     /**
      * 事实提取 Prompt
      */
-    private static final String EXTRACTION_PROMPT = """
+    private static final String EXTRACTION_PROMPT_NAME = "memory.extraction";
+    private static final String EXTRACTION_PROMPT_VERSION = "v1";
+    private static final String IMPORTANCE_PROMPT_NAME = "memory.importance";
+    private static final String IMPORTANCE_PROMPT_VERSION = "v1";
+
+    static {
+        PromptRegistry.register(EXTRACTION_PROMPT_NAME, EXTRACTION_PROMPT_VERSION, """
         从以下对话内容中提取独立的、原子化的事实陈述，并通过 submit_extracted_facts 工具提交。
 
         要求：
@@ -71,7 +78,8 @@ public class MemoryExtractionService implements IMemoryExtractionGateway {
 
         内容：
         %s
-        """;
+        """);
+    }
 
     /**
      * Function Call 工具名 —— 强制模型以工具参数形式返回结构化事实列表，从根源上避免小模型生成格式错误的 JSON
@@ -106,30 +114,33 @@ public class MemoryExtractionService implements IMemoryExtractionGateway {
         ),
         "required", List.of("facts")
     );
-    
+
     /**
-     * 重要性评估 Prompt
+     * 重要性评估 Prompt 已迁入 PromptRegistry：memory.importance@v1
      */
-    private static final String IMPORTANCE_PROMPT = """
+    static {
+        PromptRegistry.register(IMPORTANCE_PROMPT_NAME, IMPORTANCE_PROMPT_VERSION, """
         评估以下信息的重要性，返回 0-1 之间的分数：
-        
+
         评分标准：
         - 0.9-1.0: 关键决策、安全信息、用户核心偏好
         - 0.7-0.8: 业务规则、重要配置、明确需求
         - 0.5-0.6: 一般事实、常规信息
         - 0.1-0.4: 闲聊、临时信息、已过时内容
-        
+
         只返回数字，不要其他内容。
-        
+
         内容：%s
-        """;
+        """);
+    }
     
     /**
      * 从内容中提取原子事实
      */
     public List<ExtractedFact> extractFacts(String content) {
         try {
-            String prompt = String.format(EXTRACTION_PROMPT, content);
+            String prompt = String.format(PromptRegistry.current(EXTRACTION_PROMPT_NAME)
+                .orElseThrow(() -> new IllegalStateException("prompt not registered: " + EXTRACTION_PROMPT_NAME)), content);
             String response = callLlmWithFunctionCall(
                 prompt,
                 EXTRACTION_FUNCTION_NAME,
@@ -151,7 +162,8 @@ public class MemoryExtractionService implements IMemoryExtractionGateway {
      */
     public Float assessImportance(String content) {
         try {
-            String prompt = String.format(IMPORTANCE_PROMPT, content);
+            String prompt = String.format(PromptRegistry.current(IMPORTANCE_PROMPT_NAME)
+                .orElseThrow(() -> new IllegalStateException("prompt not registered: " + IMPORTANCE_PROMPT_NAME)), content);
             String response = callLlm(prompt);
             return Float.parseFloat(response.trim().replaceAll("[^0-9.]", ""));
         } catch (Exception e) {
