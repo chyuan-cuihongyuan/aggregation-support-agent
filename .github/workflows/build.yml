@@ -34,6 +34,19 @@ jobs:
       - name: 构建 + 单元测试（ci profile：pom 内排除需基础设施的集成测试）
         run: mvn -B -ntp -Pci test
 
+      # AUTOLOOP al-48 / 工单 1048：覆盖率报告产物（失败也产出，度量先于门禁）
+      - name: 生成 jacoco 覆盖率报告
+        if: always()
+        run: mvn -B -ntp -Pci jacoco:report -DskipTests || true
+
+      - name: 上传覆盖率报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: '**/target/site/jacoco/**'
+          retention-days: 7
+
       - name: 上传测试报告（失败时）
         if: failure()
         uses: actions/upload-artifact@v4

@@ -344,6 +344,19 @@
             </plugin>
         </plugins>
     </build>
+    <!-- AUTOLOOP al-48 / 工单 1048：jacoco 版本钉扎（与 add-oil 对齐 0.8.12） -->
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.jacoco</groupId>
+                    <artifactId>jacoco-maven-plugin</artifactId>
+                    <version>0.8.12</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
     <profiles>
         <!-- CI 单测管线（E06a）：显式排除需完整基础设施（MySQL/Redis/Milvus/ES/RocketMQ）
              的 @SpringBootTest；集成验证仍走本地 docker-compose。GitHub Actions 消费（-Pci）。 -->
