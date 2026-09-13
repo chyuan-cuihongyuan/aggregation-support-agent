@@ -41,3 +41,15 @@ management:
 #     path: /v3/api-docs
 #   swagger-ui:
 #     path: /swagger-ui.html
+
+# logging（AUTOLOOP al-41 / 工单 1041）：dev 环境 SQL 可见性建议段。
+# 真实 application-dev.yml 为本地部署文件不入库（本仓约定，.gitignore:71），
+# 本地 dev 请在 logging.level 下追加：
+#   cn.chyuan.ai.infrastructure.persistent.mapper: debug
+# 效果：SQL 语句+参数分两行输出（MyBatis 内建，零依赖）。
+# 评估记录：P6Spy（jdbc:p6spy 前缀方案）因破坏 MYSQL_URL 环境变量契约弃用；
+# 若后续需单行含参 SQL/慢 SQL 阈值，按 spy.properties 方案专题引入。
+# logging:
+#   level:
+#     root: info
+#     cn.chyuan.ai.infrastructure.persistent.mapper: debug
