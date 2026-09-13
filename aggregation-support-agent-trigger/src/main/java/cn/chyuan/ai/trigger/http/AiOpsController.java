@@ -11,6 +11,7 @@ import cn.chyuan.ai.types.enums.ResponseCode;
 import cn.chyuan.ai.types.exception.AppException;
 import com.google.adk.events.Event;
 import io.reactivex.rxjava3.core.Flowable;
+import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -78,7 +79,14 @@ public class AiOpsController {
             RagSourceCollector.detach();
 
             // 订阅事件流，将每个事件内容通过 SSE 推送到前端
-            events
+            // SELFLOOP2 loop-250：断连处置——emitter 关闭标志 + dispose 上游订阅，
+            // 与 chat_stream（AgentServiceController）防线对齐，防止客户端断开后继续消耗 LLM
+            java.util.concurrent.atomic.AtomicBoolean emitterClosed = new java.util.concurrent.atomic.AtomicBoolean(false);
+            java.util.concurrent.atomic.AtomicReference<io.reactivex.rxjava3.disposables.Disposable> disposableRef =
+                    new java.util.concurrent.atomic.AtomicReference<>();
+            emitter.onTimeout(() -> emitterClosed.set(true));
+            emitter.onError(e -> emitterClosed.set(true));
+            Disposable disposable = events
                     .doOnSubscribe(s -> {
                         RagSourceCollector.attach(holderRef);
                         RequestScopeContext.attach(scopeRef);
@@ -91,14 +99,24 @@ public class AiOpsController {
                     .subscribe(
                             event -> {
                                 try {
+                                    if (emitterClosed.get()) {
+                                        RagSourceCollector.drainHolder(holderRef);
+                                        disposableRef.get().dispose();
+                                        return;
+                                    }
                                     String content = event.stringifyContent();
                                     if (content != null && !content.isEmpty()) {
                                         emitter.send(SseEmitter.event().data(content));
                                     }
                                 } catch (Exception e) {
                                     log.error("AIOps SSE 发送失败", e);
-                                    // 注意：不要在这里调用 emitter.completeWithError(e)，
-                                    // 因为异常会传播到 onError 回调，避免重复完成导致 IllegalStateException
+                                    // 发送失败（客户端断连 broken pipe）：置位 + dispose 上游，停止消耗 LLM
+                                    if (!emitterClosed.getAndSet(true)) {
+                                        io.reactivex.rxjava3.disposables.Disposable d = disposableRef.get();
+                                        if (d != null && !d.isDisposed()) {
+                                            d.dispose();
+                                        }
+                                    }
                                 }
                             },
                             err -> {
@@ -110,6 +128,7 @@ public class AiOpsController {
                                 emitter.complete();
                             }
                     );
+            disposableRef.set(disposable);
 
         } catch (AppException e) {
             log.error("AIOps 分析异常", e);
