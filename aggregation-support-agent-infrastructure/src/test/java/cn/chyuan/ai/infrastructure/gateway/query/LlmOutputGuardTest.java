@@ -3,6 +3,7 @@ package cn.chyuan.ai.infrastructure.gateway.query;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
@@ -73,5 +74,36 @@ class LlmOutputGuardTest {
         // 输出侧 trim：首尾空白去除后仍需过校验
         Optional<String> trimmed = guard.callUntilValid(() -> "  带空白的结果  ", validator);
         assertEquals("带空白的结果", trimmed.orElseThrow());
+    }
+
+    @Test
+    @DisplayName("指数退避（loop-234）：异常路径 500→1000，校验失败不退避")
+    void exponentialBackoffOnExceptions() {
+        List<Long> sleeps = new java.util.ArrayList<>();
+        LlmOutputGuard spy = new LlmOutputGuard() {
+            @Override
+            void backoffSleep(long ms) {
+                sleeps.add(ms);
+            }
+        };
+        AtomicInteger calls = new AtomicInteger();
+        Optional<String> r = spy.callUntilValid(() -> {
+            if (calls.incrementAndGet() < 3) {
+                throw new RuntimeException("429 Too Many Requests");
+            }
+            return "恢复成功";
+        }, validator, 3, 500L);
+        assertTrue(r.isPresent());
+        assertEquals(java.util.List.of(500L, 1000L), sleeps);
+
+        // 校验失败立即重试：无睡眠
+        sleeps.clear();
+        AtomicInteger calls2 = new AtomicInteger();
+        Optional<String> r2 = spy.callUntilValid(() -> {
+            int n = calls2.incrementAndGet();
+            return n < 3 ? "  " : "有效";
+        }, validator, 3, 500L);
+        assertTrue(r2.isPresent());
+        assertEquals(java.util.List.of(), sleeps);
     }
 }

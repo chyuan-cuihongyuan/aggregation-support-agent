@@ -57,7 +57,8 @@ public class QueryOptimizationService implements IQueryOptimizationService {
             String rewritten = llmOutputGuard.callUntilValid(
                             () -> chatModel.call(new Prompt(new UserMessage(prompt)))
                                     .getResult().getOutput().getText(),
-                            LlmOutputGuard.NON_BLANK_MAX_500)
+                            LlmOutputGuard.NON_BLANK_MAX_500,
+                            LlmOutputGuard.DEFAULT_MAX_ATTEMPTS, 500L)
                     .orElse(originalQuery);
             log.info("Query改写完成: original={}, rewritten={}", originalQuery, rewritten);
             return rewritten;
@@ -95,7 +96,8 @@ public class QueryOptimizationService implements IQueryOptimizationService {
             String hypotheticalDoc = llmOutputGuard.callUntilValid(
                             () -> chatModel.call(new Prompt(new UserMessage(prompt)))
                                     .getResult().getOutput().getText(),
-                            LlmOutputGuard.NON_BLANK_MAX_500)
+                            LlmOutputGuard.NON_BLANK_MAX_500,
+                            LlmOutputGuard.DEFAULT_MAX_ATTEMPTS, 500L)
                     .orElse(query);
             log.info("HyDE生成完成: length={}", hypotheticalDoc.length());
             return hypotheticalDoc.trim();
@@ -134,7 +136,8 @@ public class QueryOptimizationService implements IQueryOptimizationService {
             String stepBackQuery = llmOutputGuard.callUntilValid(
                             () -> chatModel.call(new Prompt(new UserMessage(prompt)))
                                     .getResult().getOutput().getText(),
-                            LlmOutputGuard.NON_BLANK_MAX_500)
+                            LlmOutputGuard.NON_BLANK_MAX_500,
+                            LlmOutputGuard.DEFAULT_MAX_ATTEMPTS, 500L)
                     .orElse(specificQuery);
             log.info("Step-back生成完成: stepBackQuery={}", stepBackQuery);
             return stepBackQuery;
