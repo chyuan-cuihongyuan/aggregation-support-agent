@@ -342,11 +342,19 @@
                 <artifactId>versions-maven-plugin</artifactId>
                 <version>2.7</version>
             </plugin>
-            <!-- AUTOLOOP al-48 / 工单 1048：jacoco 版本钉扎（与 add-oil 对齐 0.8.12） -->
+            <!-- AUTOLOOP al-48 / 工单 1048：jacoco agent 绑定 + 版本钉扎（与 add-oil 对齐 0.8.12）。
+                 prepare-agent 随 test 生成 exec；report 经 `mvn jacoco:report` 显式产出 -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>0.8.12</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
