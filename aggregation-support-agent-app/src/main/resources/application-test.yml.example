@@ -48,3 +48,12 @@ rag:
       core-size: 1
       max-size: 2
       queue-capacity: 20
+
+# b-11（工单 1118）：模型路由表（LiteLLM router 配置形态；LiteLLM 不引库）
+# 用例键化模型 + fallback 候选顺序；缺席时回退旧键 rag.query.chat-model
+ai-api:
+  routing:
+    query-optimization:
+      model: ${LLM_ROUTING_QUERY_MODEL:glm-4.5-flash}
+      fallbacks:
+        - ${LLM_ROUTING_QUERY_FALLBACK:glm-4-flash}

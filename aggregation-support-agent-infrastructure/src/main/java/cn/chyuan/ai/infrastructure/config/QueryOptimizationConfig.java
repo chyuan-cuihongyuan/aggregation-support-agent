@@ -38,8 +38,8 @@ public class QueryOptimizationConfig {
     @Value("${ai-api.api-key}")
     private String apiKey;
 
-    @Value("${rag.query.chat-model:glm-4.5-flash}")
-    private String model;
+    @Autowired
+    private ModelRouter modelRouter;
 
     /** spring-ai GenAI 指标装配（SELFLOOP2 loop-212）：actuator registry 缺席时回退 NOOP */
     @Autowired(required = false)
@@ -53,6 +53,8 @@ public class QueryOptimizationConfig {
     @Bean("queryOptimizationChatModel")
     @ConditionalOnProperty(name = "rag.query.rewrite.enabled", havingValue = "true")
     public ChatModel queryOptimizationChatModel() {
+        // b-11：模型经路由表解析（ai-api.routing.query-optimization > 旧键 > 默认）
+        String model = modelRouter.resolveModel("query-optimization");
         log.info("初始化查询优化 ChatModel: baseUrl={}, model={}", baseUrl, model);
         // base-url 为智谱 .../api/paas/v4，需覆盖默认补全路径 /v1/chat/completions，
         // 否则拼成 .../v4/v1/chat/completions 触发 404
