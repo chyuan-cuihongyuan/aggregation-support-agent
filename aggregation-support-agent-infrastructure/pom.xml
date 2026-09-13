@@ -10,6 +10,12 @@
     <artifactId>aggregation-support-agent-infrastructure</artifactId>
 
     <dependencies>
+        <!-- b-17（工单 1130）：配置元数据处理器——@ConfigurationProperties 类生成 IDE 提示 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
         <dependency>
             <groupId>org.mybatis.spring.boot</groupId>
             <artifactId>mybatis-spring-boot-starter</artifactId>

@@ -10,6 +10,12 @@
     <artifactId>aggregation-support-agent-domain</artifactId>
 
     <dependencies>
+        <!-- b-17（工单 1130）：配置元数据处理器——@ConfigurationProperties 类生成 IDE 提示 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
         <dependency>
             <groupId>cn.bugstack.wrench</groupId>
             <artifactId>xfg-wrench-starter-design-framework</artifactId>
@@ -105,6 +111,12 @@
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
                             <version>${lombok.version}</version>
+                        </path>
+                        <!-- b-17（工单 1130）：元数据生成（模块覆写了 compiler 配置，需本地补声明） -->
+                        <path>
+                            <groupId>org.springframework.boot</groupId>
+                            <artifactId>spring-boot-configuration-processor</artifactId>
+                            <version>${spring-boot.version}</version>
                         </path>
                     </annotationProcessorPaths>
                 </configuration>

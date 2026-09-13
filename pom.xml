@@ -20,6 +20,7 @@
 
 
     <properties>
+        <spring-boot.version>3.4.3</spring-boot.version>
         <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>21</maven.compiler.source>
@@ -314,7 +315,15 @@
                                 <artifactId>lombok</artifactId>
                                 <version>${lombok.version}</version>
                             </path>
+                            <!-- b-17（工单 1130）：@ConfigurationProperties 元数据生成（IDE 提示/文档） -->
+                            <path>
+                                <groupId>org.springframework.boot</groupId>
+                                <artifactId>spring-boot-configuration-processor</artifactId>
+                                <version>${spring-boot.version}</version>
+                            </path>
                         </annotationProcessorPaths>
+                        <!-- b-17：允许 path 条目从 dependencyManagement 解析版本（compiler 3.12+） -->
+                        <annotationProcessorPathsUseDepMgmt>true</annotationProcessorPathsUseDepMgmt>
                     </configuration>
                 </plugin>
             </plugins>
