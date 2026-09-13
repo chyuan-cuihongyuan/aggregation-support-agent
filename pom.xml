@@ -342,19 +342,13 @@
                 <artifactId>versions-maven-plugin</artifactId>
                 <version>2.7</version>
             </plugin>
+            <!-- AUTOLOOP al-48 / 工单 1048：jacoco 版本钉扎（与 add-oil 对齐 0.8.12） -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+            </plugin>
         </plugins>
-    </build>
-    <!-- AUTOLOOP al-48 / 工单 1048：jacoco 版本钉扎（与 add-oil 对齐 0.8.12） -->
-    <build>
-        <pluginManagement>
-            <plugins>
-                <plugin>
-                    <groupId>org.jacoco</groupId>
-                    <artifactId>jacoco-maven-plugin</artifactId>
-                    <version>0.8.12</version>
-                </plugin>
-            </plugins>
-        </pluginManagement>
     </build>
 
     <profiles>
