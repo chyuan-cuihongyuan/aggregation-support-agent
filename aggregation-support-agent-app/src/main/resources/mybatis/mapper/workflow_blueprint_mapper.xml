@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.chyuan.ai.infrastructure.dao.IWorkflowBlueprintDao">
+
+    <resultMap id="BlueprintMap" type="cn.chyuan.ai.infrastructure.dao.po.WorkflowBlueprintPO">
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="description" property="description"/>
+        <result column="category" property="category"/>
+        <result column="tags" property="tags"/>
+        <result column="graph_json" property="graphJson"/>
+        <result column="param_schema_json" property="paramSchemaJson"/>
+        <result column="operator" property="operator"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="cols">
+        id, name, description, category, tags, graph_json, param_schema_json, operator,
+        create_time, update_time
+    </sql>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO workflow_blueprint
+            (name, description, category, tags, graph_json, param_schema_json, operator, update_time)
+        VALUES
+            (#{name}, #{description}, #{category}, #{tags}, #{graphJson}, #{paramSchemaJson},
+             #{operator}, CURRENT_TIMESTAMP)
+    </insert>
+
+    <!-- 应用层维护 update_time（双方言公共子集） -->
+    <update id="update">
+        UPDATE workflow_blueprint
+        SET name = #{name}, description = #{description}, category = #{category}, tags = #{tags},
+            graph_json = #{graphJson}, param_schema_json = #{paramSchemaJson}, operator = #{operator},
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM workflow_blueprint WHERE id = #{id}
+    </delete>
+
+    <select id="queryById" resultMap="BlueprintMap">
+        SELECT <include refid="cols"/>
+        FROM workflow_blueprint
+        WHERE id = #{id}
+    </select>
+
+    <select id="queryAll" resultMap="BlueprintMap">
+        SELECT <include refid="cols"/>
+        FROM workflow_blueprint
+        ORDER BY name
+    </select>
+</mapper>

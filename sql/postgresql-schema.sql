@@ -468,3 +468,19 @@ CREATE TABLE IF NOT EXISTS retrieval_profile (
     CONSTRAINT uk_retrieval_profile_key UNIQUE (profile_key)
 );
 COMMENT ON TABLE retrieval_profile IS '检索参数画像（AE8：topK/efSearch/权重组合的命中率与延迟快照）';
+
+-- 16. 工作流蓝图模板表（工单 0268 AI1：常用编排固化为可实例化模板）
+CREATE TABLE IF NOT EXISTS workflow_blueprint (
+    id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name             VARCHAR(128) NOT NULL,
+    description      VARCHAR(512),
+    category         VARCHAR(64)  NOT NULL DEFAULT 'general',
+    tags             VARCHAR(256),
+    graph_json       TEXT         NOT NULL,
+    param_schema_json TEXT,
+    operator         VARCHAR(64)  NOT NULL DEFAULT 'unknown',
+    create_time      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_workflow_blueprint_name UNIQUE (name)
+);
+COMMENT ON TABLE workflow_blueprint IS '工作流蓝图模板（AI1：图定义 DSL + 参数 schema，实例化产出可注册图定义）';

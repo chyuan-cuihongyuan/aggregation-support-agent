@@ -281,3 +281,18 @@ CREATE TABLE IF NOT EXISTS retrieval_profile (
   update_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_retrieval_profile_key (profile_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='检索参数画像（工单 0235 AE8）';
+
+-- 16. 工作流蓝图模板表（工单 0268 AI1）
+CREATE TABLE IF NOT EXISTS workflow_blueprint (
+  id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+  name             VARCHAR(128) NOT NULL COMMENT '蓝图名',
+  description      VARCHAR(512) NULL COMMENT '描述',
+  category         VARCHAR(64)  NOT NULL DEFAULT 'general' COMMENT '分类',
+  tags             VARCHAR(256) NULL COMMENT '标签（逗号拼接）',
+  graph_json       TEXT         NOT NULL COMMENT '图定义 DSL JSON（可含 ${param} 占位）',
+  param_schema_json TEXT        NULL COMMENT '参数 schema JSON',
+  operator         VARCHAR(64)  NOT NULL DEFAULT 'unknown' COMMENT '操作人',
+  create_time      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_workflow_blueprint_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工作流蓝图模板（工单 0268 AI1）';
