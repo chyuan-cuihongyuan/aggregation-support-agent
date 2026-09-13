@@ -53,3 +53,11 @@ management:
 #   level:
 #     root: info
 #     cn.chyuan.ai.infrastructure.persistent.mapper: debug
+
+# Neo4j 连接生命周期（SELFLOOP2 loop-246）：安全默认已内置于代码，
+# 以下为可选外置项（neo4j.enabled=true 时生效）：
+# neo4j:
+#   connection-timeout-seconds: 10          # TCP 连接建立超时
+#   connection-acquisition-timeout-seconds: 30  # 池获取连接超时
+#   max-connection-pool-size: 50            # 连接池上限
+#   max-connection-lifetime-seconds: 3600   # 连接最长寿命

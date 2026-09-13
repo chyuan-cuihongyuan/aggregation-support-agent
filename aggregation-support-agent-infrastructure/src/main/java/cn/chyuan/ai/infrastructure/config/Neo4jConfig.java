@@ -28,6 +28,16 @@ public class Neo4jConfig {
 
     private String uri;
 
+    // ===== 连接生命周期（SELFLOOP2 loop-246）：安全默认，可经同名属性外置 =====
+    /** TCP 连接建立超时（秒） */
+    private int connectionTimeoutSeconds = 10;
+    /** 从池获取连接的超时（秒） */
+    private int connectionAcquisitionTimeoutSeconds = 30;
+    /** 连接池上限 */
+    private int maxConnectionPoolSize = 50;
+    /** 连接最长寿命（秒），到期由池回收重建 */
+    private long maxConnectionLifetimeSeconds = 3600;
+
     private Authentication authentication = new Authentication();
 
     @Data
@@ -54,9 +64,16 @@ public class Neo4jConfig {
             throw new IllegalStateException("Neo4j 已启用但缺少必要配置，启动快速失败，缺失配置项: "
                     + String.join(", ", missing));
         }
+        org.neo4j.driver.Config config = org.neo4j.driver.Config.builder()
+                .withConnectionTimeout(connectionTimeoutSeconds, java.util.concurrent.TimeUnit.SECONDS)
+                .withConnectionAcquisitionTimeout(connectionAcquisitionTimeoutSeconds, java.util.concurrent.TimeUnit.SECONDS)
+                .withMaxConnectionPoolSize(maxConnectionPoolSize)
+                .withMaxConnectionLifetime(maxConnectionLifetimeSeconds, java.util.concurrent.TimeUnit.SECONDS)
+                .build();
         return org.neo4j.driver.GraphDatabase.driver(
                 uri,
-                org.neo4j.driver.AuthTokens.basic(authentication.getUsername(), authentication.getPassword())
+                org.neo4j.driver.AuthTokens.basic(authentication.getUsername(), authentication.getPassword()),
+                config
         );
     }
 
