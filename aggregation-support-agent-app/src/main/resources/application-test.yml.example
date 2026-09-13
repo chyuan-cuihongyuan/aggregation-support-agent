@@ -57,3 +57,9 @@ ai-api:
       model: ${LLM_ROUTING_QUERY_MODEL:glm-4.5-flash}
       fallbacks:
         - ${LLM_ROUTING_QUERY_FALLBACK:glm-4-flash}
+  # b-13（工单 1122）：模型单价表（USD / 1k tokens；LiteLLM cost tracking 思想）
+  # 未配置的模型只记 token 数，成本记 0
+  pricing:
+    glm-4.5-flash:
+      input-per-1k-usd: 0.0
+      output-per-1k-usd: 0.0

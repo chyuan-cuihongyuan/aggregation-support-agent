@@ -1,8 +1,10 @@
 package cn.chyuan.ai.infrastructure.gateway.query;
 
 import cn.chyuan.ai.domain.rag.service.query.IQueryOptimizationService;
+import cn.chyuan.ai.infrastructure.config.LlmCostRecorder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +24,9 @@ public class QueryOptimizationService implements IQueryOptimizationService {
 
     @Autowired
     private LlmOutputGuard llmOutputGuard;
+
+    @Autowired
+    private LlmCostRecorder llmCostRecorder;
 
     @Override
     public String rewriteQuery(String originalQuery, List<String> chatHistory) {
@@ -55,8 +60,7 @@ public class QueryOptimizationService implements IQueryOptimizationService {
         try {
             // 输出守卫（SELFLOOP2 loop-229）：空/超长/解释性输出重试，全败回退原查询
             String rewritten = llmOutputGuard.callUntilValid(
-                            () -> chatModel.call(new Prompt(new UserMessage(prompt)))
-                                    .getResult().getOutput().getText(),
+                            () -> callForText(prompt),
                             LlmOutputGuard.NON_BLANK_MAX_500,
                             LlmOutputGuard.DEFAULT_MAX_ATTEMPTS, 500L)
                     .orElse(originalQuery);
@@ -66,6 +70,17 @@ public class QueryOptimizationService implements IQueryOptimizationService {
             log.warn("Query改写失败，返回原始查询: {}", e.getMessage());
             return originalQuery;
         }
+    }
+
+    /** b-13：调用 + token 用量/成本记录（重试的每次尝试都计费，语义如实） */
+    private String callForText(String prompt) {
+        ChatResponse response = chatModel.call(new Prompt(new UserMessage(prompt)));
+        try {
+            llmCostRecorder.record(response.getMetadata().getModel(), response.getMetadata().getUsage());
+        } catch (Exception e) {
+            log.debug("LLM 成本记录跳过: {}", e.getMessage());
+        }
+        return response.getResult().getOutput().getText();
     }
 
     @Override
@@ -94,8 +109,7 @@ public class QueryOptimizationService implements IQueryOptimizationService {
 
         try {
             String hypotheticalDoc = llmOutputGuard.callUntilValid(
-                            () -> chatModel.call(new Prompt(new UserMessage(prompt)))
-                                    .getResult().getOutput().getText(),
+                            () -> callForText(prompt),
                             LlmOutputGuard.NON_BLANK_MAX_500,
                             LlmOutputGuard.DEFAULT_MAX_ATTEMPTS, 500L)
                     .orElse(query);
@@ -134,8 +148,7 @@ public class QueryOptimizationService implements IQueryOptimizationService {
 
         try {
             String stepBackQuery = llmOutputGuard.callUntilValid(
-                            () -> chatModel.call(new Prompt(new UserMessage(prompt)))
-                                    .getResult().getOutput().getText(),
+                            () -> callForText(prompt),
                             LlmOutputGuard.NON_BLANK_MAX_500,
                             LlmOutputGuard.DEFAULT_MAX_ATTEMPTS, 500L)
                     .orElse(specificQuery);
