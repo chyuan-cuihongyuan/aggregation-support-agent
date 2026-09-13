@@ -184,6 +184,25 @@
             <version>1.3.0</version>
             <scope>test</scope>
         </dependency>
+        <!-- AUTOLOOP al-43 / 工单 1043：Testcontainers 试点（借鉴 testcontainers/testcontainers-java） -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>1.20.4</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>mysql</artifactId>
+            <version>1.20.4</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>redis.clients</groupId>
+            <artifactId>jedis</artifactId>
+            <version>5.1.4</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
