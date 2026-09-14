@@ -535,3 +535,37 @@ CREATE TABLE IF NOT EXISTS browser_task_template (
 );
 COMMENT ON TABLE browser_task_template IS '浏览器任务模板（AQ6：{{param}} 占位实例化 + 录制序列回放校验）';
 COMMENT ON COLUMN browser_task_template.update_time IS '更新时间（应用层维护）';
+
+-- 20. 研究任务表（工单 0352/0353 AR6-AR7：状态机 + 检查点快照）
+CREATE TABLE IF NOT EXISTS research_task (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    task_id        VARCHAR(64)  NOT NULL,
+    topic          VARCHAR(256) NOT NULL,
+    perspectives   VARCHAR(256),
+    status         VARCHAR(16)  NOT NULL DEFAULT 'CREATED',
+    checkpoint_json TEXT,
+    token_cost     BIGINT       NOT NULL DEFAULT 0,
+    duration_ms    BIGINT       NOT NULL DEFAULT 0,
+    create_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_research_task_id UNIQUE (task_id)
+);
+COMMENT ON TABLE research_task IS '研究任务（AR6：CREATED→PLANNING→SEARCHING→DRAFTING→CITING→DONE/FAILED/CANCELLED + 检查点续跑）';
+COMMENT ON COLUMN research_task.update_time IS '更新时间（应用层维护）';
+
+-- 21. 研究报告表（工单 0353 AR7：Markdown + 引用表 + 元数据）
+CREATE TABLE IF NOT EXISTS research_report (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    task_id        VARCHAR(64)  NOT NULL,
+    topic          VARCHAR(256) NOT NULL,
+    markdown       TEXT         NOT NULL,
+    citations_json TEXT,
+    metadata_json  TEXT,
+    citation_rate  DOUBLE PRECISION NOT NULL DEFAULT 0,
+    partial        BOOLEAN      NOT NULL DEFAULT FALSE,
+    create_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_research_report_task UNIQUE (task_id)
+);
+COMMENT ON TABLE research_report IS '研究报告（AR7：Markdown+引用表+元数据 JSON，静态可交付）';
+COMMENT ON COLUMN research_report.update_time IS '更新时间（应用层维护）';

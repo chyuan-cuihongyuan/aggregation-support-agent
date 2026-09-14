@@ -339,3 +339,33 @@ CREATE TABLE IF NOT EXISTS browser_task_template (
   update_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_browser_template_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='浏览器任务模板（工单 0344 AQ6）';
+
+-- 20. 研究任务表（工单 0352/0353 AR6-AR7：状态机 + 检查点快照）
+CREATE TABLE IF NOT EXISTS research_task (
+  id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+  task_id        VARCHAR(64)  NOT NULL COMMENT '任务ID（唯一）',
+  topic          VARCHAR(256) NOT NULL COMMENT '研究主题',
+  perspectives   VARCHAR(256) NULL COMMENT '视角清单（逗号拼接）',
+  status         VARCHAR(16)  NOT NULL DEFAULT 'CREATED' COMMENT 'CREATED/PLANNING/SEARCHING/DRAFTING/CITING/DONE/FAILED/CANCELLED',
+  checkpoint_json TEXT        NULL COMMENT '检查点快照 JSON',
+  token_cost     BIGINT       NOT NULL DEFAULT 0 COMMENT 'token 成本',
+  duration_ms    BIGINT       NOT NULL DEFAULT 0 COMMENT '耗时毫秒',
+  create_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_research_task_id (task_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='研究任务（工单 0352 AR6）';
+
+-- 21. 研究报告表（工单 0353 AR7：Markdown + 引用表 + 元数据）
+CREATE TABLE IF NOT EXISTS research_report (
+  id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+  task_id        VARCHAR(64)  NOT NULL COMMENT '任务ID（唯一）',
+  topic          VARCHAR(256) NOT NULL COMMENT '主题',
+  markdown       TEXT         NOT NULL COMMENT '报告 Markdown',
+  citations_json TEXT         NULL COMMENT '引用表 JSON',
+  metadata_json  TEXT         NULL COMMENT '元数据 JSON',
+  citation_rate  DOUBLE       NOT NULL DEFAULT 0 COMMENT '引用对齐率',
+  partial        TINYINT      NOT NULL DEFAULT 0 COMMENT '是否部分报告 0/1',
+  create_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_research_report_task (task_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='研究报告（工单 0353 AR7）';
