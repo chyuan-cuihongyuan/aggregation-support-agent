@@ -36,6 +36,9 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/v1/user")
 public class UserController {
 
+    /** 单页最大记录数，避免 pageSize 过大引发慢查询/大内存（与 AuditLog/RagTrace 同口径） */
+    private static final int MAX_PAGE_SIZE = 100;
+
     @Resource
     private IUserRepository userRepository;
 
@@ -83,7 +86,10 @@ public class UserController {
             @RequestParam(value = "page", defaultValue = "1") int page,
             @RequestParam(value = "pageSize", defaultValue = "20") int pageSize) {
         try {
-            List<UserEntity> entities = userRepository.queryList(page, pageSize);
+            // 分页护栏（SELFLOOP3 loop-312）：与 AuditLog/RagTrace 控制器同口径收口
+            int normalizedPage = Math.max(page, 1);
+            int normalizedPageSize = clampPageSize(pageSize);
+            List<UserEntity> entities = userRepository.queryList(normalizedPage, normalizedPageSize);
             int total = userRepository.countAll();
 
             List<UserInfoDTO> dtoList = entities.stream().map(this::toUserInfoDTO).collect(Collectors.toList());
@@ -91,8 +97,8 @@ public class UserController {
             Map<String, Object> data = new HashMap<>();
             data.put("list", dtoList);
             data.put("total", total);
-            data.put("page", page);
-            data.put("pageSize", pageSize);
+            data.put("page", normalizedPage);
+            data.put("pageSize", normalizedPageSize);
 
             return Response.<Map<String, Object>>builder()
                     .code(ResponseCode.SUCCESS.getCode())
@@ -286,5 +292,12 @@ public class UserController {
         } catch (Exception ex) {
             log.warn("审计调用失败：action={}, err={}", action, ex.getMessage());
         }
+    }
+
+    private int clampPageSize(int pageSize) {
+        if (pageSize <= 0) {
+            return 20;
+        }
+        return Math.min(pageSize, MAX_PAGE_SIZE);
     }
 }
