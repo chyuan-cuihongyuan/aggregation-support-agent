@@ -519,3 +519,19 @@ CREATE TABLE IF NOT EXISTS graph_community (
 COMMENT ON TABLE graph_community IS '图谱社区与分层摘要（AM3：C0 基础/C1 聚合/C2 顶层）';
 COMMENT ON COLUMN graph_community.level IS '层级：0=C0 基础社区，1=C1 聚合，2=C2 顶层';
 COMMENT ON COLUMN graph_community.update_time IS '更新时间（应用层维护）';
+
+-- 19. 浏览器任务模板表（工单 0344 AQ6：目标+参数占位符+动作序列模板）
+CREATE TABLE IF NOT EXISTS browser_task_template (
+    id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    name          VARCHAR(128) NOT NULL,
+    goal          VARCHAR(512),
+    parameters    TEXT,
+    actions_json  TEXT         NOT NULL,
+    tenant_id     VARCHAR(64),
+    operator      VARCHAR(64)  NOT NULL DEFAULT 'unknown',
+    create_time   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_browser_template_name UNIQUE (name)
+);
+COMMENT ON TABLE browser_task_template IS '浏览器任务模板（AQ6：{{param}} 占位实例化 + 录制序列回放校验）';
+COMMENT ON COLUMN browser_task_template.update_time IS '更新时间（应用层维护）';

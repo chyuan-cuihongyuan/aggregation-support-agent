@@ -325,3 +325,17 @@ CREATE TABLE IF NOT EXISTS graph_community (
   update_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_graph_community (index_id, community_id, level)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='图谱社区与分层摘要（工单 0308 AM3）';
+
+-- 19. 浏览器任务模板表（工单 0344 AQ6：目标+参数占位符+动作序列模板）
+CREATE TABLE IF NOT EXISTS browser_task_template (
+  id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+  name          VARCHAR(128) NOT NULL COMMENT '模板名（唯一）',
+  goal          VARCHAR(512) NULL COMMENT '目标描述',
+  parameters    TEXT         NULL COMMENT '参数占位符 JSON',
+  actions_json  TEXT         NOT NULL COMMENT '动作序列模板 JSON',
+  tenant_id     VARCHAR(64)  NULL COMMENT '租户',
+  operator      VARCHAR(64)  NOT NULL DEFAULT 'unknown' COMMENT '操作人',
+  create_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_browser_template_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='浏览器任务模板（工单 0344 AQ6）';
