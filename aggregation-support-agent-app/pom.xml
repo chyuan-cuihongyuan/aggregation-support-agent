@@ -232,10 +232,28 @@
                 <version>3.1.2</version>
                 <configuration>
                     <testFailureIgnore>false</testFailureIgnore>
+                    <!-- 全量执行 + 排除式隔离（工单 1138）：main() 演示类与需真实基础设施的
+                         @SpringBootTest 显式排除；ArchitectureTest/TraceIdFilterTest/
+                         ContainerSmokeTest（无 Docker 自动跳过）回归常规执行。 -->
                     <includes>
-                        <include>**/trigger/http/*Test.java</include>
-                        <include>**/config/*Test.java</include>
+                        <include>**/*Test.java</include>
                     </includes>
+                    <excludes>
+                        <exclude>**/test/ApiTest.java</exclude>
+                        <exclude>**/test/app/AiAgentAutoConfigTest.java</exclude>
+                        <exclude>**/test/api/e2e/EndToEndIntegrationTest.java</exclude>
+                        <!-- @Nested 嵌套类以独立 class 文件参与 surefire 扫描，需一并排除 -->
+                        <exclude>**/test/api/e2e/EndToEndIntegrationTest$*.java</exclude>
+                        <exclude>**/test/domain/agent/ChatServiceTest.java</exclude>
+                        <exclude>**/test/api/agent/LoopAgentTest.java</exclude>
+                        <exclude>**/test/api/agent/ParallelAgentTest.java</exclude>
+                        <exclude>**/test/api/agent/SequentialAgentTest.java</exclude>
+                        <exclude>**/test/api/model/LangChain4jApiTest.java</exclude>
+                        <exclude>**/test/api/model/SpringAiApiTest.java</exclude>
+                        <exclude>**/test/api/tool/mcp/LangChain4jToolTest.java</exclude>
+                        <exclude>**/test/api/tool/mcp/SpringAiToolTest.java</exclude>
+                        <exclude>**/test/api/tool/skills/SpringAiToolTest.java</exclude>
+                    </excludes>
                 </configuration>
             </plugin>
             <plugin>
