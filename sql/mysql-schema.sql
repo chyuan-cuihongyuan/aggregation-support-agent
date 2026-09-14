@@ -296,3 +296,32 @@ CREATE TABLE IF NOT EXISTS workflow_blueprint (
   update_time      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_workflow_blueprint_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工作流蓝图模板（工单 0268 AI1）';
+
+-- 17. 图谱索引表（工单 0308 AM3：AM1 图索引构建快照落档）
+CREATE TABLE IF NOT EXISTS graph_index (
+  id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+  index_id      VARCHAR(64)  NOT NULL COMMENT '索引ID',
+  document_id   VARCHAR(128) NOT NULL COMMENT '来源文档ID',
+  unit_count    INT          NOT NULL DEFAULT 0 COMMENT '文本块数',
+  node_count    INT          NOT NULL DEFAULT 0 COMMENT '节点数',
+  edge_count    INT          NOT NULL DEFAULT 0 COMMENT '边数',
+  index_hash    VARCHAR(64)  NOT NULL COMMENT '规范化序列化 SHA-256（重放校验）',
+  graph_json    TEXT         NULL COMMENT '索引快照 JSON',
+  create_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_graph_index_id (index_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='图谱索引快照（工单 0308 AM3）';
+
+-- 18. 图谱社区表（工单 0308 AM3：社区划分 + C0/C1/C2 分层摘要）
+CREATE TABLE IF NOT EXISTS graph_community (
+  id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+  index_id      VARCHAR(64)  NOT NULL COMMENT '索引ID',
+  community_id  VARCHAR(64)  NOT NULL COMMENT '社区ID（c_ + 胜出标签）',
+  level         INT          NOT NULL DEFAULT 0 COMMENT '层级：0=C0 基础，1=C1 聚合，2=C2 顶层',
+  summary_text  TEXT         NULL COMMENT '社区摘要文本',
+  member_keys   TEXT         NULL COMMENT '成员（叶子=节点键，聚合=子社区ID，逗号拼接）',
+  member_count  INT          NOT NULL DEFAULT 0 COMMENT '成员数',
+  create_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_graph_community (index_id, community_id, level)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='图谱社区与分层摘要（工单 0308 AM3）';

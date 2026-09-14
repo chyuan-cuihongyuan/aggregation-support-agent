@@ -484,3 +484,38 @@ CREATE TABLE IF NOT EXISTS workflow_blueprint (
     CONSTRAINT uk_workflow_blueprint_name UNIQUE (name)
 );
 COMMENT ON TABLE workflow_blueprint IS '工作流蓝图模板（AI1：图定义 DSL + 参数 schema，实例化产出可注册图定义）';
+
+-- 17. 图谱索引表（工单 0308 AM3：AM1 图索引构建快照落档）
+CREATE TABLE IF NOT EXISTS graph_index (
+    id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    index_id      VARCHAR(64)  NOT NULL,
+    document_id   VARCHAR(128) NOT NULL,
+    unit_count    INT          NOT NULL DEFAULT 0,
+    node_count    INT          NOT NULL DEFAULT 0,
+    edge_count    INT          NOT NULL DEFAULT 0,
+    index_hash    VARCHAR(64)  NOT NULL,
+    graph_json    TEXT,
+    create_time   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_graph_index_id UNIQUE (index_id)
+);
+COMMENT ON TABLE graph_index IS '图谱索引快照（AM1：text_units/节点/边/来源块映射哈希）';
+COMMENT ON COLUMN graph_index.index_hash IS '规范化序列化 SHA-256（重放校验）';
+COMMENT ON COLUMN graph_index.update_time IS '更新时间（应用层维护）';
+
+-- 18. 图谱社区表（工单 0308 AM3：社区划分 + C0/C1/C2 分层摘要）
+CREATE TABLE IF NOT EXISTS graph_community (
+    id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    index_id      VARCHAR(64)  NOT NULL,
+    community_id  VARCHAR(64)  NOT NULL,
+    level         INT          NOT NULL DEFAULT 0,
+    summary_text  TEXT,
+    member_keys   TEXT,
+    member_count  INT          NOT NULL DEFAULT 0,
+    create_time   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_graph_community UNIQUE (index_id, community_id, level)
+);
+COMMENT ON TABLE graph_community IS '图谱社区与分层摘要（AM3：C0 基础/C1 聚合/C2 顶层）';
+COMMENT ON COLUMN graph_community.level IS '层级：0=C0 基础社区，1=C1 聚合，2=C2 顶层';
+COMMENT ON COLUMN graph_community.update_time IS '更新时间（应用层维护）';
