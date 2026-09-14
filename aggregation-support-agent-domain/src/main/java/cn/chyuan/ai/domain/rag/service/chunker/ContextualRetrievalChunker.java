@@ -63,6 +63,15 @@ public class ContextualRetrievalChunker {
     @Value("${document.chunk.contextual.batch-enabled}")
     private boolean batchEnabled;
 
+    /** Context 批量生成的批大小（SELFLOOP3 loop-325，工单 0448/0449；默认 5 与原硬编码一致） */
+    @Value("${document.chunk.contextual.context-batch-size:5}")
+    private int contextBatchSize;
+
+    /** 批大小钳位（≤0 回落 1，防配置错误导致死循环） */
+    int resolveContextBatchSize() {
+        return Math.max(1, contextBatchSize);
+    }
+
     /**
      * 使用Contextual Retrieval方式切割文档
      *
@@ -135,8 +144,8 @@ public class ContextualRetrievalChunker {
     private List<DocumentChunkEntity> batchGenerateContext(String fullDocument, List<DocumentChunkEntity> chunks) {
         List<DocumentChunkEntity> result = new ArrayList<>();
 
-        // 将chunks分批处理
-        int batchSize = 5;
+        // 将chunks分批处理（批大小外置化，loop-325）
+        int batchSize = resolveContextBatchSize();
         for (int i = 0; i < chunks.size(); i += batchSize) {
             int end = Math.min(i + batchSize, chunks.size());
             List<DocumentChunkEntity> batch = chunks.subList(i, end);
