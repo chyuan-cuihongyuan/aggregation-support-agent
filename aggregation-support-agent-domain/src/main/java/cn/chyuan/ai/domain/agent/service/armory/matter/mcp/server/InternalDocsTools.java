@@ -46,7 +46,7 @@ public class InternalDocsTools {
     private IRagService ragService;
 
     /** JSON 序列化工具 */
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = ToolObjectMappers.create(); // b-52：共享 mapper（java.time/宽容未知字段）
 
     /** 检索返回的最大文档数量，默认取 Top 3 最相关结果 */
     @Value("${rag.top-k}")

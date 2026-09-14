@@ -49,7 +49,7 @@ public class QueryMetricsTools {
         this.spillGuard = spillGuard;
     }
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = ToolObjectMappers.create(); // b-52：共享 mapper（java.time/宽容未知字段）
 
     @PostConstruct
     public void init() {

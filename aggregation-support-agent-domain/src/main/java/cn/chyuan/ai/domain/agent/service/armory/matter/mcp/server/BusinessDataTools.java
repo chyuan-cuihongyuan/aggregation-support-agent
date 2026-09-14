@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class BusinessDataTools {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = ToolObjectMappers.create(); // b-52：共享 mapper（java.time/宽容未知字段）
     private final OkHttpClient httpClient = new OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
