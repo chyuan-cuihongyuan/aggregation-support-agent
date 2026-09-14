@@ -19,6 +19,9 @@ import cn.chyuan.ai.domain.rag.service.chunker.SemanticChunker;
 import cn.chyuan.ai.domain.rag.service.retrieval.IBM25SearchService;
 import cn.chyuan.ai.domain.rag.service.retrieval.IHybridSearchService;
 import cn.chyuan.ai.domain.rag.support.RagSourceCollector;
+import cn.chyuan.ai.types.enums.ResponseCode;
+import cn.chyuan.ai.types.exception.AppException;
+import com.google.common.hash.Hashing;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -26,6 +29,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.Resource;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -88,6 +92,8 @@ public class RagService implements IRagService {
         String documentId = command.getDocumentId() != null && !command.getDocumentId().isBlank()
                 ? command.getDocumentId()
                 : UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        String contentHash = computeContentHash(command);
+        rejectDuplicateContent(command, contentHash);
         String fileName = command.getFileName();
         log.info("开始处理文档上传: fileName={}", fileName);
 
@@ -111,6 +117,7 @@ public class RagService implements IRagService {
                 .fileExtension(extension)
                 .fileSize(fileSize)
                 .mimeType(command.getMimeType())
+                .contentHash(contentHash)
                 .processingStatus("processing")
                 .userId(command.getUserId() != null ? command.getUserId() : "")
                 .build();
@@ -569,6 +576,35 @@ public class RagService implements IRagService {
             this.title = title;
             this.content = content;
             this.startIndex = startIndex;
+        }
+    }
+
+    /**
+     * 计算上传内容指纹 — 优先原始字节（二进制格式），缺失时退回文本内容，空内容亦产生稳定指纹
+     */
+    private String computeContentHash(DocumentUploadCommand command) {
+        byte[] bytes = command.getRawContent() != null
+                ? command.getRawContent()
+                : command.getContent() != null
+                ? command.getContent().getBytes(StandardCharsets.UTF_8)
+                : new byte[0];
+        return Hashing.sha256().hashBytes(bytes).toString();
+    }
+
+    /**
+     * 同租户+用户内容去重 — 命中同哈希未删除文档时拒绝上传；作用域无效时跳过判重（防误拒）
+     */
+    private void rejectDuplicateContent(DocumentUploadCommand command, String contentHash) {
+        TenantScopeVO scope = TenantScopeVO.builder()
+                .tenantId(command.getTenantId() != null ? command.getTenantId() : command.getUserId())
+                .ownerUserId(command.getUserId() != null ? command.getUserId() : "")
+                .build();
+        if (!scope.isValid()) {
+            return;
+        }
+        if (documentMetadataRepository.existsByContentHash(contentHash, scope)) {
+            throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(),
+                    "相同内容的文档已存在（文件名: " + command.getFileName() + "），请勿重复上传");
         }
     }
 

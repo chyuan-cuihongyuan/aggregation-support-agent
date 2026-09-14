@@ -30,4 +30,7 @@ public interface DocumentMetadataMapper {
 
     void markDeletedByDocumentId(@Param("documentId") String documentId,
                                  @Param("scope") TenantScopeVO scope);
+
+    int countByContentHash(@Param("contentHash") String contentHash,
+                           @Param("scope") TenantScopeVO scope);
 }

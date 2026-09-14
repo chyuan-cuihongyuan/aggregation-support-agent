@@ -31,6 +31,7 @@ public class DocumentMetadataRepository implements IDocumentMetadataRepository {
                 .fileExtension(entity.getFileExtension())
                 .fileSize(entity.getFileSize())
                 .mimeType(entity.getMimeType())
+                .contentHash(entity.getContentHash() != null ? entity.getContentHash() : "")
                 .totalChars(entity.getTotalChars() != null ? entity.getTotalChars() : 0)
                 .totalChunks(entity.getTotalChunks() != null ? entity.getTotalChunks() : 0)
                 .sectionCount(entity.getSectionCount() != null ? entity.getSectionCount() : 0)
@@ -78,6 +79,11 @@ public class DocumentMetadataRepository implements IDocumentMetadataRepository {
     @Override
     public void markDeletedByDocumentId(String documentId, TenantScopeVO scope) {
         documentMetadataMapper.markDeletedByDocumentId(documentId, scope);
+    }
+
+    @Override
+    public boolean existsByContentHash(String contentHash, TenantScopeVO scope) {
+        return documentMetadataMapper.countByContentHash(contentHash, scope) > 0;
     }
 
     private DocumentMetadataEntity toEntity(DocumentMetadataPO po) {

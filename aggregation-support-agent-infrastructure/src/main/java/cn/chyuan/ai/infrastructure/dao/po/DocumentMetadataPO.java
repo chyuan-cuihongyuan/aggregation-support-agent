@@ -25,6 +25,7 @@ public class DocumentMetadataPO implements Serializable {
     private String fileExtension;
     private Long fileSize;
     private String mimeType;
+    private String contentHash;
     private Integer totalChars;
     private Integer totalChunks;
     private Integer sectionCount;

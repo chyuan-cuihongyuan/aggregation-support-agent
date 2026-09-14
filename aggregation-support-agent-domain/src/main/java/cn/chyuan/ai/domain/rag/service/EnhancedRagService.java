@@ -27,6 +27,9 @@ import cn.chyuan.ai.domain.rag.service.rerank.IRerankService;
 import cn.chyuan.ai.domain.rag.service.reorder.LostInTheMiddleReorderer;
 import cn.chyuan.ai.domain.rag.service.retrieval.IBM25SearchService;
 import cn.chyuan.ai.domain.rag.support.RagSourceCollector;
+import cn.chyuan.ai.types.enums.ResponseCode;
+import cn.chyuan.ai.types.exception.AppException;
+import com.google.common.hash.Hashing;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -173,6 +176,8 @@ public class EnhancedRagService implements IRagService {
         long fileSize = command.getRawContent() != null ? command.getRawContent().length
                 : (command.getContent() != null ? command.getContent().length() : 0L);
         String extension = resolveExtension(command.getFileName());
+        String contentHash = computeContentHash(command);
+        rejectDuplicateContent(command, contentHash);
 
         DocumentMetadataEntity metadata = DocumentMetadataEntity.builder()
                 .documentId(documentId)
@@ -186,6 +191,7 @@ public class EnhancedRagService implements IRagService {
                 .fileExtension(extension)
                 .fileSize(fileSize)
                 .mimeType(command.getMimeType())
+                .contentHash(contentHash)
                 .processingStatus("processing")
                 .userId(command.getUserId() != null ? command.getUserId() : "")
                 .build();
@@ -297,6 +303,35 @@ public class EnhancedRagService implements IRagService {
             return "";
         }
         return fileName.substring(fileName.lastIndexOf(".") + 1).toLowerCase();
+    }
+
+    /**
+     * 计算上传内容指纹 — 优先原始字节（二进制格式），缺失时退回文本内容，空内容亦产生稳定指纹
+     */
+    private String computeContentHash(DocumentUploadCommand command) {
+        byte[] bytes = command.getRawContent() != null
+                ? command.getRawContent()
+                : command.getContent() != null
+                ? command.getContent().getBytes(StandardCharsets.UTF_8)
+                : new byte[0];
+        return Hashing.sha256().hashBytes(bytes).toString();
+    }
+
+    /**
+     * 同租户+用户内容去重 — 命中同哈希未删除文档时拒绝上传；作用域无效时跳过判重（防误拒）
+     */
+    private void rejectDuplicateContent(DocumentUploadCommand command, String contentHash) {
+        TenantScopeVO scope = TenantScopeVO.builder()
+                .tenantId(command.getTenantId() != null ? command.getTenantId() : command.getUserId())
+                .ownerUserId(command.getUserId() != null ? command.getUserId() : "")
+                .build();
+        if (!scope.isValid()) {
+            return;
+        }
+        if (documentMetadataRepository.existsByContentHash(contentHash, scope)) {
+            throw new AppException(ResponseCode.ILLEGAL_PARAMETER.getCode(),
+                    "相同内容的文档已存在（文件名: " + command.getFileName() + "），请勿重复上传");
+        }
     }
 
     private void enrichChunkMetadata(DocumentChunkEntity chunk, String documentId, DocumentMetadataEntity metadataEntity) {

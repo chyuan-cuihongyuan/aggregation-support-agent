@@ -20,4 +20,9 @@ public interface IDocumentMetadataRepository {
                       Integer totalChars, Integer sectionCount, String errorMessage);
 
     void markDeletedByDocumentId(String documentId, TenantScopeVO scope);
+
+    /**
+     * 同租户+用户范围内是否存在同内容哈希的未删除文档（上传去重判重）
+     */
+    boolean existsByContentHash(String contentHash, TenantScopeVO scope);
 }
