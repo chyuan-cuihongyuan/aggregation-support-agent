@@ -6,6 +6,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.io.IOException;
+
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -44,8 +46,19 @@ public class OkHttpClientConfig {
                 .connectTimeout(connectTimeoutSeconds, TimeUnit.SECONDS)
                 .readTimeout(readTimeoutSeconds, TimeUnit.SECONDS)
                 .writeTimeout(writeTimeoutSeconds, TimeUnit.SECONDS)
+                .addInterceptor(userAgentInterceptor("agent-chyuan-aggregation"))
                 .connectionPool(new ConnectionPool(10, 5, TimeUnit.MINUTES))
                 .build();
+    }
+
+    /** 出站 UA 注入（T03）：下游排障可识别调用方（app 名 + 版本） */
+    static okhttp3.Interceptor userAgentInterceptor(String appName) {
+        return chain -> {
+            okhttp3.Request req = chain.request().newBuilder()
+                    .header("User-Agent", appName + "/1.0")
+                    .build();
+            return chain.proceed(req);
+        };
     }
 
     /**
