@@ -45,6 +45,10 @@ public class InternalDocsTools {
     @Autowired
     private IRagService ragService;
 
+    /** 结果溢出守卫：所有返回路径的 JSON 出口统一过 bound（G43 接线收口） */
+    @Autowired
+    private ToolResultSpillGuard spillGuard;
+
     /** JSON 序列化工具 */
     private final ObjectMapper objectMapper = ToolObjectMappers.create(); // b-52：共享 mapper（java.time/宽容未知字段）
 
@@ -276,7 +280,7 @@ public class InternalDocsTools {
     /** 统一 JSON 序列化，序列化失败时返回降级错误串 */
     private String toJson(Object obj) {
         try {
-            return objectMapper.writeValueAsString(obj);
+            return spillGuard.bound(objectMapper.writeValueAsString(obj));
         } catch (Exception e) {
             log.error("检索结果序列化失败: {}", e.getMessage());
             return "{\"error\":true,\"message\":\"检索结果序列化异常\"}";
