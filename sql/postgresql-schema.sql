@@ -610,3 +610,20 @@ CREATE TABLE IF NOT EXISTS speech_transcript (
 );
 COMMENT ON TABLE speech_transcript IS '语音转写任务（AU8：ASR 端口产物，段/指标 JSON）';
 COMMENT ON COLUMN speech_transcript.update_time IS '更新时间（应用层维护）';
+
+-- 24. 文档解析任务表（工单 0395 AV9：版面结构 + 质量记分持久化）
+CREATE TABLE IF NOT EXISTS doc_parse_task (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    task_id        VARCHAR(64)  NOT NULL,
+    doc_ref        VARCHAR(512) NOT NULL,
+    page           INT          NOT NULL DEFAULT 1,
+    status         VARCHAR(16)  NOT NULL DEFAULT 'DONE',
+    layout_json    TEXT,
+    score_json     TEXT,
+    parse_ms       BIGINT       NOT NULL DEFAULT 0,
+    create_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_doc_parse_task_id UNIQUE (task_id)
+);
+COMMENT ON TABLE doc_parse_task IS '文档解析任务（AV9：版面结构+记分 JSON）';
+COMMENT ON COLUMN doc_parse_task.update_time IS '更新时间（应用层维护）';
