@@ -46,7 +46,8 @@ public class MilvusConfigProperties {
     /** IVF 聚类数量 */
     private int nlist = 1024;
 
-    /** 默认检索返回数量 */
+    /** 默认检索返回数量（当前无消费者：检索链路显式传参直达 withTopK；yml 的
+     * milvus.top-k 仅落在本字段上，预留可配默认——G50 判据，loop-434） */
     private int topK = 3;
 
 }
