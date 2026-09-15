@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/v1/")
+@RequestMapping("/api/v1") // 尾斜杠规范（loop-503/T43）
 public class ChatHistoryController {
 
     @Resource
