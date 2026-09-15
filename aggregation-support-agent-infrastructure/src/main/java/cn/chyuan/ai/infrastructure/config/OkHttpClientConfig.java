@@ -27,7 +27,8 @@ public class OkHttpClientConfig {
     @Value("${http.shared.write-timeout-seconds:30}")
     private int writeTimeoutSeconds;
 
-    @Value("${http.embedding.connect-timeout-seconds:30}")
+    /** 嵌入短请求语义：5s 充裕（正常延迟 <2s）；原默认 30 超 G49 钳位上限，显式调对 */
+    @Value("${http.embedding.connect-timeout-seconds:5}")
     private int embeddingConnectTimeoutSeconds;
 
     /** 嵌入降级链预算判据 T（docs/audit/2026-09-embedding-fallback-budget.md）：read 10s */
@@ -47,17 +48,22 @@ public class OkHttpClientConfig {
                 .build();
     }
 
-    /** 嵌入专用 client：正常延迟 <2s，read 10s 足够；钳位防误配（>=1s） */
+    /**
+     * 嵌入专用 client：双向钳位（G49）——下限 1s 防无超时，上限防误配
+     * 使降级链预算（loop-414 判据 ≤3min ⇒ read ≤30s）回归无上界。
+     */
     @Bean
     public OkHttpClient embeddingHttpClient() {
-        int connect = Math.max(1, embeddingConnectTimeoutSeconds);
-        int read = Math.max(1, embeddingReadTimeoutSeconds);
-        int write = Math.max(1, embeddingWriteTimeoutSeconds);
         return new OkHttpClient.Builder()
-                .connectTimeout(connect, TimeUnit.SECONDS)
-                .readTimeout(read, TimeUnit.SECONDS)
-                .writeTimeout(write, TimeUnit.SECONDS)
+                .connectTimeout(clamp(embeddingConnectTimeoutSeconds, 1, 15), TimeUnit.SECONDS)
+                .readTimeout(clamp(embeddingReadTimeoutSeconds, 1, 30), TimeUnit.SECONDS)
+                .writeTimeout(clamp(embeddingWriteTimeoutSeconds, 1, 30), TimeUnit.SECONDS)
                 .connectionPool(new ConnectionPool(5, 5, TimeUnit.MINUTES))
                 .build();
+    }
+
+    /** 边界钳位：越界取边界值，界内透传 */
+    static int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
     }
 }
