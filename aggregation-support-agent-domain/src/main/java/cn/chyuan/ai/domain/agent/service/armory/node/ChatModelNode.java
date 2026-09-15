@@ -14,6 +14,8 @@ import cn.bugstack.wrench.design.framework.tree.StrategyHandler;
 import io.micrometer.observation.ObservationRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.retry.support.RetryTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
@@ -43,6 +45,21 @@ public class ChatModelNode extends AbstractArmorySupport {
     /** spring-ai GenAI 指标装配（SELFLOOP2 loop-212）：actuator registry 缺席时回退 NOOP */
     @Autowired(required = false)
     private ObservationRegistry observationRegistry;
+
+    // LLM 重试显式化（SELFLOOP4 loop-412，工单 0622/0623）：手工 builder 绕过自动装配的
+    // RetryTemplate（缺席时落默认 10 次/3min 退避），此处显式装配并外置——
+    // 交互口径收敛 3 次、退避上限 10s 消灭长尾；参数语义对照 Spring AI 官方属性表
+    @Value("${spring.ai.retry.max-attempts:3}")
+    private int retryMaxAttempts;
+
+    @Value("${spring.ai.retry.backoff.initial-interval-ms:2000}")
+    private long retryInitialIntervalMs;
+
+    @Value("${spring.ai.retry.backoff.multiplier:5.0}")
+    private double retryMultiplier;
+
+    @Value("${spring.ai.retry.backoff.max-interval-ms:10000}")
+    private long retryMaxIntervalMs;
 
     @Override
     protected AiAgentRegisterVO doApply(ArmoryCommandEntity requestParameter, DefaultArmoryFactory.DynamicContext dynamicContext) throws Exception {
@@ -115,6 +132,8 @@ public class ChatModelNode extends AbstractArmorySupport {
                 .openAiApi(openAiApi)
                 .observationRegistry(ObservationWiring.effective(observationRegistry))
                 .defaultOptions(optionsBuilder.build())
+                .retryTemplate(LlmRetrySupport.buildRetryTemplate(retryMaxAttempts, retryInitialIntervalMs,
+                        retryMultiplier, retryMaxIntervalMs))
                 .build();
 
         dynamicContext.setChatModel(chatModel);
@@ -161,5 +180,6 @@ public class ChatModelNode extends AbstractArmorySupport {
     public StrategyHandler<ArmoryCommandEntity, DefaultArmoryFactory.DynamicContext, AiAgentRegisterVO> get(ArmoryCommandEntity requestParameter, DefaultArmoryFactory.DynamicContext dynamicContext) throws Exception {
         return agentNode;
     }
+
 
 }

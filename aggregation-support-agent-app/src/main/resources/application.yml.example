@@ -6,6 +6,15 @@ spring:
   # 优雅停机（D07）：等待在途请求完成再关闭
   lifecycle:
     timeout-per-shutdown-phase: 30s
+  # LLM 重试显式化（loop-412）：ChatModelNode 手工 builder 绕过自动装配，
+  # 经 LlmRetrySupport @Value 读取；交互口径 3 次、退避上限 10s
+  ai:
+    retry:
+      max-attempts: 3
+      backoff:
+        initial-interval-ms: 2000
+        multiplier: 5.0
+        max-interval-ms: 10000
 
 server:
   shutdown: graceful
