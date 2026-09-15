@@ -155,7 +155,11 @@ public class RerankService implements IRerankService {
                 .build();
 
         // 发送请求（只读取一次 body，避免 OkHttp body().string() 双读问题）
-        try (Response response = httpClient.newCall(request).execute()) {
+        // per-call 超时（T46）：rag.rerank.timeout 此前为死配置（未挂接），实际走共享 client 的 600s read
+        okhttp3.Call call = httpClient.newCall(request);
+        // per-call 超时设置（okio.Timeout 原地修改，返回 Timeout 非 Call，需拆行）
+        call.timeout().timeout(timeout, TimeUnit.SECONDS);
+        try (Response response = call.execute()) {
             // 提前读取 body 字符串，后续错误分支和成功分支共用
             String responseBody = response.body() != null ? response.body().string() : "{}";
 
