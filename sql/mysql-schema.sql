@@ -424,3 +424,19 @@ CREATE TABLE IF NOT EXISTS doc_parse_task (
   UNIQUE KEY uk_doc_parse_task_id (task_id),
   KEY idx_doc_parse_task_doc (doc_ref)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文档解析任务（工单 0395 AV9）';
+
+-- 25. 搜索索引文档表（工单 0404 AW9：searchkernel 进程内倒排的持久化面）
+CREATE TABLE IF NOT EXISTS search_index_doc (
+  id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+  doc_id         VARCHAR(128) NOT NULL COMMENT '文档ID（唯一）',
+  index_name     VARCHAR(64)  NOT NULL DEFAULT 'default' COMMENT '索引名',
+  title          VARCHAR(256) NULL COMMENT '标题',
+  body           TEXT         NULL COMMENT '正文',
+  fields_json    TEXT         NULL COMMENT '过滤面字段 JSON',
+  version        BIGINT       NOT NULL DEFAULT 1 COMMENT '版本（严格递增）',
+  deleted        TINYINT      NOT NULL DEFAULT 0 COMMENT '墓碑 0/1',
+  create_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_search_doc_id (doc_id),
+  KEY idx_search_doc_index (index_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='搜索索引文档（工单 0404 AW9）';

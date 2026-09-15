@@ -627,3 +627,20 @@ CREATE TABLE IF NOT EXISTS doc_parse_task (
 );
 COMMENT ON TABLE doc_parse_task IS '文档解析任务（AV9：版面结构+记分 JSON）';
 COMMENT ON COLUMN doc_parse_task.update_time IS '更新时间（应用层维护）';
+
+-- 25. 搜索索引文档表（工单 0404 AW9：searchkernel 进程内倒排的持久化面）
+CREATE TABLE IF NOT EXISTS search_index_doc (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    doc_id         VARCHAR(128) NOT NULL,
+    index_name     VARCHAR(64)  NOT NULL DEFAULT 'default',
+    title          VARCHAR(256),
+    body           TEXT,
+    fields_json    TEXT,
+    version        BIGINT       NOT NULL DEFAULT 1,
+    deleted        BOOLEAN      NOT NULL DEFAULT FALSE,
+    create_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_search_doc_id UNIQUE (doc_id)
+);
+COMMENT ON TABLE search_index_doc IS '搜索索引文档（AW9：版本单调+墓碑）';
+COMMENT ON COLUMN search_index_doc.update_time IS '更新时间（应用层维护）';
