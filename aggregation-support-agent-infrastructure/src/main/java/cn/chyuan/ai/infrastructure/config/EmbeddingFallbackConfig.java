@@ -92,6 +92,15 @@ public class EmbeddingFallbackConfig {
         FallbackEmbeddingService fallbackService = new FallbackEmbeddingService(
                 cachedService, fallbackServices, maxRetryAttempts, initialRetryDelayMs, retryMultiplier);
 
+        // 降级链水位指标（SELFLOOP5 loop-504，工单 0706/0707，池项 G51）：Gauge 绑定
+        // 降级/重试成功计数（单一计数源惯例，与 CachedEmbeddingService 同构）
+        io.micrometer.core.instrument.Gauge.builder("embedding_fallback_total", fallbackService,
+                        FallbackEmbeddingService::getFallbackCount)
+                .description("嵌入降级发生次数").register(meterRegistry);
+        io.micrometer.core.instrument.Gauge.builder("embedding_retry_success_total", fallbackService,
+                        FallbackEmbeddingService::getRetrySuccessCount)
+                .description("嵌入重试成功次数").register(meterRegistry);
+
         log.info("嵌入服务降级链构建完成: 基础提供商={}, 缓存=true, 备用提供商数={}, 重试次数={}",
                 getActiveProviderName(), fallbackServices.size(), maxRetryAttempts);
 

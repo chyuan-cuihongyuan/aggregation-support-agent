@@ -58,6 +58,16 @@ public class FallbackEmbeddingService implements IEmbeddingService {
     /** 重试成功次数 */
     private volatile int retrySuccessCount = 0;
 
+    /** 降级发生次数（loop-504/G51 Gauge 绑定用） */
+    public int getFallbackCount() {
+        return fallbackCount;
+    }
+
+    /** 重试成功次数（loop-504/G51 Gauge 绑定用） */
+    public int getRetrySuccessCount() {
+        return retrySuccessCount;
+    }
+
     public FallbackEmbeddingService(IEmbeddingService primary,
                                     List<IEmbeddingService> fallbacks,
                                     int maxRetryAttempts,
