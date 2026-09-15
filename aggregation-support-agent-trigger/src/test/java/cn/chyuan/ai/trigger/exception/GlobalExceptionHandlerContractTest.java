@@ -84,6 +84,29 @@ class GlobalExceptionHandlerContractTest {
         assertEquals("E1001", ResponseCode.E1001.getCode());
     }
 
+    @Test
+    @DisplayName("405/415 客户端错误必须 warn 留痕（loop-405 补静默分支）")
+    void clientErrorHandlersMustLogWarn() {
+        ch.qos.logback.classic.Logger logger = (ch.qos.logback.classic.Logger)
+                org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class);
+        ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender =
+                new ch.qos.logback.core.read.ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            handler.handleMethodNotSupported(new HttpRequestMethodNotSupportedException("POST"), request);
+            handler.handleMediaTypeNotSupported(
+                    new HttpMediaTypeNotSupportedException("text/plain", java.util.List.of()), request);
+        } finally {
+            logger.detachAppender(appender);
+        }
+        long warns = appender.list.stream()
+                .filter(e -> e.getLevel() == ch.qos.logback.classic.Level.WARN)
+                .filter(e -> String.valueOf(e.getFormattedMessage()).contains("/probe"))
+                .count();
+        assertTrue(warns >= 2, "405/415 各应产生一条含请求上下文的 WARN，实际 " + warns);
+    }
+
     /** 断言「处理该异常类型的 handler 方法」上的 @ResponseStatus */
     private void assertStatus(Class<?> exType, HttpStatus expected) {
         Method m = Arrays.stream(GlobalExceptionHandler.class.getMethods())

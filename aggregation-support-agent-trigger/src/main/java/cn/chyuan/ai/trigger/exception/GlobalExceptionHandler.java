@@ -156,6 +156,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     @ResponseStatus(HttpStatus.METHOD_NOT_ALLOWED)
     public Response<?> handleMethodNotSupported(HttpRequestMethodNotSupportedException e, HttpServletRequest request) {
+        log.warn("方法不支持 [{} {}]: {}", request.getMethod(), request.getRequestURI(), e.getMessage());
         return Response.builder()
                 .code(ResponseCode.METHOD_NOT_SUPPORTED.getCode())
                 .info(ResponseCode.METHOD_NOT_SUPPORTED.getInfo())
@@ -166,6 +167,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     @ResponseStatus(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
     public Response<?> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException e, HttpServletRequest request) {
+        log.warn("媒体类型不支持 [{} {}]: {}", request.getMethod(), request.getRequestURI(), e.getMessage());
         return Response.builder()
                 .code(ResponseCode.MEDIA_TYPE_NOT_SUPPORTED.getCode())
                 .info(ResponseCode.MEDIA_TYPE_NOT_SUPPORTED.getInfo())
