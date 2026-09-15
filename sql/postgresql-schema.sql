@@ -593,3 +593,20 @@ CREATE TABLE IF NOT EXISTS tmemory_edge (
 );
 COMMENT ON TABLE tmemory_edge IS '时序记忆事实边（AS1：bi-temporal 双时间线，valid_to 为空表示仍有效）';
 COMMENT ON COLUMN tmemory_edge.update_time IS '更新时间（应用层维护）';
+
+-- 23. 语音转写任务表（工单 0386 AU8：ASR 端口产物持久化）
+CREATE TABLE IF NOT EXISTS speech_transcript (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    transcript_id  VARCHAR(64)  NOT NULL,
+    audio_ref      VARCHAR(512) NOT NULL,
+    language       VARCHAR(16)  NOT NULL DEFAULT 'zh',
+    segments_json  TEXT,
+    metrics_json   TEXT,
+    duration_ms    BIGINT       NOT NULL DEFAULT 0,
+    status         VARCHAR(16)  NOT NULL DEFAULT 'DONE',
+    create_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_speech_transcript_id UNIQUE (transcript_id)
+);
+COMMENT ON TABLE speech_transcript IS '语音转写任务（AU8：ASR 端口产物，段/指标 JSON）';
+COMMENT ON COLUMN speech_transcript.update_time IS '更新时间（应用层维护）';

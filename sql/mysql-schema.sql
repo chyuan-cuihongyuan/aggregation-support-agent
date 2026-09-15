@@ -392,3 +392,19 @@ CREATE TABLE IF NOT EXISTS tmemory_edge (
   UNIQUE KEY uk_tmemory_edge_id (edge_id),
   KEY idx_tmemory_edge_subject (subject)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='时序记忆事实边（工单 0362 AS1 bi-temporal）';
+
+-- 23. 语音转写任务表（工单 0386 AU8：ASR 端口产物持久化）
+CREATE TABLE IF NOT EXISTS speech_transcript (
+  id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+  transcript_id  VARCHAR(64)  NOT NULL COMMENT '转写ID（唯一）',
+  audio_ref      VARCHAR(512) NOT NULL COMMENT '音频引用',
+  language       VARCHAR(16)  NOT NULL DEFAULT 'zh' COMMENT '语言',
+  segments_json  TEXT         NULL COMMENT '段序列 JSON（起止/文本/说话人/词）',
+  metrics_json   TEXT         NULL COMMENT '质量指标 JSON（WER/CER）',
+  duration_ms    BIGINT       NOT NULL DEFAULT 0 COMMENT '音频时长毫秒',
+  status         VARCHAR(16)  NOT NULL DEFAULT 'DONE' COMMENT 'RUNNING/DONE/FAILED',
+  create_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_speech_transcript_id (transcript_id),
+  KEY idx_speech_transcript_audio (audio_ref)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='语音转写任务（工单 0386 AU8）';
