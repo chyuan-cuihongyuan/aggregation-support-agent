@@ -120,7 +120,7 @@
             <dependency>
                 <groupId>com.google.guava</groupId>
                 <artifactId>guava</artifactId>
-                <version>32.1.3-jre</version>
+                <version>33.5.0-jre</version><!-- loop-624 收编：与 platform-bom 统一上界（原 32.1.3） -->
             </dependency>
             <!-- AUTOLOOP al-31 恢复：BOM import 因 SA 1.1-M3 线争线回退（栈分线判据），本地管理复原 -->
             <dependency>
