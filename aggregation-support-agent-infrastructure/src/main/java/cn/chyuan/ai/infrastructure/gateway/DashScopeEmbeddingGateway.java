@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.Resource;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -55,7 +56,8 @@ public class DashScopeEmbeddingGateway implements IEmbeddingService {
     @Value("${dashscope.embedding.model}")
     private String modelName;
 
-    /** HTTP 客户端 — 设置合理的超时时间 */
+    /** 嵌入专用短超时 client（loop-415/G48） */
+    @Resource(name = "embeddingHttpClient")
     private OkHttpClient httpClient;
 
     /**
@@ -63,11 +65,7 @@ public class DashScopeEmbeddingGateway implements IEmbeddingService {
      */
     @PostConstruct
     public void init() {
-        this.httpClient = new OkHttpClient.Builder()
-                .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(60, TimeUnit.SECONDS)
-                .writeTimeout(30, TimeUnit.SECONDS)
-                .build();
+        // client 改注入共享 embeddingHttpClient（loop-415/G48：自建 60s read 收敛到判据 T=10s）
         log.info("DashScope 嵌入网关初始化完成: model={}", modelName);
     }
 

@@ -54,7 +54,8 @@ public class BigModelEmbeddingGateway implements IEmbeddingService {
     @Value("${bigmodel.embedding.dimension}")
     private int dimension;
 
-    @Resource
+    /** 嵌入专用短超时 client（loop-415/G48，判据 T=10s） */
+    @Resource(name = "embeddingHttpClient")
     private OkHttpClient httpClient;
 
     @Override
