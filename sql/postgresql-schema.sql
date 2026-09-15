@@ -569,3 +569,27 @@ CREATE TABLE IF NOT EXISTS research_report (
 );
 COMMENT ON TABLE research_report IS '研究报告（AR7：Markdown+引用表+元数据 JSON，静态可交付）';
 COMMENT ON COLUMN research_report.update_time IS '更新时间（应用层维护）';
+
+-- 22. 时序记忆事实边表（工单 0362 AS1：bi-temporal 双时间线）
+CREATE TABLE IF NOT EXISTS tmemory_edge (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    edge_id        VARCHAR(64)  NOT NULL,
+    subject        VARCHAR(256) NOT NULL,
+    predicate      VARCHAR(128) NOT NULL,
+    object_entity  VARCHAR(256) NOT NULL,
+    valid_from     BIGINT       NOT NULL,
+    valid_to       BIGINT,
+    invalid_reason VARCHAR(32),
+    ingest_seq     BIGINT       NOT NULL,
+    confidence     DOUBLE PRECISION NOT NULL DEFAULT 0.5,
+    source         VARCHAR(64)  NOT NULL DEFAULT 'unknown',
+    kind           VARCHAR(16)  NOT NULL DEFAULT 'EPISODIC',
+    access_count   INT          NOT NULL DEFAULT 0,
+    score          DOUBLE PRECISION NOT NULL DEFAULT 0.5,
+    promoted_from  VARCHAR(512),
+    create_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_tmemory_edge_id UNIQUE (edge_id)
+);
+COMMENT ON TABLE tmemory_edge IS '时序记忆事实边（AS1：bi-temporal 双时间线，valid_to 为空表示仍有效）';
+COMMENT ON COLUMN tmemory_edge.update_time IS '更新时间（应用层维护）';

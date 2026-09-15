@@ -369,3 +369,26 @@ CREATE TABLE IF NOT EXISTS research_report (
   update_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_research_report_task (task_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='研究报告（工单 0353 AR7）';
+
+-- 22. 时序记忆事实边表（工单 0362 AS1：bi-temporal 双时间线）
+CREATE TABLE IF NOT EXISTS tmemory_edge (
+  id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+  edge_id        VARCHAR(64)  NOT NULL COMMENT '边标识（唯一）',
+  subject        VARCHAR(256) NOT NULL COMMENT '主语实体名',
+  predicate      VARCHAR(128) NOT NULL COMMENT '谓语（关系）',
+  object_entity  VARCHAR(256) NOT NULL COMMENT '宾语实体名',
+  valid_from     BIGINT       NOT NULL COMMENT '事实生效时间 epoch ms',
+  valid_to       BIGINT       NULL COMMENT '事实失效时间（null 仍有效）',
+  invalid_reason VARCHAR(32)  NULL COMMENT '失效原因 SUPERSEDED/CONFLICT',
+  ingest_seq     BIGINT       NOT NULL COMMENT '事务时间入库序号',
+  confidence     DOUBLE       NOT NULL DEFAULT 0.5 COMMENT '置信度 0-1',
+  source         VARCHAR(64)  NOT NULL DEFAULT 'unknown' COMMENT '来源标识',
+  kind           VARCHAR(16)  NOT NULL DEFAULT 'EPISODIC' COMMENT 'EPISODIC/SEMANTIC',
+  access_count   INT          NOT NULL DEFAULT 0 COMMENT '访问计数',
+  score          DOUBLE       NOT NULL DEFAULT 0.5 COMMENT '价值分数',
+  promoted_from  VARCHAR(512) NULL COMMENT '晋升来源批次（逗号拼接）',
+  create_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_tmemory_edge_id (edge_id),
+  KEY idx_tmemory_edge_subject (subject)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='时序记忆事实边（工单 0362 AS1 bi-temporal）';
