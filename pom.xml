@@ -26,7 +26,6 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <google.adk.version>0.5.0</google.adk.version>
         <!-- Milvus 向量数据库 SDK 版本 -->
         <milvus-sdk.version>2.6.10</milvus-sdk.version>
         <!-- 阿里云 DashScope SDK 版本（用于文本向量化） -->
@@ -162,31 +161,6 @@
                 <groupId>commons-codec</groupId>
                 <artifactId>commons-codec</artifactId>
                 <version>1.15</version>
-            </dependency>
-            <dependency>
-                <groupId>com.google.adk</groupId>
-                <artifactId>google-adk</artifactId>
-                <version>${google.adk.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.google.adk</groupId>
-                <artifactId>google-adk-dev</artifactId>
-                <version>${google.adk.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.google.adk</groupId>
-                <artifactId>google-adk-spring-ai</artifactId>
-                <version>${google.adk.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.google.adk.samples</groupId>
-                <artifactId>google-adk-sample-helloworld</artifactId>
-                <version>${google.adk.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.google.adk</groupId>
-                <artifactId>google-adk-contrib-langchain4j</artifactId>
-                <version>0.2.0</version>
             </dependency>
             <!--            <dependency>-->
             <!--                <groupId>dev.langchain4j</groupId>-->

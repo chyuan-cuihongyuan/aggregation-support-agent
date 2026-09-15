@@ -29,14 +29,8 @@
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-mcp</artifactId>
         </dependency>
-        <dependency>
-            <groupId>com.google.adk</groupId>
-            <artifactId>google-adk</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.google.adk</groupId>
-            <artifactId>google-adk-spring-ai</artifactId>
-        </dependency>
+        
+        
         <dependency>
             <groupId>org.springaicommunity</groupId>
             <artifactId>spring-ai-agent-utils</artifactId>
