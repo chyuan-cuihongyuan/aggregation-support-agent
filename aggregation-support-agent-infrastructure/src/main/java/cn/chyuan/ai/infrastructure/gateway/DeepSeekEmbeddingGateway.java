@@ -14,12 +14,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
-import jakarta.annotation.PostConstruct;
+import jakarta.annotation.Resource;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /**
  * DeepSeek 嵌入模型网关 — 使用 OpenAI 兼容接口调用嵌入模型计算文本向量
@@ -50,17 +49,10 @@ public class DeepSeekEmbeddingGateway implements IEmbeddingService {
     @Value("${deepseek.embedding.model}")
     private String modelName;
 
+    /** HTTP 客户端 — 嵌入专用（read 钳位 ≤30s，服从降级链预算判据 loop-414） */
+    @Resource
+    @org.springframework.beans.factory.annotation.Qualifier("embeddingHttpClient")
     private OkHttpClient httpClient;
-
-    @PostConstruct
-    public void init() {
-        this.httpClient = new OkHttpClient.Builder()
-                .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(60, TimeUnit.SECONDS)
-                .writeTimeout(30, TimeUnit.SECONDS)
-                .build();
-        log.info("DeepSeek 嵌入网关初始化完成: url={}, model={}", baseUrl, modelName);
-    }
 
     @Override
     public float[] embed(String text) {
