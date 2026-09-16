@@ -700,3 +700,22 @@ CREATE TABLE IF NOT EXISTS vector_point (
 COMMENT ON TABLE vector_point IS '向量点（BA7：ACTIVE/TOMBSTONED 墓碑+快照重建等价）';
 COMMENT ON COLUMN vector_point.update_time IS '更新时间（应用层维护）';
 CREATE INDEX IF NOT EXISTS idx_vector_point_status ON vector_point (status);
+
+-- 29. 扫描发现表（工单 0457 BC7：scankernel 发现清单）
+CREATE TABLE IF NOT EXISTS scan_finding (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    fingerprint    VARCHAR(64)  NOT NULL,
+    rule_id        VARCHAR(128) NOT NULL,
+    file_path      VARCHAR(512) NOT NULL,
+    line_no        INT          NOT NULL,
+    severity       VARCHAR(8)   NOT NULL,
+    status         VARCHAR(16)  NOT NULL DEFAULT 'OPEN',
+    snippet        TEXT,
+    batch_id       VARCHAR(64)  NOT NULL,
+    create_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_scan_finding_fp UNIQUE (fingerprint)
+);
+COMMENT ON TABLE scan_finding IS '扫描发现（BC7：指纹唯一+批次幂等+抑制/基线状态）';
+COMMENT ON COLUMN scan_finding.update_time IS '更新时间（应用层维护）';
+CREATE INDEX IF NOT EXISTS idx_scan_finding_rule ON scan_finding (rule_id, status);

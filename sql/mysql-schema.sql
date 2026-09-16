@@ -490,3 +490,20 @@ CREATE TABLE IF NOT EXISTS vector_point (
   UNIQUE KEY uk_vector_point_id (point_id),
   KEY idx_vector_point_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='向量点（工单 0441 BA7）';
+
+-- 29. 扫描发现表（工单 0457 BC7：scankernel 发现清单）
+CREATE TABLE IF NOT EXISTS scan_finding (
+  id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+  fingerprint    VARCHAR(64)  NOT NULL COMMENT '发现指纹（规则×文件×行内容 SHA-256）',
+  rule_id        VARCHAR(128) NOT NULL COMMENT '规则 id',
+  file_path      VARCHAR(512) NOT NULL COMMENT '文件路径',
+  line_no        INT          NOT NULL COMMENT '行号',
+  severity       VARCHAR(8)   NOT NULL COMMENT 'ERROR/WARN/INFO',
+  status         VARCHAR(16)  NOT NULL DEFAULT 'OPEN' COMMENT 'OPEN/SUPPRESSED/BASELINE',
+  snippet        TEXT         NULL COMMENT '命中行摘要',
+  batch_id       VARCHAR(64)  NOT NULL COMMENT '扫描批次',
+  create_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_scan_finding_fp (fingerprint),
+  KEY idx_scan_finding_rule (rule_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='扫描发现（工单 0457 BC7）';
