@@ -644,3 +644,23 @@ CREATE TABLE IF NOT EXISTS search_index_doc (
 );
 COMMENT ON TABLE search_index_doc IS '搜索索引文档（AW9：版本单调+墓碑）';
 COMMENT ON COLUMN search_index_doc.update_time IS '更新时间（应用层维护）';
+
+-- 26. 爬取清单表（工单 0425 AY7：crawler 域 URL 状态机）
+CREATE TABLE IF NOT EXISTS crawl_url (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    fingerprint    VARCHAR(64)  NOT NULL,
+    raw_url        VARCHAR(768) NOT NULL,
+    domain         VARCHAR(128) NOT NULL DEFAULT '',
+    depth          INT          NOT NULL DEFAULT 0,
+    priority       INT          NOT NULL DEFAULT 0,
+    status         VARCHAR(16)  NOT NULL DEFAULT 'PENDING',
+    retry_count    INT          NOT NULL DEFAULT 0,
+    content_hash   VARCHAR(64),
+    fetched_at     BIGINT,
+    create_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_crawl_url_fp UNIQUE (fingerprint)
+);
+COMMENT ON TABLE crawl_url IS '爬取清单（AY7：PENDING→FETCHED/FAILED 状态机，robots 合规先行）';
+COMMENT ON COLUMN crawl_url.update_time IS '更新时间（应用层维护）';
+CREATE INDEX IF NOT EXISTS idx_crawl_url_status ON crawl_url (status, depth);

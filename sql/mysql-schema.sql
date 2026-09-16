@@ -440,3 +440,21 @@ CREATE TABLE IF NOT EXISTS search_index_doc (
   UNIQUE KEY uk_search_doc_id (doc_id),
   KEY idx_search_doc_index (index_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='搜索索引文档（工单 0404 AW9）';
+
+-- 26. 爬取清单表（工单 0425 AY7：crawler 域 URL 状态机）
+CREATE TABLE IF NOT EXISTS crawl_url (
+  id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+  fingerprint    VARCHAR(64)  NOT NULL COMMENT 'URL 归一化指纹（SHA-256）',
+  raw_url        VARCHAR(768) NOT NULL COMMENT '原始 URL',
+  domain         VARCHAR(128) NOT NULL DEFAULT '' COMMENT '域名（节流分组）',
+  depth          INT          NOT NULL DEFAULT 0 COMMENT '深度',
+  priority       INT          NOT NULL DEFAULT 0 COMMENT '域内优先级',
+  status         VARCHAR(16)  NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING/FETCHED/FAILED',
+  retry_count    INT          NOT NULL DEFAULT 0 COMMENT '重试计数',
+  content_hash   VARCHAR(64)  NULL COMMENT '内容指纹',
+  fetched_at     BIGINT       NULL COMMENT '最后抓取时间 epoch ms',
+  create_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_crawl_url_fp (fingerprint),
+  KEY idx_crawl_url_status (status, depth)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='爬取清单（工单 0425 AY7）';
