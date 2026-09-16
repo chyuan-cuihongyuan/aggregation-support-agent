@@ -474,3 +474,19 @@ CREATE TABLE IF NOT EXISTS codeintel_edit (
   UNIQUE KEY uk_codeintel_edit_id (edit_id),
   KEY idx_codeintel_edit_file (file_path, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='代码编辑审计（工单 0434 AZ8）';
+
+-- 28. 向量点表（工单 0441 BA7：vectorkernel 进程内 HNSW 的持久化面）
+CREATE TABLE IF NOT EXISTS vector_point (
+  id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+  point_id       VARCHAR(64)  NOT NULL COMMENT '点ID（唯一）',
+  vector_json    TEXT         NOT NULL COMMENT '向量 JSON（float 数组）',
+  tags_json      TEXT         NULL COMMENT '标签 JSON（过滤面）',
+  dimension      INT          NOT NULL COMMENT '维度',
+  quantized      TINYINT      NOT NULL DEFAULT 0 COMMENT '量化 0/1',
+  status         VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE/TOMBSTONED',
+  version        BIGINT       NOT NULL DEFAULT 1 COMMENT '版本（严格递增）',
+  create_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_vector_point_id (point_id),
+  KEY idx_vector_point_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='向量点（工单 0441 BA7）';

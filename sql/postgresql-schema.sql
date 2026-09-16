@@ -682,3 +682,21 @@ CREATE TABLE IF NOT EXISTS codeintel_edit (
 COMMENT ON TABLE codeintel_edit IS '代码编辑审计（AZ8：search-replace/unified diff 编辑留痕+检查点回滚）';
 COMMENT ON COLUMN codeintel_edit.update_time IS '更新时间（应用层维护）';
 CREATE INDEX IF NOT EXISTS idx_codeintel_edit_file ON codeintel_edit (file_path, create_time);
+
+-- 28. 向量点表（工单 0441 BA7：vectorkernel 进程内 HNSW 的持久化面）
+CREATE TABLE IF NOT EXISTS vector_point (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    point_id       VARCHAR(64)  NOT NULL,
+    vector_json    TEXT         NOT NULL,
+    tags_json      TEXT,
+    dimension      INT          NOT NULL,
+    quantized      BOOLEAN      NOT NULL DEFAULT FALSE,
+    status         VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE',
+    version        BIGINT       NOT NULL DEFAULT 1,
+    create_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_vector_point_id UNIQUE (point_id)
+);
+COMMENT ON TABLE vector_point IS '向量点（BA7：ACTIVE/TOMBSTONED 墓碑+快照重建等价）';
+COMMENT ON COLUMN vector_point.update_time IS '更新时间（应用层维护）';
+CREATE INDEX IF NOT EXISTS idx_vector_point_status ON vector_point (status);
