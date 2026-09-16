@@ -59,7 +59,9 @@ docs/dev-ops/elasticsearch/plugins/*
 
 ### 文档清理：不提交到 GitHub ###
 doc/
-docs/
+docs/*	# SELFLOOP5 loop-519：目录级忽略剪枝子文件，改通配以开 mysql/sql 白名单
+!docs/dev-ops/
+!docs/dev-ops/mysql/
 claude.md
 CLAUDE.md
 *.md

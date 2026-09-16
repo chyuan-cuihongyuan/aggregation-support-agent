@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS `rag_trace` (
+  `id`                bigint unsigned NOT NULL AUTO_INCREMENT,
+  `trace_id`          varchar(64)     NOT NULL COMMENT '请求维度唯一追踪ID',
+  `tenant_id`         varchar(64)     NOT NULL DEFAULT '' COMMENT '租户ID',
+  `owner_user_id`     varchar(64)     NOT NULL DEFAULT '' COMMENT '归属用户ID',
+  `session_id`        varchar(128)    NOT NULL DEFAULT '' COMMENT '会话ID（AIOps 工具触发时可为空）',
+  `agent_id`          varchar(64)     NOT NULL DEFAULT '' COMMENT '智能体ID',
+  `query_text`        text            NOT NULL COMMENT '原始查询文本',
+  `rewrite_text`      text            COMMENT 'Query 改写后的检索文本',
+  `retrieval_topk`    int             NOT NULL DEFAULT 0 COMMENT '检索 TopK',
+  `source_docs`       json            COMMENT '命中证据列表 [{documentId,documentName,chunkId,chunkIndex,score,retrievalType,snippet}]',
+  `answer_score`      double          DEFAULT NULL COMMENT '答案质量分（预留）',
+  `hallucination_score` double        DEFAULT NULL COMMENT '幻觉率（预留）',
+  `create_time`       datetime        NOT NULL COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_trace_id` (`trace_id`),
+  KEY `idx_tenant_owner` (`tenant_id`, `owner_user_id`),
+  KEY `idx_session_id` (`session_id`),
+  KEY `idx_create_time` (`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='RAG 检索追踪记录';
