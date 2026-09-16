@@ -458,3 +458,19 @@ CREATE TABLE IF NOT EXISTS crawl_url (
   UNIQUE KEY uk_crawl_url_fp (fingerprint),
   KEY idx_crawl_url_status (status, depth)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='爬取清单（工单 0425 AY7）';
+
+-- 27. 代码编辑审计表（工单 0434 AZ8：codeintel 域编辑留痕）
+CREATE TABLE IF NOT EXISTS codeintel_edit (
+  id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+  edit_id        VARCHAR(64)  NOT NULL COMMENT '编辑ID（唯一）',
+  file_path      VARCHAR(512) NOT NULL COMMENT '文件路径',
+  strategy       VARCHAR(16)  NOT NULL COMMENT '策略 SEARCH_REPLACE/UNIFIED_DIFF',
+  success        TINYINT      NOT NULL DEFAULT 0 COMMENT '成功 0/1',
+  errors_json    TEXT         NULL COMMENT '失败清单 JSON',
+  checkpoint_id  VARCHAR(64)  NULL COMMENT '检查点ID',
+  cost_ms        BIGINT       NOT NULL DEFAULT 0 COMMENT '耗时 ms',
+  create_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_codeintel_edit_id (edit_id),
+  KEY idx_codeintel_edit_file (file_path, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='代码编辑审计（工单 0434 AZ8）';

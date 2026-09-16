@@ -664,3 +664,21 @@ CREATE TABLE IF NOT EXISTS crawl_url (
 COMMENT ON TABLE crawl_url IS '爬取清单（AY7：PENDING→FETCHED/FAILED 状态机，robots 合规先行）';
 COMMENT ON COLUMN crawl_url.update_time IS '更新时间（应用层维护）';
 CREATE INDEX IF NOT EXISTS idx_crawl_url_status ON crawl_url (status, depth);
+
+-- 27. 代码编辑审计表（工单 0434 AZ8：codeintel 域编辑留痕）
+CREATE TABLE IF NOT EXISTS codeintel_edit (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    edit_id        VARCHAR(64)  NOT NULL,
+    file_path      VARCHAR(512) NOT NULL,
+    strategy       VARCHAR(16)  NOT NULL,
+    success        BOOLEAN      NOT NULL DEFAULT FALSE,
+    errors_json    TEXT,
+    checkpoint_id  VARCHAR(64),
+    cost_ms        BIGINT       NOT NULL DEFAULT 0,
+    create_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_codeintel_edit_id UNIQUE (edit_id)
+);
+COMMENT ON TABLE codeintel_edit IS '代码编辑审计（AZ8：search-replace/unified diff 编辑留痕+检查点回滚）';
+COMMENT ON COLUMN codeintel_edit.update_time IS '更新时间（应用层维护）';
+CREATE INDEX IF NOT EXISTS idx_codeintel_edit_file ON codeintel_edit (file_path, create_time);
