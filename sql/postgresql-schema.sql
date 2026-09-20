@@ -719,3 +719,22 @@ CREATE TABLE IF NOT EXISTS scan_finding (
 COMMENT ON TABLE scan_finding IS '扫描发现（BC7：指纹唯一+批次幂等+抑制/基线状态）';
 COMMENT ON COLUMN scan_finding.update_time IS '更新时间（应用层维护）';
 CREATE INDEX IF NOT EXISTS idx_scan_finding_rule ON scan_finding (rule_id, status);
+
+-- 30. 存储段表（工单 0478 BE7：storekernel LSM 段元数据）
+CREATE TABLE IF NOT EXISTS store_segment (
+    id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    segment_id  BIGINT       NOT NULL,
+    level_no    INT          NOT NULL,
+    min_key     VARCHAR(512) NOT NULL,
+    max_key     VARCHAR(512) NOT NULL,
+    row_count   INT          NOT NULL,
+    byte_size   BIGINT       NOT NULL,
+    checksum    VARCHAR(64)  NOT NULL,
+    status      VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE',
+    create_time TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_store_segment_id UNIQUE (segment_id)
+);
+COMMENT ON TABLE store_segment IS '存储段（BE7：LSM 段元数据+compaction 淘汰状态）';
+COMMENT ON COLUMN store_segment.update_time IS '更新时间（应用层维护）';
+CREATE INDEX IF NOT EXISTS idx_store_segment_level ON store_segment (level_no, status);

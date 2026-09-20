@@ -507,3 +507,20 @@ CREATE TABLE IF NOT EXISTS scan_finding (
   UNIQUE KEY uk_scan_finding_fp (fingerprint),
   KEY idx_scan_finding_rule (rule_id, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='扫描发现（工单 0457 BC7）';
+
+-- 30. 存储段表（工单 0478 BE7：storekernel LSM 段元数据）
+CREATE TABLE IF NOT EXISTS store_segment (
+  id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+  segment_id     BIGINT       NOT NULL COMMENT '段 id（引擎分配单调）',
+  level_no       INT          NOT NULL COMMENT '层号（0=L0 热层）',
+  min_key        VARCHAR(512) NOT NULL COMMENT '段内最小键',
+  max_key        VARCHAR(512) NOT NULL COMMENT '段内最大键',
+  row_count      INT          NOT NULL COMMENT '段行数',
+  byte_size      BIGINT       NOT NULL COMMENT '段字节数（估算）',
+  checksum       VARCHAR(64)  NOT NULL COMMENT '段内容校验和（SHA-256 前 16 字节 hex）',
+  status         VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE/COMPACTED',
+  create_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_store_segment_id (segment_id),
+  KEY idx_store_segment_level (level_no, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='存储段（工单 0478 BE7）';
