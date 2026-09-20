@@ -738,3 +738,18 @@ CREATE TABLE IF NOT EXISTS store_segment (
 COMMENT ON TABLE store_segment IS '存储段（BE7：LSM 段元数据+compaction 淘汰状态）';
 COMMENT ON COLUMN store_segment.update_time IS '更新时间（应用层维护）';
 CREATE INDEX IF NOT EXISTS idx_store_segment_level ON store_segment (level_no, status);
+
+-- 31. 文本文档表（工单 0494 BG7：textkernel 检索文档）
+CREATE TABLE IF NOT EXISTS text_doc (
+    id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    doc_id      INT          NOT NULL,
+    field_text  JSONB        NOT NULL,
+    term_count  INT          NOT NULL,
+    status      VARCHAR(16)  NOT NULL DEFAULT 'INDEXED',
+    create_time TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_text_doc_id UNIQUE (doc_id)
+);
+COMMENT ON TABLE text_doc IS '文本文档（BG7：字段文本 JSON+词数+状态）';
+COMMENT ON COLUMN text_doc.update_time IS '更新时间（应用层维护）';
+CREATE INDEX IF NOT EXISTS idx_text_doc_status ON text_doc (status);

@@ -524,3 +524,16 @@ CREATE TABLE IF NOT EXISTS store_segment (
   UNIQUE KEY uk_store_segment_id (segment_id),
   KEY idx_store_segment_level (level_no, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='存储段（工单 0478 BE7）';
+
+-- 31. 文本文档表（工单 0494 BG7：textkernel 检索文档）
+CREATE TABLE IF NOT EXISTS text_doc (
+  id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+  doc_id         INT          NOT NULL COMMENT '文档 id（内核分配）',
+  field_text     JSON         NOT NULL COMMENT '字段文本（键字典序 JSON）',
+  term_count     INT          NOT NULL COMMENT '分析后词数',
+  status         VARCHAR(16)  NOT NULL DEFAULT 'INDEXED' COMMENT 'INDEXED/DELETED',
+  create_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_text_doc_id (doc_id),
+  KEY idx_text_doc_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文本文档（工单 0494 BG7）';
