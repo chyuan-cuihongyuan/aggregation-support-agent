@@ -537,3 +537,20 @@ CREATE TABLE IF NOT EXISTS text_doc (
   UNIQUE KEY uk_text_doc_id (doc_id),
   KEY idx_text_doc_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文本文档（工单 0494 BG7）';
+
+-- 32. 任务表（工单 0502 BH7：jobkernel 调度任务）
+CREATE TABLE IF NOT EXISTS job_task (
+  id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+  task_id        VARCHAR(128) NOT NULL COMMENT '任务 id',
+  cron_expr      VARCHAR(64)  NOT NULL COMMENT 'cron 表达式（六域）',
+  shard_index    INT          NOT NULL DEFAULT 0 COMMENT '分片序',
+  shard_total    INT          NOT NULL DEFAULT 1 COMMENT '总分片数',
+  status         VARCHAR(16)  NOT NULL DEFAULT 'RUNNING' COMMENT 'RUNNING/PAUSED/DEAD',
+  last_trigger_at BIGINT      NULL COMMENT '上次触发 epoch ms',
+  next_trigger_at BIGINT      NULL COMMENT '下次触发 epoch ms',
+  retry_count    INT          NOT NULL DEFAULT 0 COMMENT '重试计数',
+  create_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_job_task_id (task_id),
+  KEY idx_job_task_status (status, next_trigger_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='调度任务（工单 0502 BH7）';

@@ -753,3 +753,22 @@ CREATE TABLE IF NOT EXISTS text_doc (
 COMMENT ON TABLE text_doc IS '文本文档（BG7：字段文本 JSON+词数+状态）';
 COMMENT ON COLUMN text_doc.update_time IS '更新时间（应用层维护）';
 CREATE INDEX IF NOT EXISTS idx_text_doc_status ON text_doc (status);
+
+-- 32. 任务表（工单 0502 BH7：jobkernel 调度任务）
+CREATE TABLE IF NOT EXISTS job_task (
+    id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    task_id         VARCHAR(128) NOT NULL,
+    cron_expr       VARCHAR(64)  NOT NULL,
+    shard_index     INT          NOT NULL DEFAULT 0,
+    shard_total     INT          NOT NULL DEFAULT 1,
+    status          VARCHAR(16)  NOT NULL DEFAULT 'RUNNING',
+    last_trigger_at BIGINT,
+    next_trigger_at BIGINT,
+    retry_count     INT          NOT NULL DEFAULT 0,
+    create_time     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_job_task_id UNIQUE (task_id)
+);
+COMMENT ON TABLE job_task IS '调度任务（BH7：cron+分片+重试计数+状态）';
+COMMENT ON COLUMN job_task.update_time IS '更新时间（应用层维护）';
+CREATE INDEX IF NOT EXISTS idx_job_task_status ON job_task (status, next_trigger_at);
