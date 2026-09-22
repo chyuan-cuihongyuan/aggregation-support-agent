@@ -554,3 +554,17 @@ CREATE TABLE IF NOT EXISTS job_task (
   UNIQUE KEY uk_job_task_id (task_id),
   KEY idx_job_task_status (status, next_trigger_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='调度任务（工单 0502 BH7）';
+
+-- 33. 分词词条表（工单 0531 BK7：segkernel 分词词条）
+CREATE TABLE IF NOT EXISTS seg_term (
+  id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+  word           VARCHAR(64)  NOT NULL COMMENT '词条',
+  freq           BIGINT       NOT NULL COMMENT '词频',
+  word_length    INT          NOT NULL COMMENT '词长（字符数）',
+  source         VARCHAR(16)  NOT NULL DEFAULT 'DICT' COMMENT '来源 DICT/USER/HMM',
+  status         VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE/DELETED',
+  create_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_seg_term_word (word),
+  KEY idx_seg_term_source (source, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='分词词条（工单 0531 BK7）';

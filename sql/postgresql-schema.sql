@@ -772,3 +772,19 @@ CREATE TABLE IF NOT EXISTS job_task (
 COMMENT ON TABLE job_task IS '调度任务（BH7：cron+分片+重试计数+状态）';
 COMMENT ON COLUMN job_task.update_time IS '更新时间（应用层维护）';
 CREATE INDEX IF NOT EXISTS idx_job_task_status ON job_task (status, next_trigger_at);
+
+-- 33. 分词词条表（工单 0531 BK7：segkernel 分词词条）
+CREATE TABLE IF NOT EXISTS seg_term (
+    id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    word        VARCHAR(64)  NOT NULL,
+    freq        BIGINT       NOT NULL,
+    word_length INT          NOT NULL,
+    source      VARCHAR(16)  NOT NULL DEFAULT 'DICT',
+    status      VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE',
+    create_time TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_seg_term_word UNIQUE (word)
+);
+COMMENT ON TABLE seg_term IS '分词词条（BK7：词频+来源+状态）';
+COMMENT ON COLUMN seg_term.update_time IS '更新时间（应用层维护）';
+CREATE INDEX IF NOT EXISTS idx_seg_term_source ON seg_term (source, status);
