@@ -788,3 +788,21 @@ CREATE TABLE IF NOT EXISTS seg_term (
 COMMENT ON TABLE seg_term IS '分词词条（BK7：词频+来源+状态）';
 COMMENT ON COLUMN seg_term.update_time IS '更新时间（应用层维护）';
 CREATE INDEX IF NOT EXISTS idx_seg_term_source ON seg_term (source, status);
+
+-- 34. 压缩统计表（工单 0592 BR7：compresskernel 压缩统计）
+CREATE TABLE IF NOT EXISTS compress_stat (
+    id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    scene            VARCHAR(64)   NOT NULL,
+    level            INT           NOT NULL,
+    raw_bytes        BIGINT        NOT NULL,
+    compressed_bytes BIGINT        NOT NULL,
+    ratio            DECIMAL(10,8) NOT NULL,
+    cost_ms          BIGINT        NOT NULL,
+    sample_at        BIGINT        NOT NULL,
+    remark           VARCHAR(16)   NOT NULL DEFAULT '',
+    create_time      TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time      TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+COMMENT ON TABLE compress_stat IS '压缩统计（BR7：级别/字节/比率/耗时）';
+COMMENT ON COLUMN compress_stat.update_time IS '更新时间（应用层维护）';
+CREATE INDEX IF NOT EXISTS idx_compress_stat_scene ON compress_stat (scene, sample_at);

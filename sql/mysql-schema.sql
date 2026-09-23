@@ -568,3 +568,19 @@ CREATE TABLE IF NOT EXISTS seg_term (
   UNIQUE KEY uk_seg_term_word (word),
   KEY idx_seg_term_source (source, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='分词词条（工单 0531 BK7）';
+
+-- 34. 压缩统计表（工单 0592 BR7：compresskernel 压缩统计）
+CREATE TABLE IF NOT EXISTS compress_stat (
+  id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+  scene            VARCHAR(64)   NOT NULL COMMENT '场景',
+  level            INT           NOT NULL COMMENT '压缩级别 1-9',
+  raw_bytes        BIGINT        NOT NULL COMMENT '原始字节',
+  compressed_bytes BIGINT        NOT NULL COMMENT '压缩字节',
+  ratio            DECIMAL(10,8) NOT NULL COMMENT '压缩比（压缩/原始）',
+  cost_ms          BIGINT        NOT NULL COMMENT '耗时毫秒',
+  sample_at        BIGINT        NOT NULL COMMENT '样本时间 epoch ms',
+  remark           VARCHAR(16)   NOT NULL DEFAULT '' COMMENT '备注 LEVEL/ADAPTIVE/DICT/SST',
+  create_time      DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time      DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_compress_stat_scene (scene, sample_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='压缩统计（工单 0592 BR7）';
