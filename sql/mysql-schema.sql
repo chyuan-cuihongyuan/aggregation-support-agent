@@ -584,3 +584,18 @@ CREATE TABLE IF NOT EXISTS compress_stat (
   update_time      DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_compress_stat_scene (scene, sample_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='压缩统计（工单 0592 BR7）';
+
+-- 35. 期望态状态表（工单 0677 CB7：desiredkernel 声明式状态）
+CREATE TABLE IF NOT EXISTS desired_state (
+  id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+  resource_type  VARCHAR(64)  NOT NULL COMMENT '资源类型',
+  resource_id    VARCHAR(128) NOT NULL COMMENT '资源标识',
+  attr_digest    VARCHAR(64)  NOT NULL COMMENT '属性指纹 SHA-256 截断',
+  state_payload  TEXT         NOT NULL COMMENT '状态载荷 JSON',
+  serial         BIGINT       NOT NULL COMMENT '状态版本号',
+  sample_at      BIGINT       NOT NULL COMMENT '样本时间 epoch ms',
+  create_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_desired_state_rid (resource_type, resource_id),
+  KEY idx_desired_state_serial (serial)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='期望态状态（工单 0677 CB7）';

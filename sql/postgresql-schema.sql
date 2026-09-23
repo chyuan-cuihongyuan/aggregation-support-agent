@@ -806,3 +806,20 @@ CREATE TABLE IF NOT EXISTS compress_stat (
 COMMENT ON TABLE compress_stat IS '压缩统计（BR7：级别/字节/比率/耗时）';
 COMMENT ON COLUMN compress_stat.update_time IS '更新时间（应用层维护）';
 CREATE INDEX IF NOT EXISTS idx_compress_stat_scene ON compress_stat (scene, sample_at);
+
+-- 35. 期望态状态表（工单 0677 CB7：desiredkernel 声明式状态）
+CREATE TABLE IF NOT EXISTS desired_state (
+    id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    resource_type  VARCHAR(64)  NOT NULL,
+    resource_id    VARCHAR(128) NOT NULL,
+    attr_digest    VARCHAR(64)  NOT NULL,
+    state_payload  TEXT         NOT NULL,
+    serial         BIGINT       NOT NULL,
+    sample_at      BIGINT       NOT NULL,
+    create_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+COMMENT ON TABLE desired_state IS '期望态状态（CB7：资源属性指纹+版本）';
+COMMENT ON COLUMN desired_state.update_time IS '更新时间（应用层维护）';
+CREATE UNIQUE INDEX IF NOT EXISTS uk_desired_state_rid ON desired_state (resource_type, resource_id);
+CREATE INDEX IF NOT EXISTS idx_desired_state_serial ON desired_state (serial);
